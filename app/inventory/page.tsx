@@ -78,7 +78,7 @@ const numKey = (r: OverviewRow, k: Exclude<SortKey, "recommend" | "request_by">)
 export default function InventoryPage() {
   const router = useRouter();
   const [rows, setRows] = useState<OverviewRow[]>([]);
-  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; sellable?: string; nextDraft?: string; nextSellable?: string; inboundOk?: boolean; requestedOk?: boolean } | null>(null);
+  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; sellable?: string; nextDraft?: string; nextSellable?: string; inboundOk?: boolean; requestedOk?: boolean; promosOk?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -349,6 +349,7 @@ export default function InventoryPage() {
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
       {/* 확정형 탭엔 권장생산·입고 예정이 없으므로 그 얘기를 하는 경고도 띄우지 않는다 */}
       {confirmedTab && meta?.requestedOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>요청량을 불러오지 못했습니다 — 새로고침하세요.</div>}
+      {!confirmedTab && channel !== "도매" && meta?.promosOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>행사 일정을 불러오지 못했습니다 — 하루 출고·예상소진·부족에서 행사분을 빼지 못해 실제보다 크게 보일 수 있습니다.</div>}
       {/* 도매 탭 경고는 원인별 — 권장(생산 수치)의 잔여 집계 실패와 입고 예정 열(개요)의 집계 실패는 따로다. 소매 전용 실패(prodWarn)에 가리지 않는다 */}
       {!confirmedTab && channel === "도매" && prodWholeReqBad && <div className="sm-warn" style={{ marginBottom: 12 }}>'도매 요청 잔여'를 불러오지 못했습니다 — 권장생산이 이미 요청한 양을 빼지 못해 실제보다 크게 보일 수 있습니다.</div>}
       {!confirmedTab && channel === "도매" && !prodWholeReqBad && meta?.inboundOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>'입고 예정'(열린 도매 요청서 잔여)을 불러오지 못했습니다.</div>}
@@ -533,9 +534,9 @@ export default function InventoryPage() {
       {/* 기간·계산식 안내줄 — 표 위에 있으면 정신없다는 요청(2026-09-28)으로 표 아래에 둔다 */}
       {meta && (confirmedTab
         ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>{pmode === "전체" ? `기간 전체 (~ ${meta.to})` : `기간 ${meta.from} ~ ${meta.to} (${meta.periodDays}일)`}{hasSched ? " · 현재고 = 오늘까지 · 출고 예정 = 오늘 뒤 발송일로 이미 뺀 수량" : ""}</p>
-        /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함, 칸 이동·제조사 반품 출고 제외 — NON_DEMAND_REASONS·isMoveRow), 권장(production/inventory)은
-           평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
-        : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일){hasSched ? " · 현재고 = 오늘까지 · 출고 예정 = 오늘 뒤 발송일로 이미 뺀 수량 · 예상소진·부족·권장은 출고 예정까지 뺀 가용 기준" : ""} · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함, 칸 이동·제조사 반품 출고 제외) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − (도매 현재고 + 도매 요청 잔여)" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만{channel === "도매" ? "(도매는 현재고만)" : ""}</p>
+        /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장에서 행사 일정의 예상 판매량(겹친 기간 일할)을 뺀 값(2026-10-27 — 전엔 행사 포함, #45). 대량 발송 포함,
+           칸 이동·제조사 반품 출고 제외(NON_DEMAND_REASONS·isMoveRow). 권장(production/inventory)은 최근 30일 평상시 속도 — 기간이 달라 두 하루출고는 여전히 다를 수 있다 */
+        : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일){hasSched ? " · 현재고 = 오늘까지 · 출고 예정 = 오늘 뒤 발송일로 이미 뺀 수량 · 예상소진·부족·권장은 출고 예정까지 뺀 가용 기준" : ""} · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사 일정에 적은 예상 판매량은 겹친 기간만큼 뺌 · 대량 발송 포함 · 칸 이동·제조사 반품 출고 제외) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − (도매 현재고 + 도매 요청 잔여)" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만{channel === "도매" ? "(도매는 현재고만)" : ""}</p>
       )}
 
       {/* 품목 변경 히스토리 — 원장 공용 테이블(TxnTable) 재사용. 행 취소 시 재고가 원복되므로 목록도 다시 읽는다 */}

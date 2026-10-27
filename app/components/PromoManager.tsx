@@ -72,7 +72,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>행사 기간의 판매를 하루 출고 평균에서 뺍니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>행사 기간에 적은 예상 판매량을 재고 목록의 하루 출고(겹친 기간만큼)와 권장생산의 평상시 속도에서 뺍니다(소매). 아직 안 지난 행사분은 '행사분'으로 표시만 됩니다.</p>
 
           {!draft && (
             <>

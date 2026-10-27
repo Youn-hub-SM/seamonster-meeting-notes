@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { toInvChannelParam } from "@/app/lib/inventory";
 import { scheduleHorizon, kstTodayIso } from "@/app/lib/production-schedule";
-import { getPromoForwardBySku } from "@/app/lib/production-promotions";
+import { getPromotionsWithOk, promoForwardFrom, promoSoldFrom } from "@/app/lib/production-promotions";
 import { getAllBundles, bundleAvailable } from "@/app/lib/product-bundles";
 import { getOpenInboundByProduct, formatInbound, getOpenRequestedByProduct, formatRequested, type InboundRow, type RequestedRow } from "@/app/lib/production-inbound";
 import { getUntracked } from "@/app/lib/stock-tracked";
@@ -38,7 +38,7 @@ export type OverviewRow = {
 };
 
 // GET /api/inventory/overview?from=&to=&channel= — 재고목록 고도화 뷰.
-//  기간[from,to]의 총입고·총출고·일평균소진 + 자동 목표(일평균소진 × 목표 일수 — 생산 일정 기반, production-schedule)
+//  기간[from,to]의 총입고·총출고·일평균소진(행사 일정의 예상 판매량 제외) + 자동 목표(일평균소진 × 목표 일수 — 생산 일정 기반, production-schedule)
 //  + 예상소진일수(가용 ÷ 일평균소진). 채널(도매/소매) 지정 시 그 채널 기준.
 //  현재고(on_hand) = 오늘까지, 출고 예정 = 오늘 뒤 날짜로 이미 뺀 출고, 가용(qty) = 둘의 차 — 부족·예상소진·권장은 가용 기준 그대로(D1).
 export async function GET(req: NextRequest) {
@@ -65,13 +65,13 @@ export async function GET(req: NextRequest) {
     //  일시 오류는 던진다 — 모든 오류에서 폴백하면 도매 대량 탭 등에 4칸 합이 현재고로 조용히 표시된다(#11).
     //  가용(asof 없음) = 부족·예상소진·생산 창 기준(종전 그대로), 현재고(asof 오늘) = 표시. 차이 = 출고 예정(S6·D1).
     type P = { id: string; sku: string | null; name: string; spec: string | null; unit: string; cost_price: number; attrs: string | null };
-    const [products, stock, stockToday, schedOut, promoFwd, bundles, inbound, untracked, requestedMap] = await Promise.all([
+    const [products, stock, stockToday, schedOut, promos, bundles, inbound, untracked, requestedMap] = await Promise.all([
       readAll<P>((a, b) => sb.from("products").select("id, sku, name, spec, unit, cost_price, attrs").eq("active", true)
         .order("name", { ascending: true }).order("id", { ascending: true }).range(a, b)),
       readStockMap(sb, { asof: null, chan }),
       readStockMap(sb, { asof: today, chan }),
       readScheduledOut(sb, today, chan),
-      getPromoForwardBySku(today, horizonDays),
+      getPromotionsWithOk(), // 행사 일정 — 남은 행사분(표시)·기간에 겹친 예상 판매량(하루 출고에서 뺌). 실패면 ok=false 로 알린다(S4)
       getAllBundles(sb),
       chan === "도매" ? getOpenInboundByProduct(sb, today, "도매 납품") // 도매 탭 = 열린 도매 요청서 잔여(소매→도매 이동 대기, 2026-09-29)
         : chan !== "도매 대량" && chan !== "프로모션" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()), // 제조사 입고는 소매로만 온다 — 확정형 칸엔 '입고 예정'이 없다
@@ -80,6 +80,11 @@ export async function GET(req: NextRequest) {
     ]);
     const inboundOk = inbound !== null;
     const requestedOk = requestedMap !== null;
+    // 행사 일정(소매 판매 장치): 남은 행사분은 표시용, 기간에 겹친 예상 판매량(일할)은 '하루 출고'에서 뺀다(2026-10-27 대표 요청 —
+    //  하루 출고를 보며 생산량을 가늠하므로 권장생산의 평상시 속도(production-inventory promoSold)와 같은 규칙). 소매·전체 탭만(도매·확정형 칸은 행사가 아니다).
+    //  전엔 표의 하루 출고가 행사 포함 원장값이었다(#45) — 권장과 두 숫자가 달라 혼동됐다.
+    const promoFwd = promoForwardFrom(promos.list, today, horizonDays);
+    const promoSold: Record<string, number> = chan === null || chan === "소매" ? promoSoldFrom(promos.list, from, to) : {};
     const stockOf = (id: string) => stock.get(id) || 0;
     const todayOf = (id: string) => stockToday.get(id) || 0;
 
@@ -146,8 +151,10 @@ export async function GET(req: NextRequest) {
       const cost = Number(p.cost_price) || 0;
       const period_in = inq.get(p.id) || 0;
       const period_out = outq.get(p.id) || 0;
-      const daily_out = period_out / periodDays;
-      const promo = promoFwd[(p.sku || "").trim().toUpperCase()] || 0;
+      const skuKey = (p.sku || "").trim().toUpperCase();
+      const promo_sold = Math.min(period_out, promoSold[skuKey] || 0); // 기간에 겹친 행사 예상 판매량(총출고를 넘지 않게)
+      const daily_out = (period_out - promo_sold) / periodDays;        // 평상시 하루 출고(행사분 제외) — 예상소진·부족·목표도 이 값
+      const promo = promoFwd[skuKey] || 0;
       const auto_safety = Math.ceil(daily_out * horizonDays); // 행사 가산은 빼다(결정 9) — promo 는 표시용
       const lead_safety = Math.ceil(daily_out * leadDays);    // 부족 기준 — 오늘 요청분 판매 가능일까지 버틸 양
       const depletion_days = daily_out > 0 ? Math.floor(qty / daily_out) : null;
@@ -158,7 +165,7 @@ export async function GET(req: NextRequest) {
         qty, cost_price: cost, value: onHand * cost,
         on_hand: onHand, scheduled_out: Math.max(0, Math.round((onHand - qty) * 100) / 100),
         scheduled_first: sched?.first ?? null, scheduled_detail: sched ? sched.lines.join("\n") + (sched.more ? `\n외 ${sched.more}건` : "") : "",
-        period_in, period_out, daily_out: Math.round(daily_out * 10) / 10,
+        period_in, period_out, daily_out: Math.round(daily_out * 10) / 10, promo_sold: Math.round(promo_sold * 10) / 10,
         auto_safety, promo_qty: Math.round(promo), depletion_days,
         promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
         inbound: inbQty, inbound_due: inb?.earliest_due ?? null, inbound_overdue: inb?.overdue_qty ?? 0, inbound_detail: formatInbound(inb, today),
@@ -175,7 +182,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable, inboundOk, requestedOk } });
+    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable, inboundOk, requestedOk, promosOk: promos.ok } });
   } catch (err) {
     console.error("[inventory/overview]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "재고 개요 조회 실패") }, { status: 500 });
