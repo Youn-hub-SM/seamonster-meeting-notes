@@ -243,7 +243,8 @@ function breakdownTable(platform: string, body: string, title: string): LiveTabl
   return { title, sql: `${AD_SQL_NOTE}\n-- 네이버 광고그룹: 광고비 VAT 포함`, columns, rows };
 }
 
-const AD_RULES = "해석 규칙: 메타 ROAS·구매는 메타 픽셀 기준, 네이버 구매는 네이버 전환 기준이라 실제 매출(sales_orders)과 다릅니다. ROAS 는 배수(3.2 = 320%)이고 두 매체 모두 VAT 제외 광고비 기준입니다. 네이버 광고비(cost_vat_incl)는 VAT 포함입니다. 네이버 conv_all 은 장바구니 등 전체 전환이라 구매와 비교하지 않습니다. 마지막 며칠의 구매는 전환 지연으로 늘어날 수 있습니다. 네이버 구매가 '미확정'이면 0 이라고 단정하지 않습니다. prev_* 는 비교 기간 합계입니다(기간 길이가 다르면 하루 평균끼리 비교). 광고 성과를 좋다·나쁘다로 단정하지 않고, 사용자가 물을 때만 근거와 함께 '추정:'으로 판단합니다. 광고를 끄거나 예산을 바꾸라고 단정하지 않습니다(실행은 사람).";
+// 2026-10-27 지식 통합: 매체별 집계 기준·전환 지연·판정 규칙은 매뉴얼 '[비서] 데이터 해석 기준' 3절(프롬프트의 매뉴얼 핵심 페이지)에만 둔다. 여기엔 데이터 설명만.
+const AD_RULES = "prev_* 는 비교 기간 합계입니다(기간 길이가 다르면 하루 평균끼리 비교). 매체별 집계 기준 차이·전환 지연·판정은 매뉴얼 핵심 페이지 '데이터 해석 기준' 3절을 따릅니다.";
 
 // 실행 — content 는 모델에 돌려줄 글, tables 는 화면 표 카드
 export async function runLiveTool(sb: SupabaseClient, state: LiveState, name: LiveToolName, input: Record<string, unknown>): Promise<{ content: string; tables: LiveTable[] }> {

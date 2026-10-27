@@ -137,7 +137,7 @@ export default function AiSection({ onDirty }: SectionProps) {
         )}
       </SetCard>
 
-      {([["비서 지침", "AI 비서의 동작 규칙(역할·대화법·도구 사용법·SQL·판단·표기). 회사 기준·금액·담당자·용어는 여기 적지 말고 셰어포인트 매뉴얼의 '[비서]' 페이지에 적습니다 — 아래 현황의 페이지가 매 대화에 그대로 붙습니다.", guide], ["회의록 정리 프롬프트", "팀원 정보·회사 맥락·출력 형식(JSON)은 자동으로 덧붙습니다 — 넣지 마세요.", meeting], ["CS 응대 코칭 프롬프트", "AI 비서가 고객 문의 응대를 코칭할 때 쓰는 지침(코칭 방식). 응대 기준·보상 금액은 셰어포인트 매뉴얼의 '[비서] CS'·'CS 보상·판정 기준' 페이지에서 자동으로 덧붙고, 공지문 말투는 '[비서] 공지문 작성 기준' 페이지를 읽습니다 — 여기엔 넣지 마세요.", cs]] as const).map(([title, desc, p]) => (
+      {([["비서 지침", "AI 비서의 동작 규칙(역할·대화법·도구 사용법·SQL·판단·표기). 회사 기준·금액·담당자·용어는 여기 적지 말고 셰어포인트 매뉴얼의 '[비서]' 페이지에 적습니다 — 아래 현황의 페이지가 매 대화에 그대로 붙습니다(종합 리포트는 '데이터 해석 기준'·'용어 정의' 페이지를 읽습니다).", guide], ["회의록 정리 프롬프트", "팀원 정보·회사 맥락·출력 형식(JSON)은 자동으로 덧붙습니다 — 넣지 마세요.", meeting], ["CS 응대 코칭 프롬프트", "AI 비서가 고객 문의 응대를 코칭할 때 쓰는 지침(코칭 방식). 응대 기준·보상 금액은 셰어포인트 매뉴얼의 '[비서] CS'·'CS 보상·판정 기준' 페이지에서 자동으로 덧붙고, 공지문 말투는 '[비서] 공지문 작성 기준' 페이지를 읽습니다 — 여기엔 넣지 마세요.", cs]] as const).map(([title, desc, p]) => (
         <SetCard key={title} title={title} desc={desc}
           pill={p.draft ? (p.draft.text === p.draft.def || !p.draft.text ? <Pill state="off">기본값</Pill> : <Pill state="warn">바꿔 씀</Pill>) : undefined}
           actions={p.draft ? <button type="button" className="b2b-btn-secondary" disabled={p.draft.text === p.draft.def} onClick={() => p.setDraft({ ...p.draft!, text: p.draft!.def })}>기본값으로</button> : undefined}>
