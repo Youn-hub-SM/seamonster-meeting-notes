@@ -86,7 +86,7 @@ A1 1만 원 쿠폰 · A2 업무도우미 · A3 취소·반품 제외 · A4 워�
 
 - 1단계 완료: 본문 치환 63건(도구·표준 업무 플로우·2026 계획·휴가·프로모션·상품 품절 임박 재고 운영·생산·입고·출고·글쓰기·OKR·우피·디자이너 OKR·콘텐츠 방향·상품 등록·역할과 책임·cafe24 품절 세팅 2편·GA 버튼 클릭 추적 8절·홈), 제목 6건(`[비서] CS`·`[비서] 톤 앤 매너 가이드`·`[비서] 이유식 생선 고객 답변 가이드라인`, 상품 품절 3편), 새 페이지 5(`[비서] 용어 정의`·`[비서] CS 보상·판정 기준`·`[비서] CS 담당자표`·`[비서] 데이터 해석 기준`·`[비서] 2026 OKR 요약`), 탐색·홈 링크. 같은 날 2차: DB '반복 클레임 응대 매뉴얼' → `[비서] 반복 클레임 응대 매뉴얼` 페이지(B2), 용어 사전 2항목(단독 주문·/buy 화면) → `[비서] 용어 정의`, 보상 기준에 '책임 애매 구간제' 행, `[비서] CS` 9절 교환·환불·배송 기준(cs_manual 5·FAQ 보관 + 출고 수치). cs_manual 6항목·용어 사전은 전부 셰어포인트에 있다 → 3단계에서 폐기 가능.
 - 2단계 완료(dev): `app/lib/assistant-prompt.ts`(기본 지침 = 옛 systemChat 에서 GA 해석 규칙·용어 결정을 뺀 것 + 회사 지식 규칙), `ms365-docs.manualKnowledgeBlock`(`[비서]` 페이지 본문 + 전체 목차, 2만 자 상한, 10분 캐시), `/api/b2b/settings/assistant-prompt`, 설정 › AI '비서 지침' 카드(탑재 현황 표시). 프롬프트 첫 블록(캐시)에 지침 → 핵심 페이지 → 목차 → 조회 가능 관계 순.
-- 3단계(다음): cs_coach·write_notice 가 `[비서] CS`·`[비서] 톤 앤 매너 가이드` 페이지를 읽게, propose_term → 용어 페이지 추가 제안, cs_manual·report_glossary·공지 톤 kv 폐기.
+- 3단계 완료(dev): `ms365-docs.manualCoreText(filter)` — cs_coach 는 `[비서]` 페이지 중 CS·클레임·이유식·톤 앤 매너·용어 정의, write_notice 는 `[비서] 공지문 작성 기준`(신설, 옛 공지 톤 프롬프트의 말투·글의 순서·금지)·`[비서] 톤 앤 매너 가이드`를 읽는다. propose_term 도구·용어 사전 패널·카드 삭제(지침: 정의를 '용어 정의' 페이지에 적으라고 글로 제안). 삭제: `app/cs/manual`·`/api/cs/manual`·`cs-manual.ts`·`report-glossary.ts`·`/api/report/glossary`·`/api/notice/prompt`, search_text 의 manual 소스, 설정 공지 톤 카드. migration 154(cs_manual·report_glossary drop, notice_prompt kv 삭제).
 
 ## 7. 단계
 

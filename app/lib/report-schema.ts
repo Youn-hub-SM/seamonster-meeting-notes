@@ -19,7 +19,7 @@ export const BLOCKED_RELATIONS = [
   // 회사 문서 본문(비서는 docs_* 도구로만)
   "ms365_doc_index",
   // 비서 자체(okr_checkins·briefings 표는 2026-10-20 migration 142 로 삭제)
-  "report_threads", "report_messages", "report_tables", "report_glossary", "report_feedback",
+  "report_threads", "report_messages", "report_tables", "report_feedback",
 ];
 const BLOCKED_SET = new Set(BLOCKED_RELATIONS);
 export const isBlockedRelation = (name: string) => BLOCKED_SET.has(name.toLowerCase());
@@ -137,7 +137,6 @@ TABLE voc — 고객의 소리 원장: id, received_at(date 접수일), source(t
   cause(text), status(text 접수|응대·개선중|개선완료), assignee, sentiment(text 긍정|부정|중립), loss_amount(numeric 손해액),
   fault(text 제조사|물류|자사|고객|미분류), buyer_type(text 첫구매|재구매), comp_type(text 보상유형), comp_qty(int), production_date(date), created_at
 TABLE voc_categories — VOC 유형 관리: name(text), fault(text 기본 귀책), status(text 관찰|개선중|개선완료), resolved_at, active(bool), memo
-TABLE cs_manual — CS 매뉴얼: title, content, category, sort_order
 
 ## 마케팅·링크(MARKETING)  [루커 못 봄]
 

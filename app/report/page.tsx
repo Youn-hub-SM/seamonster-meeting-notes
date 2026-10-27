@@ -16,7 +16,6 @@ type Row = Record<string, unknown>;
 type ScheduleFreq = "daily" | "weekly" | "monthly";
 type Schedule = { freq: ScheduleFreq; to: string[]; lastSentOn?: string; setBy?: string | null };
 type Saved = { id: string; name: string; question: string; sql: string; chart: Chart; looker: Looker; createdAt: string; createdBy?: string | null; schedule?: Schedule | null };
-type Glossary = { id: string; term: string; definition: string; createdBy: string | null; updatedBy: string | null; updatedAt: string };
 type AskTable = { title: string; sql: string; columns: string[]; rows: Row[]; rowCount: number; truncated: boolean; looker?: Looker };
 // /api/report/chat 계약(chat-assistant.ts) — 화면은 이 모양만 믿는다
 type ChatTable = AskTable & { id: string; toolUseId: string };
@@ -25,7 +24,7 @@ type Item =
   | { role: "user"; text: string }
   | { role: "assistant"; text: string; live?: boolean; meta?: Meta; fb?: "ok" | "ng"; stopped?: boolean }
   | { role: "tool"; toolUseId: string; name: string; label: string; ok: boolean | null; ms?: number; table?: ChatTable }
-  | { role: "term"; toolUseId: string; term: string; definition: string; state?: "saved" | "skipped" };
+;
 type Thread = { id: string; title: string; createdBy: string; createdAt: string; updatedAt: string; estUsd: number };
 type RunResult = { rep: Saved; sql: string; columns: string[]; rows: Row[] };
 type SaveCtx = { question: string; sql: string; looker?: Looker; chart?: Chart };
@@ -223,8 +222,8 @@ function AiText({ text, live }: { text: string; live?: boolean }) {
   );
 }
 
-type Panel = null | "saved" | "glossary" | "looker";
-const PANEL_TITLE: Record<Exclude<Panel, null>, string> = { saved: "저장된 리포트", glossary: "회사 용어 사전", looker: "루커스튜디오에 적용하는 법" };
+type Panel = null | "saved" | "looker";
+const PANEL_TITLE: Record<Exclude<Panel, null>, string> = { saved: "저장된 리포트", looker: "루커스튜디오에 적용하는 법" };
 
 export default function ReportPage() {
   const toast = useToast();
@@ -263,11 +262,6 @@ export default function ReportPage() {
   const [schedTo, setSchedTo] = useState("");
   const [schedErr, setSchedErr] = useState("");
   const [schedBusy, setSchedBusy] = useState("");
-  // 용어 사전(개선안 1)
-  const [glossary, setGlossary] = useState<Glossary[]>([]);
-  const [gEdit, setGEdit] = useState<{ id: string; term: string; definition: string } | null>(null);
-  const [gNew, setGNew] = useState({ term: "", definition: "" });
-  const [gErr, setGErr] = useState("");
   // 피드백(개선안 5)
   const [fbNoteFor, setFbNoteFor] = useState<number | null>(null);
   const [fbNote, setFbNote] = useState("");
@@ -287,10 +281,7 @@ export default function ReportPage() {
       else if (j.pending_migration) setPendingMsg(j.error);
     } catch { /* noop */ }
   }, [showAll]);
-  const loadGlossary = useCallback(async () => {
-    try { const j = await (await fetch("/api/report/glossary", { cache: "no-store" })).json(); if (j.ok) setGlossary(j.terms || []); } catch { /* noop */ }
-  }, []);
-  useEffect(() => { loadSaved(); loadThreads(); loadGlossary(); }, [loadSaved, loadThreads, loadGlossary]);
+  useEffect(() => { loadSaved(); loadThreads(); }, [loadSaved, loadThreads]);
   useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/auth", { cache: "no-store" })).json(); if (j.ok) setMe(j.name); } catch { /* noop */ } })(); }, []);
   // 대화 박스 안에서만 맨 아래로(페이지 전체를 움직이지 않는다). 글자가 흘러올 때도 따라간다.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -402,8 +393,6 @@ export default function ReportPage() {
             const extra: Item = { role: "tool", toolUseId: table.toolUseId, name: "", label: table.title, ok: true, table };
             return at < 0 ? [...it, extra] : [...it.slice(0, at + 1), extra, ...it.slice(at + 1)];
           });
-        } else if (type === "term") {
-          setItems((it) => [...unlive(it), { role: "term", toolUseId: String(obj.toolUseId || ""), term: String(obj.term || ""), definition: String(obj.definition || "") }]);
         } else if (type === "done") {
           const usage = (obj.usage || {}) as { estUsd?: number; estNote?: string };
           setItems((it) => {
@@ -429,26 +418,6 @@ export default function ReportPage() {
       loadThreads();
       setTimeout(() => taRef.current?.focus(), 0);
     }
-  }
-
-  // ── 용어 사전 ──
-  async function saveTerm(term: string, definition: string, id?: string): Promise<boolean> {
-    setGErr("");
-    const r = await fetch("/api/report/glossary", { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, term, definition }) });
-    const j = await r.json();
-    if (!j.ok) { setGErr(j.error || "용어를 저장하지 못했습니다"); toast.error(j.error || "용어를 저장하지 못했습니다"); return false; }
-    toast.success(`'${term}'을 용어 사전에 저장했습니다`);
-    loadGlossary();
-    return true;
-  }
-  async function acceptTerm(it: Extract<Item, { role: "term" }>) {
-    if (await saveTerm(it.term, it.definition)) setItems((list) => list.map((x) => (x.role === "term" && x.toolUseId === it.toolUseId ? { ...x, state: "saved" } : x)));
-  }
-  async function deleteTerm(g: Glossary) {
-    if (!(await confirmModal({ title: `'${g.term}' 용어 지우기`, body: "다음 대화부터 비서가 이 용어를 다시 묻게 됩니다.", action: "용어 지우기" }))) return;
-    const j = await (await fetch(`/api/report/glossary?id=${g.id}`, { method: "DELETE" })).json();
-    if (!j.ok) { toast.error(j.error || "용어를 지우지 못했습니다"); return; }
-    toast.success("용어를 지웠습니다"); loadGlossary();
   }
 
   // ── 피드백·복사 ──
@@ -581,7 +550,6 @@ export default function ReportPage() {
         </nav>
         <div className="rp-side-foot">
           <button type="button" className="rp-side-tool" onClick={() => { setPanel("saved"); setSideOpen(false); }}>저장된 리포트{saved.length ? <span className="rp-side-count">{qty(saved.length)}</span> : null}</button>
-          <button type="button" className="rp-side-tool" onClick={() => { setPanel("glossary"); setSideOpen(false); }}>회사 용어 사전{glossary.length ? <span className="rp-side-count">{qty(glossary.length)}</span> : null}</button>
           <button type="button" className="rp-side-tool" onClick={() => { setPanel("looker"); setSideOpen(false); }}>루커스튜디오에 적용하는 법</button>
         </div>
       </aside>
@@ -627,24 +595,6 @@ export default function ReportPage() {
                       </div>
                     )}
                     {it.table && <div className="rp-tool-out"><TableCard table={it.table} question={lastUserText} defaultOpen={it.table.rowCount <= 6} onSave={openSave} onExport={exportXlsx} /></div>}
-                  </div>
-                );
-              }
-              if (it.role === "term") {
-                return (
-                  <div key={it.toolUseId} className="rp-m-ai">
-                    <section className="b2b-card rp-term">
-                      <div className="rp-term-head">용어 사전에 넣을까요?</div>
-                      <div className="rp-term-body"><b>{it.term}</b> = {it.definition}</div>
-                      <div className="rp-term-actions">
-                        {it.state === "saved" ? <span className="rp-term-done">사전에 저장했습니다. 다음 대화부터 묻지 않습니다</span>
-                          : it.state === "skipped" ? <span className="rp-term-done">저장하지 않았습니다</span>
-                          : <>
-                            <button className="b2b-btn-primary" onClick={() => acceptTerm(it)}>사전에 저장</button>
-                            <button className="b2b-btn-secondary" onClick={() => setItems((list) => list.map((x) => (x.role === "term" && x.toolUseId === it.toolUseId ? { ...x, state: "skipped" } : x)))}>이번만</button>
-                          </>}
-                      </div>
-                    </section>
                   </div>
                 );
               }
@@ -786,46 +736,6 @@ export default function ReportPage() {
                       ))}
                     </div>
                   )}
-                </>
-              )}
-
-              {panel === "glossary" && (
-                <>
-                  <p className="rp-drawer-note">비서가 묻지 않고 쓸 정의입니다. 대화에서 비서가 제안하면 [사전에 저장]을 누르거나 아래에 직접 적으세요. 누구나 고칠 수 있고 누가 고쳤는지 남습니다.</p>
-                  {gErr && <div className="b2b-error">{gErr}</div>}
-                  {glossary.length === 0 ? <div className="b2b-empty">아직 정한 용어가 없습니다.</div> : (
-                    <div className="b2b-table-wrap">
-                      <table className="b2b-table rp-glossary-table">
-                        <thead><tr><th style={{ width: 130 }}>용어</th><th>정의 · 판별 기준</th><th style={{ width: 110 }}></th></tr></thead>
-                        <tbody>
-                          {glossary.map((g) => gEdit?.id === g.id ? (
-                            <tr key={g.id}>
-                              <td><input className="b2b-input" value={gEdit.term} onChange={(e) => setGEdit({ ...gEdit, term: e.target.value })} aria-label="용어" /></td>
-                              <td><input className="b2b-input" value={gEdit.definition} onChange={(e) => setGEdit({ ...gEdit, definition: e.target.value })} aria-label="정의" /></td>
-                              <td>
-                                <button className="b2b-link-btn" onClick={async () => { if (await saveTerm(gEdit.term, gEdit.definition, g.id)) setGEdit(null); }}>저장</button>
-                                <button className="b2b-link-btn" onClick={() => setGEdit(null)}>그만두기</button>
-                              </td>
-                            </tr>
-                          ) : (
-                            <tr key={g.id}>
-                              <td><b>{g.term}</b></td>
-                              <td className="rp-glossary-def">{g.definition}<div className="sm-faint">{g.updatedBy || g.createdBy || "—"} · {String(g.updatedAt).slice(0, 10)}</div></td>
-                              <td>
-                                <button className="b2b-link-btn" onClick={() => setGEdit({ id: g.id, term: g.term, definition: g.definition })}>고치기</button>
-                                <button className="b2b-link-btn" onClick={() => deleteTerm(g)}>지우기</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <div className="rp-glossary-add">
-                    <input className="b2b-input" placeholder="용어 (예: 합배송)" value={gNew.term} onChange={(e) => setGNew({ ...gNew, term: e.target.value })} aria-label="새 용어" />
-                    <input className="b2b-input" placeholder="정의 · 판별 기준 (예: 한 주문번호에 상품 2줄 이상인 주문)" value={gNew.definition} onChange={(e) => setGNew({ ...gNew, definition: e.target.value })} aria-label="새 정의" />
-                    <button className="b2b-btn-secondary" onClick={async () => { if (await saveTerm(gNew.term, gNew.definition)) setGNew({ term: "", definition: "" }); }}>용어 추가</button>
-                  </div>
                 </>
               )}
 

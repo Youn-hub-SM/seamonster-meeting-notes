@@ -342,6 +342,22 @@ export async function manualKnowledgeBlock(): Promise<string> {
   ].filter(Boolean).join("\n");
 }
 
+// 도구용 — 제목(접두사 뺀 것)이 filter 에 맞는 '[비서]' 페이지 본문만 이어 붙인다(cs_coach·write_notice, 2026-10-27 cs_manual·공지 톤 kv 폐기).
+export async function manualCoreText(filter?: RegExp, cap = KNOWLEDGE_CAP): Promise<string> {
+  const parts: string[] = [];
+  let chars = 0;
+  for (const { pages } of await manualPages()) for (const pg of pages) {
+    if (!CORE_RE.test(pg.title)) continue;
+    const title = pg.title.replace(CORE_RE, "");
+    if (filter && !filter.test(title)) continue;
+    const body = (pg.description ? `${pg.description}\n` : "") + pg.text;
+    if (chars + body.length > cap) continue;
+    chars += body.length;
+    parts.push(`[${title}]\n${body}`);
+  }
+  return parts.join("\n\n");
+}
+
 // 비서 지침용 — 등록된 문서함 목록(턴마다 붙는 블록). 없으면 빈 문자열.
 export async function docsPromptBlock(): Promise<string> {
   if (!isMsConfigured()) return "";

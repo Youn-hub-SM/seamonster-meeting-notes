@@ -19,7 +19,7 @@ export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, 
 // ── 화면 계약(AskResult) ──
 export type AskLooker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
 export type AskTable = { title: string; sql: string; columns: string[]; rows: Record<string, unknown>[]; rowCount: number; truncated: boolean; looker?: AskLooker };
-export type QuoteSource = "voc" | "inquiry" | "report" | "manual" | "request" | "activity";
+export type QuoteSource = "voc" | "inquiry" | "report" | "request" | "activity";
 export type AskQuote = { source: QuoteSource; date: string; title: string; text: string };
 export type AskUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; estUsd: number; estNote: string };
 export type AskToolLog = { name: string; label: string; ok: boolean; ms: number };
@@ -136,11 +136,11 @@ export function toolDefs(strict: boolean): Anthropic.Tool[] {
     },
     {
       name: "search_text", ...s,
-      description: "글 본문 검색 — voc(고객의 소리 내용), inquiry(스마트스토어 문의 질문·답변), report(종합 리포트 본문), manual(CS 매뉴얼), request(생산 요청서 제목·메모), activity(업무 변경 이력). keyword 의 단어는 모두 포함(AND)돼야 하며, 결과는 최신순 발췌(300자). 개인정보는 마스킹돼 옵니다.",
+      description: "글 본문 검색 — voc(고객의 소리 내용), inquiry(스마트스토어 문의 질문·답변), report(종합 리포트 본문), request(생산 요청서 제목·메모), activity(업무 변경 이력). keyword 의 단어는 모두 포함(AND)돼야 하며, 결과는 최신순 발췌(300자). 개인정보는 마스킹돼 옵니다.",
       input_schema: {
         type: "object", additionalProperties: false, required: ["sources", "keyword", "since", "until", "limit"],
         properties: {
-          sources: { type: ["array", "null"], items: { type: "string", enum: ["voc", "inquiry", "report", "manual", "request", "activity"] }, description: "검색할 소스. null = 전부" },
+          sources: { type: ["array", "null"], items: { type: "string", enum: ["voc", "inquiry", "report", "request", "activity"] }, description: "검색할 소스. null = 전부" },
           keyword: { type: ["string", "null"], description: "공백으로 나눈 단어 AND 검색. null = 기간만으로 최신순" },
           since: { type: ["string", "null"], description: "YYYY-MM-DD 부터" },
           until: { type: ["string", "null"], description: "YYYY-MM-DD 까지" },
@@ -264,7 +264,7 @@ const excerpt = (text: string, ws: string[]): string => {
   const start = idx < 0 ? 0 : Math.max(0, Math.min(idx - 100, t.length - QUOTE_MAX));
   return `${start > 0 ? "…" : ""}${t.slice(start, start + QUOTE_MAX)}…`;
 };
-const SOURCES: QuoteSource[] = ["voc", "inquiry", "report", "manual", "request", "activity"];
+const SOURCES: QuoteSource[] = ["voc", "inquiry", "report", "request", "activity"];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyQuery = any;
@@ -324,15 +324,6 @@ async function searchText(sb: SupabaseClient, input: { sources: QuoteSource[]; k
       ...dr.map((r) => ({ source: "report" as const, date: dayOf(r.report_date), title: `일일 종합 리포트 ${dayOf(r.report_date)}`, text: excerpt(String(r.report_md || ""), ws) })),
       ...pr.map((r) => ({ source: "report" as const, date: dayOf(r.report_date), title: `${r.period === "weekly" ? "주간" : "월간"} 종합 리포트 ${dayOf(r.report_date)}~${dayOf(r.period_end)}`, text: excerpt(String(r.report_md || ""), ws) })),
     ];
-  })());
-
-  if (has("manual")) tasks.push((async () => {
-    let q: AnyQuery = sb.from("cs_manual").select("id, title, category, content, updated_at");
-    q = applyWords(q, ["title", "content"], ws);
-    q = q.order("updated_at", { ascending: false }).limit(limit);
-    return (await rowsOf(q, "CS 매뉴얼")).map((r) => ({
-      source: "manual" as const, date: dayOf(r.updated_at), title: `CS 매뉴얼 · ${r.category || ""} · ${r.title || ""}`, text: excerpt(String(r.content || ""), ws),
-    }));
   })());
 
   if (has("request")) tasks.push((async () => {

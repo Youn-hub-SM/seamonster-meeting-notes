@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg, supabaseAdmin } from "@/app/lib/supabase";
 import { verifySession, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
-import { isPending140, PENDING_140 } from "@/app/lib/report-glossary";
+// migration 140(report_feedback) 미적용 감지 — report-glossary.ts 는 2026-10-27 용어 사전 폐기로 삭제
+const PENDING_140 = "DB 준비 전입니다 — supabase/migrations/140_report_glossary_feedback.sql 을 적용하세요.";
+const isPending140 = (err: unknown) => { const m = String((err as { message?: string })?.message ?? err ?? ""); return /report_feedback/.test(m) && /(does not exist|schema cache|Could not find)/i.test(m); };
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

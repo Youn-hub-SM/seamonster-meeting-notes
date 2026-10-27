@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getCsModel, effortParams, readText, AiResponseError } from "./ai-model";
-import { fetchManualEntries, assembleManual, DEFAULT_CS_MANUAL } from "./cs-manual";
+import { manualCoreText } from "./ms365-docs";
 import { supabaseAdmin } from "./supabase";
 
 const anthropic = new Anthropic({
@@ -9,7 +9,7 @@ const anthropic = new Anthropic({
 
 // 코치 지침(역할·코칭 방식·최우선 규칙) — 편집 가능한 '기초 프롬프트'.
 // b2b_settings 의 'cs_prompt' 키에 저장. 미설정/오류 시 아래 기본값 사용.
-// '지식'(매뉴얼)은 DB(cs_manual)에서 주입되고, 출력 JSON 형식(OUTPUT_RULES)은 파서가 의존하므로 코드 고정.
+// '지식'(매뉴얼)은 셰어포인트 매뉴얼의 '[비서]' 페이지(CS·보상·담당자·반복 클레임·이유식·톤·용어)에서 주입되고(2026-10-27, cs_manual 표 폐기), 출력 JSON 형식(OUTPUT_RULES)은 파서가 의존하므로 코드 고정.
 export const DEFAULT_CS_PROMPT = `당신은 씨몬스터(Sea Monster) CS 응대 직원을 돕는 'CS 코치'입니다.
 직원이 주로 묻는 것은 "지금 이 상황에서 나는 어떻게 행동해야 하지?" 입니다.
 입력은 고객 문의 원문일 수도 있고, "고객이 2번째로 녹았다고 연락왔는데 어떻게 해야 해?" 같은
@@ -112,17 +112,14 @@ export async function setCsPrompt(prompt: string): Promise<void> {
 export async function generateCsAdvice(query: string): Promise<CsAdvice> {
   const model = await getCsModel();
 
-  // 코치 지침(편집 가능) + 지식베이스(매뉴얼, DB) + 출력 규칙(고정) 으로 시스템 프롬프트 조립.
-  // DB 미적용/오류 시에도 멈추지 않도록 각각 코드 기본값으로 폴백.
+  // 코치 지침(편집 가능) + 지식(셰어포인트 매뉴얼 '[비서]' 페이지, 10분 캐시) + 출력 규칙(고정) 으로 시스템 프롬프트 조립.
+  // 매뉴얼을 못 읽으면 추측하지 않도록 그 사실을 넣는다(코드에 매뉴얼 사본을 두지 않는다 — 지식의 단일 기준은 셰어포인트).
   const framework = await getCsPrompt();
-  let manualText: string;
-  try {
-    manualText = assembleManual(await fetchManualEntries());
-  } catch (err) {
-    console.error("[cs] 매뉴얼 DB 조회 실패 — 기본 매뉴얼로 폴백:", err);
-    manualText = assembleManual(DEFAULT_CS_MANUAL);
-  }
-  const systemPrompt = framework + manualText + OUTPUT_RULES;
+  let manualText = "";
+  try { manualText = await manualCoreText(/CS|클레임|이유식|톤 앤 매너|용어 정의/); }
+  catch (err) { console.error("[cs] 셰어포인트 매뉴얼 읽기 실패:", err); }
+  if (!manualText) manualText = "(셰어포인트 매뉴얼을 읽지 못했습니다 — 관리자가 연결을 확인해야 합니다. 매뉴얼 없이 추측하지 말고 manualMissing 을 true 로 답합니다.)";
+  const systemPrompt = `${framework}\n\n[매뉴얼 — 셰어포인트 '[비서]' 페이지]\n${manualText}\n` + OUTPUT_RULES;
 
   const response = await anthropic.messages.create({
     model,

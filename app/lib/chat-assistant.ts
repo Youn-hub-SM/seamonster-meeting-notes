@@ -13,7 +13,6 @@ import { getFeatureModel, effortParams, AiResponseError, readText } from "./ai-m
 import { MODELS } from "./config";
 import { isAdminName } from "./b2b-auth";
 import { LOOKER_RELATIONS } from "./report-schema";
-import { glossaryPromptBlock } from "./report-glossary";
 import { gaCatalogPromptBlock } from "./ga-catalog";
 import { docsPromptBlock, manualKnowledgeBlock } from "./ms365-docs";
 import { getAssistantPrompt } from "./assistant-prompt";
@@ -36,7 +35,6 @@ export type ChatEvent =
   | { type: "text"; delta: string }
   | { type: "tool"; toolUseId: string; name: string; label: string; status: "start" | "ok" | "fail"; ms?: number }
   | { type: "table"; table: ChatTable }
-  | { type: "term"; toolUseId: string; term: string; definition: string }       // 용어 사전 저장 제안(사람이 화면에서 저장)
   | { type: "done"; model: string; usage: AskUsage; downgraded: boolean; timedOut: boolean; elapsedMs: number; title: string; seq: number | null; dataDate: string | null }
   | { type: "error"; error: string };
 
@@ -133,17 +131,6 @@ function chatTools(strict: boolean): Anthropic.Tool[] {
         type: "object", additionalProperties: false, required: ["query"],
         properties: {
           query: { type: "string", description: "고객 문의 원문 또는 상황 설명(채널·주문 상황 등 사용자가 준 정보 그대로)" },
-        },
-      },
-    },
-    {
-      name: "propose_term", ...s,
-      description: "사용자가 대화에서 새로 정한 용어와 정의를 '회사 용어 사전'에 저장하자고 제안합니다. 저장은 사용자가 화면에서 누르며, 이 도구는 아무것도 쓰지 않습니다.",
-      input_schema: {
-        type: "object", additionalProperties: false, required: ["term", "definition"],
-        properties: {
-          term: { type: "string", description: "용어(짧은 명사구, 예: '합배송')" },
-          definition: { type: "string", description: "판별 기준이 드러나는 한 문장(예: '한 주문번호에 상품 2줄 이상인 주문')" },
         },
       },
     },
@@ -289,7 +276,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (!text) throw new AiResponseError("메시지를 입력하세요.");
   if (!process.env.ANTHROPIC_API_KEY) throw new AiResponseError("ANTHROPIC_API_KEY 가 설정되어 있지 않습니다.");
 
-  const [settings, month, featureModel, thread, glossary, dataDate, schemaIndex, gaBlock, docsBlock, instructions, knowledge] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user), glossaryPromptBlock(), salesDataDate(), catalogIndex(supabaseAdmin()), gaCatalogPromptBlock(), docsPromptBlock(), getAssistantPrompt(), manualKnowledgeBlock().catch((e) => `[매뉴얼 핵심 페이지] 읽기 실패: ${e instanceof Error ? e.message : String(e)}`)]);
+  const [settings, month, featureModel, thread, dataDate, schemaIndex, gaBlock, docsBlock, instructions, knowledge] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user), salesDataDate(), catalogIndex(supabaseAdmin()), gaCatalogPromptBlock(), docsPromptBlock(), getAssistantPrompt(), manualKnowledgeBlock().catch((e) => `[매뉴얼 핵심 페이지] 읽기 실패: ${e instanceof Error ? e.message : String(e)}`)]);
   if (settings.off) throw new AssistantOffError("AI 비서가 꺼져 있습니다. 관리자 › 설정 › AI 에서 켜세요.");
   if (!thread) throw new AiResponseError("대화를 찾을 수 없습니다. 새 대화를 시작하세요.");
   const downgraded = month.usd >= settings.capUsd;
@@ -317,7 +304,6 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
       `[오늘] 기준일(Asia/Seoul): ${kstTodayLabel()} — '오늘·어제·이번 주·이번 달·올해·최근 N일' 등 상대 기간은 반드시 이 날짜 기준. 학습 시점의 연도를 가정하지 않습니다.`,
       dataDate ? `[데이터 최신일] 매출 원장(sales_orders)은 ${dataDate}까지 들어 있습니다. 그 뒤 날짜는 아직 없으니 답에 "데이터는 ${dataDate}까지"라고 적습니다.` : "",
       `[사용자] ${p.user}`,
-      glossary,
       gaBlock,
       docsBlock,
     ].filter(Boolean).join("\n") },
@@ -435,11 +421,6 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
             p.send({ type: "tool", toolUseId: u.id, name: u.name, label, status: "fail", ms: Date.now() - t0 });
             return { type: "tool_result" as const, tool_use_id: u.id, content: `오류: ${e instanceof Error ? e.message : String(e)}`, is_error: true };
           }
-        }
-        if (u.name === "propose_term") { // 쓰기 아님 — 화면에 저장 제안 카드만
-          const term = String(input.term || "").trim().slice(0, 60), definition = String(input.definition || "").trim().slice(0, 600);
-          if (term && definition) p.send({ type: "term", toolUseId: u.id, term, definition });
-          return { type: "tool_result" as const, tool_use_id: u.id, content: term && definition ? "제안을 화면에 보였습니다. 사용자가 [사전에 저장]을 누르면 다음 대화부터 반영됩니다." : "용어와 정의가 비어 제안하지 못했습니다." };
         }
         if (isLiveTool(u.name)) { // 광고 API·재고·채널 상태 — 쓰기 없음. 표는 SQL 아님('-- ' 주석)으로 저장
           const label = liveToolLabel(u.name, input);
