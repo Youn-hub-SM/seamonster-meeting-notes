@@ -3,7 +3,8 @@
 //  · 목록: Graph delta(변경분) API — 처음엔 전체(200개씩 페이지), 그 뒤엔 바뀐 것만. 토큰은 kv 'ms365_delta:<드라이브>'.
 //    (폴더를 하나씩 걷는 방식은 파일 1,500개에 45초를 다 써서 본문 읽기 차례가 오지 않았다 — 2026-10-27 실측)
 //  · 본문: delta 로 받은 새·바뀐 파일은 status 'pending' 으로 먼저 저장하고, 남은 시간 예산 안에서 작은 파일부터 4개씩 읽는다.
-//    못 읽은 것은 다음 실행(버튼 자동 반복·크론 틱)이 이어서. 본문은 앞 60,000자. 읽을 수 없는 형식은 이름·경로만(skipped). AI 호출 없음.
+//    못 읽은 것은 다음 실행(버튼 자동 반복·크론 틱)이 이어서. 본문은 앞 20,000자. 읽을 수 없는 형식·1MB 넘는 데이터 파일은 이름·경로만(skipped). AI 호출 없음.
+//  · 검색은 name·path·text 에 ilike(대소문자 무시) — 소문자 복사본(haystack)은 153 에서 없앴다(저장량 절반).
 //  · 표가 없으면(마이그레이션 151·152 미적용) 검색은 null 을 돌려주고 호출부가 옛 방식(검색 끝점 → 폴더 훑기)으로 간다.
 import { supabaseAdmin } from "./supabase";
 import { getKv, setKv } from "./b2b-settings";
@@ -13,13 +14,16 @@ import type { ResolvedSource } from "./ms365-docs";
 const TABLE = "ms365_doc_index";
 const KV_LAST = "ms365_index_last";
 const KV_DELTA = "ms365_delta:";
-const TEXT_CAP = 60_000;
+const TEXT_CAP = 20_000;            // 본문 앞 2만 자(2026-10-27 용량 조정: 찾는 데는 앞부분이면 되고, 읽을 땐 docs_read 가 전문을 연다)
 const WALK_FOLDERS = 400, WALK_ITEMS = 20_000;
 const DELTA_PAGES = 150; // 200개씩 → 30,000 항목
 const EXTRACT_PARALLEL = 4;
 const PENDING_BATCH = 120;
 const INDEXABLE = /\.(docx|pptx|xlsx|pdf|txt|md|csv|json|xml|html?|log|doc|xls|ppt|rtf|odt|ods|odp)$/i;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// 데이터 성격 파일(엑셀·CSV·JSON 등)은 1MB 를 넘으면 숫자 덩어리라 본문 검색 가치가 낮고 글자만 많다 → 이름·경로만
+const DATA_EXT = /\.(xlsx|xls|csv|json|xml|log|ods)$/i;
+const DATA_MAX_BYTES = 1024 * 1024;
 const ITEM_SELECT = "$select=id,name,webUrl,size,lastModifiedDateTime,file,folder,parentReference,deleted";
 
 type DeltaItem = GraphItem & { deleted?: { state?: string } };
@@ -94,7 +98,6 @@ async function walkDrive(driveId: string, deadline: number): Promise<{ files: Gr
   return { files, complete: true };
 }
 
-const haystackOf = (name: string, path: string, text: string) => `${name} ${path}\n${text}`.toLowerCase().slice(0, TEXT_CAP + 1000);
 
 // 색인 갱신 — sources·extract 는 ms365-docs 가 넘긴다(순환 import 를 피하려고).
 export async function reindexDocs(p: {
@@ -114,7 +117,7 @@ export async function reindexDocs(p: {
 
   const upsert = async (rows: (IndexRow & { seen_at?: string })[]) => {
     for (let i = 0; i < rows.length; i += 20) {
-      const chunk = rows.slice(i, i + 20).map((r) => ({ ...r, haystack: haystackOf(r.name, r.path, r.text), seen_at: sum.at }));
+      const chunk = rows.slice(i, i + 20).map((r) => ({ ...r, seen_at: sum.at }));
       const { error } = await sb.from(TABLE).upsert(chunk, { onConflict: "ref" });
       if (error) {
         if (missingTable(error.message)) throw new Error("문서 색인 표가 없습니다 — 마이그레이션 151_ms365_doc_index.sql 을 적용하세요.");
@@ -188,16 +191,15 @@ export async function reindexDocs(p: {
         const [driveId, itemId] = r.ref.split(":");
         const stub = { id: itemId, name: r.name, size: r.size_kb * 1024 } as GraphItem;
         const now = new Date().toISOString();
-        if (!INDEXABLE.test(r.name) || r.size_kb * 1024 > MAX_FILE_BYTES) { sum.skipped++; return { ref: r.ref, status: "skipped" as const, error: r.size_kb * 1024 > MAX_FILE_BYTES ? "25MB 초과" : "읽지 않는 형식", text: "", indexed_at: now }; }
+        const bytes = r.size_kb * 1024;
+        const skipWhy = !INDEXABLE.test(r.name) ? "읽지 않는 형식" : bytes > MAX_FILE_BYTES ? "25MB 초과" : DATA_EXT.test(r.name) && bytes > DATA_MAX_BYTES ? "데이터 파일(1MB 초과, 이름만)" : "";
+        if (skipWhy) { sum.skipped++; return { ref: r.ref, status: "skipped" as const, error: skipWhy, text: "", indexed_at: now }; }
         try { const text = (await p.extract(stub, driveId || r.drive_id)).slice(0, TEXT_CAP); sum.indexed++; return { ref: r.ref, status: "ok" as const, error: "", text, indexed_at: now }; }
         catch (e) { sum.errors++; return { ref: r.ref, status: "error" as const, error: (e instanceof Error ? e.message : String(e)).slice(0, 200), text: "", indexed_at: now }; }
       }));
-      // 부분 갱신 — name·path 는 그대로 두고 상태·본문만(haystack 은 name+path+text 라 다시 계산해야 해서 행을 읽어 합친다)
-      const { data: cur } = await sb.from(TABLE).select("ref, name, path").in("ref", done.map((x) => x.ref));
-      const nm = new Map((cur || []).map((c) => [String(c.ref), { name: String(c.name || ""), path: String(c.path || "") }]));
+      // 부분 갱신 — name·path 는 그대로 두고 상태·본문만
       for (const x of done) {
-        const c = nm.get(x.ref) || { name: "", path: "" };
-        const { error } = await sb.from(TABLE).update({ status: x.status, error: x.error, text: x.text, haystack: haystackOf(c.name, c.path, x.text), indexed_at: x.indexed_at }).eq("ref", x.ref);
+        const { error } = await sb.from(TABLE).update({ status: x.status, error: x.error, text: x.text, indexed_at: x.indexed_at }).eq("ref", x.ref);
         if (error) throw new Error(`색인 저장 실패: ${error.message}`);
       }
       progressed += done.length;
@@ -219,7 +221,8 @@ export type IndexHit = { ref: string; source: string; site_id: string; name: str
 // 색인 검색 — 모든 검색어가 이름·경로·본문 어딘가에 있으면 적중. 표가 없으면 null(호출부가 옛 방식으로).
 export async function searchIndex(p: { terms: string[]; siteIds: string[]; limit: number }): Promise<{ hits: IndexHit[]; indexedSites: Set<string>; at: string } | null> {
   const sb = supabaseAdmin();
-  const terms = p.terms.map((t) => t.replace(/[%_\\]/g, "").trim()).filter(Boolean).slice(0, 6);
+  // ilike 패턴·PostgREST or() 문법에 끼는 글자는 뺀다(% _ \ , ( ) ")
+  const terms = p.terms.map((t) => t.replace(/[%_\\,()"]/g, "").trim()).filter(Boolean).slice(0, 6);
   if (!p.siteIds.length) return { hits: [], indexedSites: new Set(), at: "" };
   // 어느 사이트가 색인돼 있나(0건 적중과 '색인 없음'을 구분) — 본문을 하나라도 읽은 사이트만
   const indexedSites = new Set<string>();
@@ -230,7 +233,7 @@ export async function searchIndex(p: { terms: string[]; siteIds: string[]; limit
   }
   if (!indexedSites.size || !terms.length) return { hits: [], indexedSites, at: (await lastIndexRun())?.at || "" };
   let q = sb.from(TABLE).select("ref, source, site_id, name, path, url, modified, size_kb, status, text").in("site_id", [...indexedSites]);
-  for (const t of terms) q = q.ilike("haystack", `%${t}%`);
+  for (const t of terms) q = q.or(`name.ilike.%${t}%,path.ilike.%${t}%,text.ilike.%${t}%`); // 검색어마다 (이름|경로|본문) — 여러 검색어는 AND
   const { data, error } = await q.order("modified", { ascending: false }).limit(Math.min(p.limit, 50));
   if (error) throw new Error(`색인 검색 실패: ${error.message}`);
   const hits = (data || []).map((r) => {
