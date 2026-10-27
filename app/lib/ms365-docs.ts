@@ -289,6 +289,59 @@ export async function readDoc(p: { ref: string; offset?: number | null }): Promi
   return { name: c.name, path: c.path, url: c.url, text: slice, offset, total: c.text.length, next };
 }
 
+// ── 매뉴얼 핵심 페이지·목차(2026-10-27 지식 통합) — 제목이 '[비서]'로 시작하는 페이지 본문은 턴마다 프롬프트에 그대로, 나머지는 목차(제목·요약·ref)만 ──
+//  상한 20,000자(대표 결정 A7). 넘으면 뒤 페이지를 자르고 그 사실을 적는다. 사이트 페이지 캐시(10분)를 그대로 써서 수정이 10분 안에 반영된다.
+const KNOWLEDGE_CAP = 20_000;
+const CORE_RE = /^\s*\[비서\]\s*/;
+export type ManualKnowledge = { core: { title: string; chars: number; ref: string; included: boolean }[]; toc: number; chars: number; note: string };
+async function manualPages(): Promise<{ src: ResolvedSource; pages: PageText[] }[]> {
+  if (!isMsConfigured()) return [];
+  const out: { src: ResolvedSource; pages: PageText[] }[] = [];
+  for (const src of await resolveSources()) {
+    if (src.error) continue;
+    try { const pages = await sitePages(src); if (pages.length) out.push({ src, pages }); } catch { /* 페이지 없는 사이트(문서함만) */ }
+  }
+  return out;
+}
+export async function manualKnowledgeStatus(): Promise<ManualKnowledge> {
+  const sites = await manualPages();
+  const core: ManualKnowledge["core"] = [];
+  let toc = 0, chars = 0;
+  for (const { src, pages } of sites) for (const pg of pages) {
+    toc++;
+    if (!CORE_RE.test(pg.title)) continue;
+    const body = (pg.description ? `${pg.description}\n` : "") + pg.text;
+    const included = chars + body.length <= KNOWLEDGE_CAP;
+    if (included) chars += body.length;
+    core.push({ title: pg.title.replace(CORE_RE, ""), chars: body.length, ref: `page:${src.site.id}:${pg.id}`, included });
+  }
+  const dropped = core.filter((c) => !c.included).length;
+  return { core, toc, chars, note: dropped ? `상한 ${KNOWLEDGE_CAP.toLocaleString("ko-KR")}자를 넘어 ${dropped}개 페이지는 목차로만 들어갑니다` : "" };
+}
+export async function manualKnowledgeBlock(): Promise<string> {
+  const sites = await manualPages();
+  if (!sites.length) return "";
+  const coreLines: string[] = [], tocLines: string[] = [];
+  let chars = 0, dropped = 0;
+  for (const { src, pages } of sites) for (const pg of pages) {
+    const ref = `page:${src.site.id}:${pg.id}`;
+    const title = pg.title.replace(CORE_RE, "");
+    tocLines.push(`- ${title}${pg.description ? ` — ${pg.description.slice(0, 80)}` : ""} (${ref})`);
+    if (!CORE_RE.test(pg.title)) continue;
+    const body = (pg.description ? `${pg.description}\n` : "") + pg.text;
+    if (chars + body.length > KNOWLEDGE_CAP) { dropped++; continue; }
+    chars += body.length;
+    coreLines.push(`### ${title} (${ref})\n${body}`);
+  }
+  return [
+    `[매뉴얼 핵심 페이지 — 셰어포인트 '[비서]' 페이지 본문 그대로. 회사 기준·금액·담당자·용어·해석 규칙은 여기 적힌 것을 쓴다. 전문은 docs_read(ref)]`,
+    coreLines.join("\n\n") || "(핵심 페이지 없음 — 제목이 '[비서]'로 시작하는 매뉴얼 페이지가 없습니다)",
+    dropped ? `(상한 ${KNOWLEDGE_CAP.toLocaleString("ko-KR")}자를 넘어 ${dropped}개 핵심 페이지는 본문을 빼고 목차에만 두었습니다 — docs_read 로 읽습니다)` : "",
+    `[매뉴얼 목차 — 업무 절차·기준 질문은 먼저 여기서 페이지를 고르고 docs_read(ref)로 읽는다]`,
+    tocLines.join("\n"),
+  ].filter(Boolean).join("\n");
+}
+
 // 비서 지침용 — 등록된 문서함 목록(턴마다 붙는 블록). 없으면 빈 문자열.
 export async function docsPromptBlock(): Promise<string> {
   if (!isMsConfigured()) return "";

@@ -25,6 +25,8 @@ export default function AiSection({ onDirty }: SectionProps) {
   const meeting = useDraft<Prompt>(null);
   const cs = useDraft<Prompt>(null);
   const notice = useDraft<Prompt>(null); // 공지 톤(2026-10-22 공지 작성기 화면 삭제 → 여기서 편집, 비서 write_notice 가 쓴다)
+  const guide = useDraft<Prompt>(null); // 비서 지침(2026-10-27 지식 통합 — 동작 규칙만. 회사 지식은 셰어포인트 [비서] 페이지)
+  const [knowledge, setKnowledge] = useState<{ core: { title: string; chars: number; included: boolean }[]; toc: number; chars: number; note: string } | null>(null);
   const [fb, setFb] = useState<{ good: number; bad: number; recentBad: { id: string; user_name: string; note: string; created_at: string }[] } | null>(null);
   const [audit, setAudit] = useState<{ fromDb: boolean; visible: number; noComment: string[]; jsonbNoComment: string[]; pii: { table: string; column: string }[] } | null>(null);
   const [capErr, setCapErr] = useState("");
@@ -34,12 +36,13 @@ export default function AiSection({ onDirty }: SectionProps) {
   useEffect(() => {
     (async () => {
       try {
-        const [m, a, mp, cp, np] = await Promise.all([
+        const [m, a, mp, cp, np, gp] = await Promise.all([
           api<{ options: Option[]; featureMeta: FeatureMeta[]; global: ModelKey; features: Record<string, FeatureVal> }>("/api/b2b/settings/model"),
           api<{ off: boolean; capUsd: number; month: { usd: number; questions: number } }>("/api/b2b/settings/assistant"),
           api<{ prompt: string; default: string }>("/api/b2b/settings/meeting-prompt"),
           api<{ prompt: string; default: string }>("/api/b2b/settings/cs-prompt"),
           api<{ prompt: string; default: string }>("/api/notice/prompt"),
+          api<{ prompt: string; default: string; knowledge: { core: { title: string; chars: number; included: boolean }[]; toc: number; chars: number; note: string } }>("/api/b2b/settings/assistant-prompt"),
         ]);
         setOptions(m.options || []); setMeta(m.featureMeta || []);
         models.load({ global: m.global, features: m.features || {} });
@@ -47,6 +50,7 @@ export default function AiSection({ onDirty }: SectionProps) {
         meeting.load({ text: mp.prompt || "", def: mp.default || "" });
         cs.load({ text: cp.prompt || "", def: cp.default || "" });
         notice.load({ text: np.prompt || "", def: np.default || "" });
+        guide.load({ text: gp.prompt || "", def: gp.default || "" }); setKnowledge(gp.knowledge || null);
       } catch (e) { setErr(errText(e, "AI 설정을 불러오지 못했습니다. 새로고침하세요")); }
     })();
     fetch("/api/report/feedback?stats=1", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j?.ok) setFb({ good: j.good, bad: j.bad, recentBad: j.recentBad || [] }); }).catch(() => {});
@@ -54,9 +58,9 @@ export default function AiSection({ onDirty }: SectionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const dirty = models.dirty || asst.dirty || meeting.dirty || cs.dirty || notice.dirty;
+  const dirty = models.dirty || asst.dirty || meeting.dirty || cs.dirty || notice.dirty || guide.dirty;
   useReportDirty(dirty, onDirty);
-  const reset = () => { models.reset(); asst.reset(); meeting.reset(); cs.reset(); notice.reset(); setCapErr(""); setSaveMsg(null); };
+  const reset = () => { models.reset(); asst.reset(); meeting.reset(); cs.reset(); notice.reset(); guide.reset(); setCapErr(""); setSaveMsg(null); };
 
   async function save() {
     if (asst.dirty && asst.draft) {
@@ -81,7 +85,7 @@ export default function AiSection({ onDirty }: SectionProps) {
         asst.load(asst.draft);
       }
       // 프롬프트 — 기본값과 같으면 빈 값으로 저장(= 기본값을 따름, 기본이 바뀌면 같이 바뀐다)
-      for (const [p, url] of [[meeting, "/api/b2b/settings/meeting-prompt"], [cs, "/api/b2b/settings/cs-prompt"], [notice, "/api/notice/prompt"]] as const) {
+      for (const [p, url] of [[meeting, "/api/b2b/settings/meeting-prompt"], [cs, "/api/b2b/settings/cs-prompt"], [notice, "/api/notice/prompt"], [guide, "/api/b2b/settings/assistant-prompt"]] as const) {
         if (p.dirty && p.draft) {
           const j = await api<{ prompt: string }>(url, "PUT", { prompt: p.draft.text === p.draft.def ? "" : p.draft.text });
           p.load({ text: j.prompt || "", def: p.draft.def });
@@ -136,7 +140,7 @@ export default function AiSection({ onDirty }: SectionProps) {
         )}
       </SetCard>
 
-      {([["회의록 정리 프롬프트", "팀원 정보·회사 맥락·출력 형식(JSON)은 자동으로 덧붙습니다 — 넣지 마세요.", meeting], ["CS 응대 코칭 프롬프트", "AI 비서가 고객 문의 응대를 코칭할 때 쓰는 지침. 응대 매뉴얼 내용·출력 형식(JSON)은 자동으로 덧붙습니다 — 넣지 마세요.", cs], ["공지문 톤 프롬프트", "AI 비서가 공지문 초안을 쓸 때 쓰는 말투·형식 지침(호칭 없음·첫 문장 사과 등). 유형별 항목·채널 글자 수 규칙은 자동으로 덧붙습니다 — 넣지 마세요.", notice]] as const).map(([title, desc, p]) => (
+      {([["비서 지침", "AI 비서의 동작 규칙(역할·대화법·도구 사용법·SQL·판단·표기). 회사 기준·금액·담당자·용어는 여기 적지 말고 셰어포인트 매뉴얼의 '[비서]' 페이지에 적습니다 — 아래 현황의 페이지가 매 대화에 그대로 붙습니다.", guide], ["회의록 정리 프롬프트", "팀원 정보·회사 맥락·출력 형식(JSON)은 자동으로 덧붙습니다 — 넣지 마세요.", meeting], ["CS 응대 코칭 프롬프트", "AI 비서가 고객 문의 응대를 코칭할 때 쓰는 지침. 응대 매뉴얼 내용·출력 형식(JSON)은 자동으로 덧붙습니다 — 넣지 마세요.", cs], ["공지문 톤 프롬프트", "AI 비서가 공지문 초안을 쓸 때 쓰는 말투·형식 지침(호칭 없음·첫 문장 사과 등). 유형별 항목·채널 글자 수 규칙은 자동으로 덧붙습니다 — 넣지 마세요.", notice]] as const).map(([title, desc, p]) => (
         <SetCard key={title} title={title} desc={desc}
           pill={p.draft ? (p.draft.text === p.draft.def || !p.draft.text ? <Pill state="off">기본값</Pill> : <Pill state="warn">바꿔 씀</Pill>) : undefined}
           actions={p.draft ? <button type="button" className="b2b-btn-secondary" disabled={p.draft.text === p.draft.def} onClick={() => p.setDraft({ ...p.draft!, text: p.draft!.def })}>기본값으로</button> : undefined}>
@@ -144,6 +148,9 @@ export default function AiSection({ onDirty }: SectionProps) {
             <>
               <textarea className="b2b-textarea set-prompt" value={p.draft.text} spellCheck={false} aria-label={title} onChange={(e) => p.setDraft({ ...p.draft!, text: e.target.value })} />
               <p className="set-row-note">{qtyText(p.draft.text.length, "자")} · 모든 사용자 공용</p>
+              {p === guide && knowledge && (
+                <p className="set-row-note">매뉴얼 핵심 페이지 {qtyText(knowledge.core.length, "개")}({qtyText(knowledge.chars, "자")} 탑재, 상한 20,000자) · 목차 {qtyText(knowledge.toc, "페이지")}{knowledge.core.length ? ` — ${knowledge.core.map((c) => `${c.title}${c.included ? "" : "(제외)"}`).join(", ")}` : " — 제목이 '[비서]'로 시작하는 페이지가 없습니다"}{knowledge.note ? ` · ${knowledge.note}` : ""}</p>
+              )}
             </>
           )}
         </SetCard>
