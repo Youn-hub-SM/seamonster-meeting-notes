@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useConfirm, type ConfirmOptions } from "@/app/components/Feedback";
 import { qty, qtyText, dateTime } from "@/app/lib/format";
+import { CUSTOMER_KIND_COLOR, type CustomerKind } from "@/app/lib/customer-kind";
 
 type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
@@ -15,6 +16,8 @@ type Result = {
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
   messageWarnings?: { rowNo: number; orderNo: string; name: string; msg: string }[];
+  customerFlags?: { rowNo: number; orderNo: string; name: string; kind: CustomerKind; memo: string; matchedBy: string; customerId: string }[]; // 단골·블랙 고객 주문(156)
+  customersMissing?: boolean;      // 156 미적용 — 고객 확인 없이 진행(화면 안내)
   unmatched: string[];
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[];
   sig?: string; // 배치 서명(batchSig) — ④ 출고가 그대로 전달해야 대기 키·중복 검사가 이 파일과 이어진다
@@ -73,6 +76,7 @@ export default function FulfillPage() {
   const [fileName, setFileName] = useState("");
   const [keywords, setKeywords] = useState("");
   const [msgAck, setMsgAck] = useState(false);
+  const [custAck, setCustAck] = useState(false);     // 단골·블랙 고객 확인
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [res, setRes] = useState<Result | null>(null);
@@ -178,7 +182,7 @@ export default function FulfillPage() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setLoading(true);
+    setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setCustAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setLoading(true);
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("keywords", keywords);
@@ -306,11 +310,15 @@ export default function FulfillPage() {
 
   async function reset() {
     if (!(await okToLeave())) return;
-    setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setError("");
+    setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setCustAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setError("");
     void loadSide();
   }
 
   const msgWarns = res?.messageWarnings ?? [];
+  const custFlags = res?.customerFlags ?? [];
+  // 배송메시지 줄에도 구분을 붙인다 — 같은 이름이면 메시지 옆에서 바로 보이게(주문번호 기준, 없으면 이름)
+  const custByOrder = new Map<string, CustomerKind>();
+  for (const f of custFlags) { const k = f.orderNo || f.name; if (!custByOrder.has(k) || f.kind === "블랙") custByOrder.set(k, f.kind); }
   // 완전히 같은 문장(공백 차이만 무시)은 한 줄로 합쳐 "윤현석 등 3명 · 문 앞" 으로 보인다 —
   //  표준 문구가 수십 줄 반복되는 것을 접어 훑는 시간을 줄인다. 이름은 중복 제거해 센다.
   const msgGroups = (() => {
@@ -318,7 +326,8 @@ export default function FulfillPage() {
     for (const w of msgWarns) {
       const key = w.msg.replace(/\s+/g, "");
       const g = m.get(key);
-      const nm = w.name || "(이름?)";
+      const kind = custByOrder.get(w.orderNo || w.name);
+      const nm = (w.name || "(이름?)") + (kind ? `[${kind}]` : "");
       if (!g) m.set(key, { msg: w.msg, names: [nm] });
       else if (!g.names.includes(nm)) g.names.push(nm);
     }
@@ -326,7 +335,7 @@ export default function FulfillPage() {
   })();
   // 주소 경고·배송메시지 각각 확인(체크)해야 다운로드가 풀린다
   const overlapWarn = !!res?.openOverlap && ("error" in res.openOverlap || res.openOverlap.orders > 0);
-  const blocked = !!res && ((res.addressWarnings.length > 0 && !ack) || (msgWarns.length > 0 && !msgAck) || (overlapWarn && !overlapAck));
+  const blocked = !!res && ((res.addressWarnings.length > 0 && !ack) || (msgWarns.length > 0 && !msgAck) || (custFlags.length > 0 && !custAck) || (overlapWarn && !overlapAck));
   const unm = dispatch?.unmatched ?? [];
   const unmQty = unm.reduce((s, u) => s + u.qty, 0);
   const dedupOffBanner = res && res.dedupEnabled === false && (
@@ -473,6 +482,28 @@ export default function FulfillPage() {
               </ul>
               <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 주소들을 확인했습니다
+              </label>
+            </div>
+          )}
+          {res.customersMissing && (
+            <div className="sm-warn">단골·블랙 고객 확인이 꺼져 있습니다 — supabase/migrations/156_fulfill_customers.sql 을 적용하면 등록 고객의 주문이 여기 뜹니다.</div>
+          )}
+          {custFlags.length > 0 && (
+            // 단골·블랙 고객(156) — 등록 고객의 주문. 블랙이 위. 체크해야 다운로드가 풀린다(주소·메시지와 같은 규칙)
+            <div className={custFlags.some((f) => f.kind === "블랙") ? "b2b-error" : "sm-success"} style={{ lineHeight: 1.6 }}>
+              <strong>단골·블랙 고객 {qtyText(custFlags.length, "건")}</strong> — 메모를 읽고 발송 전에 처리하세요. <Link className="sm-link" href="/fulfill/customers">고객 목록</Link>
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, maxHeight: 300, overflowY: "auto" }}>
+                {custFlags.map((f, i) => (
+                  <li key={i}>
+                    <span className="b2b-status-pill" style={{ background: CUSTOMER_KIND_COLOR[f.kind].bg, color: CUSTOMER_KIND_COLOR[f.kind].fg, border: `1px solid ${CUSTOMER_KIND_COLOR[f.kind].border}`, marginRight: 6 }}>{f.kind}</span>
+                    <strong>{f.name || "(이름?)"}</strong>{f.orderNo ? <span className="sm-faint"> · {f.orderNo}</span> : null}
+                    {f.memo ? <> — {f.memo}</> : null}
+                    <span className="sm-faint"> ({f.matchedBy})</span>
+                  </li>
+                ))}
+              </ul>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
+                <input type="checkbox" checked={custAck} onChange={(e) => setCustAck(e.target.checked)} /> 위 고객을 확인했습니다
               </label>
             </div>
           )}

@@ -19,7 +19,7 @@ export const CNPLUS_HEADERS = [
 export const GUARANTEE_LABEL = "네이버 도착보장";
 
 // 입력 A~M 열 인덱스(0-based)
-const IDX = { dbNo: 0, orderNo: 1, name: 2, zip: 3, addr: 4, phone1: 5, phone2: 6, product: 7, qty: 8, msg: 9, sku: 10, date: 11, prop: 12 };
+export const IDX = { dbNo: 0, orderNo: 1, name: 2, zip: 3, addr: 4, phone1: 5, phone2: 6, product: 7, qty: 8, msg: 9, sku: 10, date: 11, prop: 12 }; // 고객 매칭(fulfill-customers)도 같은 열
 
 // 박스타입/기본운임 구간 (주문 총중량 kg). 값 바뀌면 여기만 수정.
 export function boxType(w: number): number { return boxTypeOf(w, DEFAULT_RATES.boxTiers); }

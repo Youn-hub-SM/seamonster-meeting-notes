@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { IDX as ORDER_IDX } from "@/app/lib/order-fulfill";
+import { loadFlaggedCustomers, matchFlaggedCustomers } from "@/app/lib/fulfill-customers";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
 import { getAllBundles } from "@/app/lib/product-bundles";
@@ -243,6 +245,11 @@ export async function POST(req: NextRequest) {
       hasKeys = !up.error;
     }
 
+    // 단골·블랙 고객(156) — 이 배치의 주문 중 등록 고객을 찾는다(② 화면 카드, 체크해야 다운로드). 정기배송(NOTHING) 행은 CN 과 같이 뺀다.
+    //  표 없음(156 미적용)만 빈 목록 + customersMissing, 그 밖의 조회 실패는 생성 실패로 — 블랙 고객을 못 읽은 채 넘기지 않는다(S4).
+    const cust = await loadFlaggedCustomers(sb);
+    const customerFlags = matchFlaggedCustomers(rows.filter((r) => !/NOTHING/i.test(String(r[ORDER_IDX.sku] ?? ""))), cust.list, ORDER_IDX);
+
     // CN 을 받았지만 아직 출고 완료 안 한 다른 배치(최근 3일)와 주문이 겹치는지 — 겹치면 같은 주문이 두 번 발송·차감된다.
     const openOverlap = hasKeys ? await findOpenOverlap(sb, sig, new Set(matchKeys)) : null;
 
@@ -263,6 +270,7 @@ export async function POST(req: NextRequest) {
       parcelSummary: res.parcelSummary,
       addressWarnings: res.addressWarnings,
       messageWarnings: res.messageWarnings, // 배송메시지 확인 목록 — 빠뜨리면 화면 카드가 영영 안 뜬다
+      customerFlags, customersMissing: cust.missing, // 단골·블랙 고객 주문(체크해야 다운로드) · 156 미적용이면 화면이 안내
       unmatched: res.unmatched,
       outbound: res.outbound, // SKU별 출고수량(재고 출고 연동용) — PII 없음
       sig, // 배치 서명(batchSig) — 4단계 출고가 이 값을 그대로 써야 대기 키·중복 검사가 이 파일과 정확히 이어진다

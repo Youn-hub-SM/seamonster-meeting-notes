@@ -11,7 +11,7 @@
 //  관리자 점검: /api/report/schema-audit 가 차단되지 않은 표에서 전화·이메일·주소·토큰 같은 컬럼 이름을 찾아 경고한다.
 export const BLOCKED_RELATIONS = [
   // 고객·거래처 개인정보
-  "sales_customers", "companies", "shipments", "survey_responses",
+  "sales_customers", "companies", "shipments", "survey_responses", "fulfill_customers",
   // 비밀·계정·설정
   "b2b_settings", "app_users", "utm_settings", "channel_commands",
   // 경영 비공개
@@ -24,7 +24,7 @@ export const BLOCKED_RELATIONS = [
 const BLOCKED_SET = new Set(BLOCKED_RELATIONS);
 export const isBlockedRelation = (name: string) => BLOCKED_SET.has(name.toLowerCase());
 // 차단 목록 사람 설명(프롬프트 '조회 불가' 절)
-export const BLOCKED_NOTE = "sales_customers(고객 전화·이름), companies·shipments(원본 — companies_report·shipments_report 뷰 사용), survey_responses(설문 원문), b2b_settings·utm_settings·channel_commands(토큰·설정), app_users(계정), bank_deposits·bank_deposit_names(입금 내역), tax_invoices(사업자 정보), ms365_doc_index(문서 본문 색인 — docs_search 로만), report_*(비서 자체 저장소). public 밖 스키마·pg_catalog·information_schema 도 조회하지 않습니다 — 특히 '파도소리'(제조사)의 재고·품목은 factory 스키마에 있어 비서가 볼 수 없습니다. 그런 질문엔 '파도소리 재고는 별도 도구(/factory)라 조회할 수 없다'고 답합니다.";
+export const BLOCKED_NOTE = "sales_customers(고객 전화·이름), fulfill_customers(단골·블랙 고객 메모), companies·shipments(원본 — companies_report·shipments_report 뷰 사용), survey_responses(설문 원문), b2b_settings·utm_settings·channel_commands(토큰·설정), app_users(계정), bank_deposits·bank_deposit_names(입금 내역), tax_invoices(사업자 정보), ms365_doc_index(문서 본문 색인 — docs_search 로만), report_*(비서 자체 저장소). public 밖 스키마·pg_catalog·information_schema 도 조회하지 않습니다 — 특히 '파도소리'(제조사)의 재고·품목은 factory 스키마에 있어 비서가 볼 수 없습니다. 그런 질문엔 '파도소리 재고는 별도 도구(/factory)라 조회할 수 없다'고 답합니다.";
 
 // 루커스튜디오(looker_ro)가 볼 수 있는 뷰(원장·재고·products 는 못 봄)
 export const LOOKER_RELATIONS = [
