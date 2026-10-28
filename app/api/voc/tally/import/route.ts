@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getTallyApiKey, getTallyFormId, getTallyCursor, setTallyCursor, tallyFetch } from "@/app/lib/voc-tally";
 import { findRespondent, summarizeAnswers, type SurveyAnswer } from "@/app/lib/surveys";
@@ -49,7 +50,10 @@ function mapSubmission(sub: Sub, qmap: Map<string, Q>, formId: string): Record<s
   };
 }
 
-export async function POST() {
+// 2026-10-29: 미들웨어 matcher 가 /api/voc/tally 하위 경로까지 제외해 왔으므로 여기서 직접 로그인 쿠키를 검사한다(웹훅 /api/voc/tally 만 서명 검증으로 공개).
+export async function POST(req: NextRequest) {
+  const token = req.cookies.get("b2b_auth")?.value;
+  if (!(await verifySession(token)) && !resolveUserName(token)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
   try {
     const [apiKey, formId] = await Promise.all([getTallyApiKey(), getTallyFormId()]);
     if (!apiKey) return NextResponse.json({ ok: false, error: "Tally API 키를 먼저 저장하세요." }, { status: 400 });
