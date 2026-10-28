@@ -1998,6 +1998,9 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
   .b2b-select,
   .b2b-search,
   .b2b-combo-input,
+  .rp-input {
+    font-size: 14px !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════
