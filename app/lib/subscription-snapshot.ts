@@ -184,4 +184,3 @@ export function computeSubscriptionSnapshot(inp: SnapshotInput) {
     cycleMix: Object.keys(cycleCounts).sort(cycleSort).map((c) => `${c} ${cycleCounts[c]}`).join(" · "),
   };
 }
-export type SubscriptionSnapshot = ReturnType<typeof computeSubscriptionSnapshot>;

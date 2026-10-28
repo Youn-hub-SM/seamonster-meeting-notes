@@ -56,8 +56,3 @@ export const MODEL_OPTIONS: { key: ModelKey; label: string; desc: string; price:
   { key: "opus", label: "높은 품질", desc: "정확·신중 (비용 ↑)", price: "$4 / $20" },
   { key: "fable", label: "최상위", desc: "Opus 위 등급 — 가장 깊은 분석 (비용 ↑↑, 느림)", price: "콘솔 요금표" },
 ];
-
-// 모델 키 → 실제 모델 ID. 잘못된 키면 sonnet 으로 폴백.
-export function resolveModel(key: ModelKey = DEFAULT_MODEL): string {
-  return MODELS[key] ?? MODELS.sonnet;
-}

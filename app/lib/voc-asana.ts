@@ -184,13 +184,6 @@ export async function createAsanaTask(opts: {
   return finalize(r.data as { gid?: string; permalink_url?: string } | null);
 }
 
-// 프로젝트 이름 조회 — 연동 점검용(접근 불가·잘못된 gid 를 사람이 읽을 메시지로).
-export async function getAsanaProjectName(pat: string, gid: string): Promise<{ ok: boolean; name?: string; error?: string }> {
-  const r = await asanaFetch(pat, `/projects/${encodeURIComponent(gid)}?opt_fields=name`);
-  if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true, name: (r.data as { name?: string } | null)?.name || gid };
-}
-
 // 연결 테스트 — 토큰(내 정보)과 프로젝트 접근을 각각 확인해 이름으로 답한다.
 export async function testAsanaConnection(pat: string, projectGid: string): Promise<{ ok: boolean; detail?: string; error?: string }> {
   const me = await asanaFetch(pat, "/users/me?opt_fields=name,email");

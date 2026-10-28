@@ -296,9 +296,3 @@ export async function claimPromoRelease(sb: SupabaseClient, requestId: string, s
   if (error) { if (missingCol(error.message, "promo_release_started_at")) return "unsupported"; throw error; }
   return (data ?? []).length ? "ok" : "busy";
 }
-// 합류가 끝까지 가지 못했으면(조회 실패·일부 실패) 클레임을 풀어 바로 다시 실행할 수 있게 — 내 클레임일 때만.
-export async function clearPromoReleaseClaim(sb: SupabaseClient, requestId: string, startedAt: string): Promise<void> {
-  const { error } = await sb.from("production_requests").update({ promo_release_started_at: null })
-    .eq("id", requestId).eq("promo_release_started_at", startedAt);
-  if (error && !missingCol(error.message, "promo_release_started_at")) console.warn("[promotion-close] 합류 클레임 해제 실패", error.message);
-}

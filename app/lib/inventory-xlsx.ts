@@ -41,7 +41,6 @@ export function cellErrorOf(v: unknown): string | null {
   const r = o.result as { error?: unknown } | null | undefined;
   return r && typeof r === "object" && typeof r.error === "string" ? r.error : null;
 }
-export function cellIsError(v: unknown): boolean { return cellErrorOf(v) !== null; }
 
 // 엑셀 셀값 → 문자열(날짜/수식/리치텍스트 대응).
 export function cellStr(v: unknown): string {

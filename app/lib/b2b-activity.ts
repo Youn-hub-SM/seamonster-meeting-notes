@@ -114,20 +114,6 @@ export async function logProductionRequestStatusChanged(reqNo: string, fromStatu
   });
 }
 
-// 자동 처리(프로모션 합류 크론)가 사람에게 확인을 요청하는 알림 — '생산요청 수정'과 구분(제목·끄기 설정·변경 기록 표시).
-//  생산 요청 등록과 같은 체크 키(prod_request)로 보낸다 — '수정' 알림을 꺼도 이 확인 요청은 간다.
-export async function logProductionRequestNotice(reqNo: string, actor: string, detail?: string): Promise<void> {
-  await recordActivity({
-    event_type: "production_request.notice",
-    summary: `생산요청 확인 필요 · ${reqNo || "(번호없음)"}`,
-    meta: { req_no: reqNo },
-    notify: true,
-    bot: "helper",
-    helperEvent: "prod_request",
-    actor,
-    detail,
-  });
-}
 export async function logProductionRequestUpdated(reqNo: string, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "production_request.updated",
@@ -522,16 +508,6 @@ export async function logSalesConfigChanged(channels: number): Promise<void> {
     event_type: "sales.config_changed",
     summary: `채널 이익 설정 저장 · ${channels}개 채널`,
     meta: { channels },
-    notify: false,
-  });
-}
-// 전화번호 조회 감사 — 번호는 뒤4자리만 기록(내부 오남용 억제). 외부 알림 없이 DB에만 남김.
-export async function logPhoneLookup(phoneDigits: string): Promise<void> {
-  const masked = phoneDigits ? `***${phoneDigits.slice(-4)}` : "(빈값)";
-  await recordActivity({
-    event_type: "sales.phone_lookup",
-    summary: `주문 검색(전화 조회) · ${masked}`,
-    meta: { masked },
     notify: false,
   });
 }

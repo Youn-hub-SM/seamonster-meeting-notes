@@ -28,7 +28,6 @@ export type InventoryFacts = {
   purchase?: { amount: number; basis: "확정" | "잠정"; no_price_qty?: number }; // 월간: 매입액
 };
 
-const won = (n: number | null | undefined) => (n == null ? "-" : Math.round(n).toLocaleString("ko-KR"));
 const qty = (n: number) => (Math.round(n * 10) / 10).toLocaleString("ko-KR");
 const cell = (s: string) => s.replace(/[|\r\n]+/g, "/").replace(/\s+/g, " ").trim().slice(0, 40) || "-";
 
@@ -124,26 +123,6 @@ export const tableRow = (t: string) => /^\|.*\|$/.test(t);
 export const tableRule = (t: string) => /^\|[\s|:-]+\|$/.test(t);
 export const splitRow = (t: string) => t.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
 export const hasVoiceBlock = (md: string) => md.split("\n").some((l) => VOICE_HEAD.test(l.trim()));
-// ① '고객의 소리 집계' 표만 '- 구분 · {기간} N · 전주 M' 한 줄씩으로(표 아래 기준·주의 줄은 그대로). 다른 표는 건드리지 않는다.
-export function voiceTableAsLines(md: string): string {
-  const lines = md.split("\n");
-  const out: string[] = [];
-  let inVoice = false;
-  for (let i = 0; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (/^##/.test(t)) inVoice = VOICE_HEAD.test(t); // 다음 헤딩(## · ###)에서 블록이 끝난다
-    if (!inVoice || !tableRow(t)) { out.push(lines[i]); continue; }
-    const rows: string[][] = [];
-    for (; i < lines.length && tableRow(lines[i].trim()); i++) {
-      const raw = lines[i].trim();
-      if (!/^\|[\s|:-]+\|$/.test(raw)) rows.push(splitRow(raw));
-    }
-    i--;
-    const [head = [], ...body] = rows;
-    for (const r of body) out.push(`- ${r[0]} · ${r.slice(1).map((c, k) => `${head[k + 1] ?? ""} ${c}`.trim()).join(" · ")}`);
-  }
-  return out.join("\n");
-}
 
 // 팀즈 마지막 안전장치 — 코드 표 블록(### 캠페인 전체·광고 추이·재고 주의 품목·고객의 소리 집계)을 통째로 빼고 AI 글만 남긴다.
 //  예전엔 한도를 넘으면 본문 전체를 안내 한 줄로 바꿔 AI 분석까지 사라졌다. names 를 주면 그 블록만 뺀다(② 단계).

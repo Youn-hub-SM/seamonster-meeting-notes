@@ -123,12 +123,6 @@ export function promoForwardFrom(list: Promotion[], today: string, leadDays: num
   return out;
 }
 
-// 판매속도 보정용 — 최근 집계창[from,to]에 '이미 나간' 프로모션 판매분(SKU별, 일할).
-//  이 값을 평상시 판매속도에서 빼서, 행사때 과하게 나간 스파이크를 제거한다.
-//  → 행사분때문에 '과하게 많이 나간 것'이 평상시 안전재고를 부풀리지 않게.
-export async function getPromoSoldInWindow(from: string, to: string): Promise<Record<string, number>> {
-  return promoSoldFrom((await getPromotionsWithOk()).list, from, to);
-}
 export function promoSoldFrom(list: Promotion[], from: string, to: string): Record<string, number> {
   const out: Record<string, number> = {};
   if (!from || !to || to < from) return out;

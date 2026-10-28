@@ -8,7 +8,7 @@
 //  주문 총중량 U = 같은 (주문번호 B, 주소 E, 배송타입) 라인들의 Σ( 코드 총중량 × 수량 I ).
 //  배송타입 = M열 '네이버 도착보장' 여부. 일반/도착보장은 다른 박스로 나가므로 혼합 주문은 타입별 2박스.
 
-import { type FulfillRates, type BoxTier, type BoxCat, DEFAULT_RATES, DEFAULT_BOX_CATS, boxTypeOf, baseFeeOf, boxCategoryOf, boxCatWeights } from "./fulfill-rates";
+import { type FulfillRates, type BoxCat, DEFAULT_RATES, DEFAULT_BOX_CATS, boxTypeOf, baseFeeOf, boxCategoryOf } from "./fulfill-rates";
 
 export const CNPLUS_HEADERS = [
   "사용안함", "고객주문번호", "받는분성명", "우편번호", "받는분주소(전체, 분할)", "받는분전화번호",
@@ -21,33 +21,11 @@ export const GUARANTEE_LABEL = "네이버 도착보장";
 // 입력 A~M 열 인덱스(0-based)
 export const IDX = { dbNo: 0, orderNo: 1, name: 2, zip: 3, addr: 4, phone1: 5, phone2: 6, product: 7, qty: 8, msg: 9, sku: 10, date: 11, prop: 12 }; // 고객 매칭(fulfill-customers)도 같은 열
 
-// 박스타입/기본운임 구간 (주문 총중량 kg). 값 바뀌면 여기만 수정.
-export function boxType(w: number): number { return boxTypeOf(w, DEFAULT_RATES.boxTiers); }
-export function baseFee(w: number): number { return baseFeeOf(w, DEFAULT_RATES.boxTiers); }
-export const GUAR_SURCHARGE = 143; // 도착보장 건당 운임(원). 이제 도착보장 '기본운임'에 143×건이 포함됨(추가운임은 제주 등 수동).
 
 // 택배량 집계용 박스종류(주문 총중량 구간). 배송일지 '해당 주문건 박스 종류'와 동일.
 //  ★목록은 이제 설정(온라인 발주 설정 > 배송일지 박스 종류)에서 편집한다 — fulfill-rates.ts 의 BoxCat.
 //   아래 BOX_CATEGORIES 는 '설정을 못 읽는 곳'을 위한 기본값일 뿐이니, 새 코드는 설정에서 받은 cats 를 넘길 것.
 export const BOX_CATEGORIES: string[] = DEFAULT_BOX_CATS.map((c) => c.name);
-
-export function boxCategory(w: number, cats: BoxCat[] = DEFAULT_BOX_CATS): string {
-  return boxCategoryOf(w, cats);
-}
-
-// 박스종류별 개수 → 기본운임 합. 각 종류 대표중량(구간에서 자동 도출)을 요율 구간(tiers)에 대입해 합산.
-//  배송일지 '택배량 직접수정'에서 개수를 고치면 기본운임이 이 함수로 다시 계산된다.
-//  (박스종류가 요율 구간을 걸치지 않도록 저장 시 검증하므로 — validateBoxCats — 발주처리 시점
-//   ΣbaseFeeOf(주문중량) 과 정확히 일치한다.)
-export function baseFeeFromBoxes(boxes: Record<string, number> | null | undefined, tiers: BoxTier[], cats: BoxCat[] = DEFAULT_BOX_CATS): number {
-  const w = boxCatWeights(cats);
-  let sum = 0;
-  for (const cat of Object.keys(w)) {
-    const cnt = Math.max(0, Math.round(Number(boxes?.[cat]) || 0));
-    if (cnt) sum += cnt * baseFeeOf(w[cat], tiers);
-  }
-  return sum;
-}
 
 // L열(날짜) 셀 → YYYY-MM-DD. 엑셀 날짜셀(Date)·직렬값(number)·문자열 모두 방어 파싱, 실패 시 null.
 //  출고를 '주문일' 축으로 기록해 매출(주문일자)과 같은 축에서 완전 대조하기 위함 — 실패 행은 처리일로 폴백.

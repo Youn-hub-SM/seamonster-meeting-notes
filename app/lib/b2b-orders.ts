@@ -9,11 +9,6 @@ import { Company, TaxType } from "./b2b-types";
 // ── 생산 상태 (발주 단위) ──
 export const PRODUCTION_STATUSES = ["생산대기", "생산중", "생산완료"] as const;
 export type ProductionStatus = (typeof PRODUCTION_STATUSES)[number];
-export const PRODUCTION_COLORS: Record<ProductionStatus, { bg: string; fg: string }> = {
-  "생산대기": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
-  "생산중": { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
-  "생산완료": { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
-};
 
 // ── 발송 상태 (차수 단위; 발주 status 는 차수들의 롤업) ──
 export const ORDER_STATUSES = ["발송대기", "발송완료", "취소"] as const;
@@ -129,13 +124,6 @@ export interface OrderListItem extends Order {
   items: OrderLinePreview[];
   shipments: ShipmentDatePreview[];   // 발송 일정 (캘린더·주간뷰 분할 발송 표시용)
   remaining_total?: number;           // 발송일 미정 잔여 수량 합(라인별 remaining 합) — 0 이면 전량 일정 있음
-}
-
-// 단일 조회 응답: 풀 디테일
-export interface OrderDetail extends Order {
-  company: Company;
-  items: OrderItem[];
-  shipments: Shipment[];
 }
 
 // 입금 내역

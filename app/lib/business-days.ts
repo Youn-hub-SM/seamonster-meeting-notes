@@ -32,11 +32,6 @@ const isoOf = (dt: Date): string =>
   `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 
 /** 이 날짜가 영업일인가(주말·공휴일 아님). */
-export function isBusinessDay(iso: string, holidays: Set<string> = KR_HOLIDAYS): boolean {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dow = new Date(y, m - 1, d).getDay(); // 0=일, 6=토
-  return dow !== 0 && dow !== 6 && !holidays.has(iso);
-}
 
 /** fromIso(그날 자체는 세지 않음) 기준으로 영업일 n개 뒤 날짜(YYYY-MM-DD)를 반환. */
 export function addBusinessDays(fromIso: string, n: number, holidays: Set<string> = KR_HOLIDAYS): string {

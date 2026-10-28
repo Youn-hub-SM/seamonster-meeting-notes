@@ -51,7 +51,6 @@ export const LINES: ProductLine[] = [
 
 // 절단 규격(그램)
 export const CUTS = ["100", "200"] as const;
-export type Cut = (typeof CUTS)[number];
 
 export function findSpecies(code: string): Species | undefined {
   return SPECIES.find((s) => s.code === code.toUpperCase());

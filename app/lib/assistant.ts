@@ -20,9 +20,7 @@ export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, 
 export type AskLooker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
 export type AskTable = { title: string; sql: string; columns: string[]; rows: Record<string, unknown>[]; rowCount: number; truncated: boolean; looker?: AskLooker };
 export type QuoteSource = "voc" | "inquiry" | "report" | "request" | "activity";
-export type AskQuote = { source: QuoteSource; date: string; title: string; text: string };
 export type AskUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; estUsd: number; estNote: string };
-export type AskToolLog = { name: string; label: string; ok: boolean; ms: number };
 export class AssistantOffError extends Error {}
 
 // ── 설정·월 누적(kv) ──
@@ -77,11 +75,6 @@ const NAME_SPACED_RE = new RegExp(`(?<![가-힣])([${SURNAMES}])([가-힣]{2})(?
 // 라벨 뒤 조사(은·는·이·가)는 띄어 쓴 경우에만 조사로 본다 — '수취인 이민준' 의 '이' 를 조사로 먹지 않게
 const NAME_LABEL_RE = /(고객명|고객 이름|이름|성함|수취인|수령인|받는\s*분|주문자|구매자|보내는\s*분|신청자|작성자)\s*(?:[:：]|(?:은|는|이|가)(?=\s))?\s*([가-힣])[가-힣]{1,3}(?![가-힣])/g;
 
-export function maskName(name: string | null | undefined): string {
-  const s = (name || "").trim();
-  if (!s) return "";
-  return `${s[0]}**`;
-}
 export function maskPii(text: string, opts?: { names?: boolean }): string {
   if (!text) return "";
   let s = text
@@ -194,8 +187,6 @@ export const strictRejected = (e: unknown) => e instanceof Anthropic.APIError &&
 export const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | "timeout"> =>
   Promise.race([p, new Promise<"timeout">((res) => setTimeout(() => res("timeout"), ms))]);
 
-// ── 한계값 ──
-export const ASK_DEADLINE_MS = 270_000;   // 라우트 maxDuration 300 에서 응답 여유
 const MAX_TOOL_ROUNDS = 8;
 const FINAL_RESERVE = 120_000;            // 최종 답 턴에 남겨 둘 시간
 export const TOOL_TIMEOUT_MS = 25_000;           // run_sql·schema·read_report

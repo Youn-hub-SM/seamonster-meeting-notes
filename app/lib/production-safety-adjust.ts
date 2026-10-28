@@ -25,28 +25,6 @@ export async function getSafetyAdjustsWithOk(): Promise<{ adjusts: AdjMap; ok: b
   return { adjusts: asMap(r.value), ok: r.ok };
 }
 
-export async function getSafetyAdjusts(): Promise<AdjMap> {
-  return (await getSafetyAdjustsWithOk()).adjusts;
-}
-
-export async function setSafetyAdjust(sku: string, adj: SafetyAdjust): Promise<AdjMap> {
-  const key = (sku || "").trim().toUpperCase();
-  if (!key) throw new Error("sku 가 필요합니다.");
-  const delta = Math.round(Number(adj.delta) || 0);
-  const excludeOut = Math.max(0, Math.round(Number(adj.excludeOut) || 0));
-  const memo = (adj.memo || "").trim();
-  const until = (adj.until || "").trim() || null;
-  return mutateKv<AdjMap>(KEY, (raw) => {
-    const cur = { ...asMap(raw) };
-    if (delta === 0 && excludeOut === 0 && !memo) {
-      delete cur[key]; // 보정값·행사출고·메모 모두 없으면 제거(기본 복귀)
-    } else {
-      cur[key] = { delta, ...(excludeOut ? { excludeOut } : {}), ...(memo ? { memo } : {}), ...(until ? { until } : {}) };
-    }
-    return cur;
-  });
-}
-
 // 만료가 지나지 않은 유효 보정값만 반환(만료 지났으면 0).
 export function effectiveDelta(adj: SafetyAdjust | undefined, today: string): number {
   if (!adj) return 0;

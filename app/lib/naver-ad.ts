@@ -175,12 +175,6 @@ function parseConvTsv(tsv: string): ConvRow[] {
   return out;
 }
 
-// 하루치 전환 상세 행 조회(모든 전환유형 포함 — 필터는 호출측). statDt="YYYY-MM-DD".
-// 지표 없는 날/오늘(미지원) 등은 400을 내므로 해당 일자는 빈 배열로 처리(전체 요청 실패 방지).
-export async function fetchConvReportDay(statDt: string): Promise<ConvRow[]> {
-  return (await fetchConvReportDayStrict(statDt)) ?? [];
-}
-
 // 위와 같되 '데이터 없음'([])과 '조회 실패'(null)를 구분한다(2026-09-30) — 실패를 0건으로 캐시하면
 //  그날 구매가 0 으로 굳고(어제분은 재조회 때 기존 캐시까지 지워짐) 어제 분석이 '구매 0'으로 단정한다.
 //  [] = 400(지표 없음·미지원 일자) 또는 리포트 상태 NONE. null = 그 밖의 오류·빌드 미완료·다운로드 실패.

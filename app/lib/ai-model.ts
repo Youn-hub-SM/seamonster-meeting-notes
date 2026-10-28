@@ -105,7 +105,4 @@ export function readText(resp: Anthropic.Message, opts?: { allowTruncated?: bool
   return resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
 }
 
-// ── 하위호환: 기존 CS 전용 API (동일 키 ai_model_cs 사용) ──
-export const getCsModelKey = (): Promise<ModelKey | "inherit"> => getFeatureModelKey("cs");
-export const setCsModelKey = (key: ModelKey | "inherit"): Promise<void> => setFeatureModelKey("cs", key);
 export const getCsModel = (): Promise<string> => getFeatureModel("cs");

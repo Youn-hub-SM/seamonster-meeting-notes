@@ -4,22 +4,6 @@
 export const PR_STATUSES = ["요청", "진행중", "완료", "취소"] as const;
 export type PrStatus = (typeof PR_STATUSES)[number];
 
-export const PR_STATUS_COLOR: Record<PrStatus, { bg: string; fg: string }> = {
-  요청: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },        // 접수 대기
-  진행중: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" }, // 일부 입고됨
-  완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },   // 생산·입고 종료
-  취소: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },   // 취소(기록 보존)
-};
-
-// 화면 표시 라벨 — DB status 문자열('진행중' 등)은 그대로 두고 '표시'만 바꾼다(로직·비교·알림은 raw 유지).
-//  '진행중'은 생산담당자가 요청을 확인하고 생산에 착수한 단계임을 분명히 하려고 '담당자 확인/생산 중'으로 표기.
-export const PR_STATUS_LABEL: Record<PrStatus, string> = {
-  요청: "요청",
-  진행중: "담당자 확인/진행 중",
-  완료: "완료",
-  취소: "취소",
-};
-
 // 입고 1건(증거)
 export interface PrReceipt {
   id: string;

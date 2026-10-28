@@ -281,10 +281,3 @@ export async function loadCurrentRoundDist(sb: SupabaseClient): Promise<RoundDis
 
 // 상태 전이의 종류 — 화면·API 공용 라벨(prev→new)
 export type TransitionKind = "new" | "resume" | "reactivate" | "pause" | "cancel" | "other";
-export function transitionKind(prev: string | null, next: string): TransitionKind {
-  if (!prev) return "new";                 // 최초 관측(신규 유입)
-  if (next === "U") return prev === "C" ? "reactivate" : "resume"; // 해지→이용중 재활성 / 일시정지→이용중 재개
-  if (next === "P") return "pause";        // 일시정지
-  if (next === "C") return "cancel";       // 해지
-  return "other";
-}

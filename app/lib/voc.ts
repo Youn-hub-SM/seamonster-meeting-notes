@@ -27,10 +27,6 @@ export const FAULT_BY_CATEGORY: Record<string, VocFault> = {
 export function suggestFault(category: string): VocFault {
   return FAULT_BY_CATEGORY[category] || "미분류";
 }
-// 제조사에 청구 가능한 귀책(개선요청서 청구액 산정)
-export const VOC_FAULT_CLAIMABLE = new Set<string>(["제조사"]);
-// 자사가 떠안는 부담 귀책
-export const VOC_FAULT_BURDEN = new Set<string>(["물류", "자사"]);
 
 // 보상유형별 손해/보상 금액 자동계산.
 //  손해 = 이미 나간 비용이 날아가는 것 = 상품원가(cost_price)×수량 + 배송원가.

@@ -141,11 +141,6 @@ export function boxSummary(lots: Pick<StockLot, "box_kg" | "kg">[], max = 2): st
   const total = Math.round(gs.reduce((s, g) => s + (g.boxes ?? 0), 0) * 100) / 100;
   return `총 ${boxQty(total)} · ${gs.length}종`;
 }
-// 입고 때 적은 박스 참고 — "16kg × 3박스" (둘 다 있을 때만, 없으면 "")
-export function boxNote(box_kg: number | null | undefined, boxes: number | null | undefined): string {
-  if (!box_kg || !boxes) return "";
-  return `${kgStr(Number(box_kg))} × ${boxStr(Math.abs(Number(boxes)))}`;
-}
 
 // 같은 품목 판정 키 = 품목명·규격·원산지 셋이 모두 같을 때(공백 정리·대소문자 무시, 2026-10-22 대표 규칙).
 //  상품마스터 등록·수정과 입고 창 즉시 등록(quick)이 같은 키를 쓴다.

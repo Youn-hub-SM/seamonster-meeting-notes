@@ -171,25 +171,6 @@ export function findFieldByKey(key: string, type: NoticeType): NoticeField | nul
   return promptFieldsFor(type).find((f) => f.key === key) ?? null;
 }
 
-// 직원 추가 입력(extras)을 유형 `to` 로 보낼 때 남길 것 — 화면이 서버에 보내기 전·응답 뒤에 정리한다.
-//  · `to` 에 있는 키만. 이전 유형 `from` 에 같은 키가 다른 kind 로 있었으면 버린다(위 findFieldByKey 의 충돌 예).
-//  · select 는 선택지 안의 값만(선택지 밖은 서버가 버려 바뀌는 게 없다).
-//  · 빈 값은 버린다 — 화면은 '비웠다' 표시로 "" 를 들고 있지만 서버는 빈 값을 '추출값 유지' 로 보므로 보낼 것이 없다.
-//  결과 순서는 `to` 의 항목 순서(프롬프트 [추가 입력] 줄 순서).
-export function carryExtras(extras: NoticeValues, from: NoticeType | null, to: NoticeType): NoticeValues {
-  const fromFields = from ? promptFieldsFor(from) : [];
-  const out: NoticeValues = {};
-  for (const nf of promptFieldsFor(to)) {
-    const v = (extras[nf.key] ?? "").trim();
-    if (!v) continue;
-    const of = fromFields.find((f) => f.key === nf.key);
-    if (of && of.kind !== nf.kind) continue;
-    if (nf.kind === "select" && !nf.options?.includes(v)) continue;
-    out[nf.key] = v;
-  }
-  return out;
-}
-
 // 유형의 초기값(defaultValue 가 있는 항목만)
 export function defaultValuesFor(type: NoticeType): NoticeValues {
   const out: NoticeValues = {};
@@ -227,10 +208,4 @@ export function fieldInfo(f: NoticeField): NoticeFieldInfo {
   const hint = f.hint ?? f.placeholder;
   if (hint) out.hint = hint;
   return out;
-}
-
-// 받는 사람 라벨 — 유형이 both 면 입력의 '대상', 아니면 유형이 정한 쪽.
-export function audienceOf(type: NoticeType, values: NoticeValues): string {
-  if (type.audience === "both") return (values.audience ?? "").trim() || "고객";
-  return AUDIENCE_LABEL[type.audience];
 }

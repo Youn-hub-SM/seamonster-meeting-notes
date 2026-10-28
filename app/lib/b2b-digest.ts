@@ -15,7 +15,6 @@ import { fetchAllPages, fetchInChunks } from "./sales-paging";
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const kst = () => new Date(Date.now() + 9 * 3600e3);
 export const kstDateStr = () => kst().toISOString().slice(0, 10);
-export const kstHour = () => kst().getUTCHours();
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 const won = (n: unknown) => Math.round(Number(n) || 0).toLocaleString();
 function weekday(dateStr: string): string {
@@ -62,7 +61,6 @@ export async function saveDigestConfig(patch: Partial<DigestConfig>): Promise<Di
 }
 // 마지막 자동 발송(날짜 시각) — digest_last_auto(2026-10-21~), 없으면 옛 날짜 표시(digest_last_sent, 중복 방지 겸용)
 export const getDigestLastSent = async () => (await getKv("digest_last_auto")) || (await getKv("digest_last_sent"));
-export const setDigestLastSent = (d: string) => setKv("digest_last_sent", d);
 
 type OrderRow = { id: string; order_no: string; company_id: string; status: string; tax_invoice_status: string; payment_status: string; total: number };
 type ShipRow = { ship_date: string; status: string; box_count: number; order_id: string };
