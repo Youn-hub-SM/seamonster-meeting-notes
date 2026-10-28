@@ -442,11 +442,6 @@ export function hasPendingShipment(o: { shipments?: PendingShipLike[] }): boolea
     (!!s.ship_date || (s.items ?? []).some((it) => (Number(it.qty) || 0) > 0)));
 }
 
-// 발주 UI 에서 '생산일·생산 상태' 표시 여부. 생산 일정은 생산관리(app/production)에서 관리하므로 발주에선 숨긴다.
-//  데이터·컬럼·API·타입은 그대로 두고 '표시만' 끈다 → 되돌리려면 이 값을 true 로 바꾸면 전체 복원.
-//  발주 목록/폼/캘린더/대시보드의 생산 UI 와 '지연' 판정(생산 기준)이 모두 이 플래그를 따른다.
-export const SHOW_ORDER_PRODUCTION = false;
-
 // 목록·캘린더·주간뷰용 긴급도 — 다음 미발송 차수 날짜로 판정.
 //  복수 발송은 첫 차수가 나가면 발주가 발송완료(매출 인식)가 되지만(deriveParentStatus), 남은 차수의
 //  지연·임박은 계속 보여야 한다 → 남은 차수가 있으면 발송대기로 보고 판정한다.
@@ -464,10 +459,6 @@ export function getUrgency(o: Pick<Order, "status" | "production_status" | "prod
 
   // 발송일 지남 + 아직 미발송
   if (o.ship_date && o.ship_date < todayIso) return "overdue";
-  // 생산일 지남 + 아직 생산 미완료 — 생산 표시가 켜져 있을 때만(꺼진 화면에서 근거 없는 '지연'이 뜨지 않게)
-  if (SHOW_ORDER_PRODUCTION && o.production_date && o.production_date < todayIso && o.production_status !== "생산완료") {
-    return "overdue";
-  }
   // 발송 임박
   if (o.ship_date && (o.ship_date === todayIso || o.ship_date === tomorrowIso)) {
     return "urgent";

@@ -8,17 +8,13 @@ import {
   OrderListItem,
   OrderLinePreview,
   ORDER_STATUSES,
-  PRODUCTION_STATUSES,
   PAYMENT_STATUSES,
   TAX_INVOICE_STATUSES,
   OrderStatus,
-  ProductionStatus,
   PaymentStatus,
   TaxInvoiceStatus,
   STATUS_COLORS,
   STATUS_SHORT,
-  PRODUCTION_COLORS,
-  SHOW_ORDER_PRODUCTION,
   PAYMENT_COLORS,
   TAX_INVOICE_COLORS,
   SHIPMENT_STATUS_COLORS,
@@ -42,7 +38,6 @@ import {
 import { Company } from "@/app/lib/b2b-types";
 import CalendarView from "./CalendarView";
 import WeeklyView from "./WeeklyView";
-import ProductionView from "./ProductionView";
 import IconButton from "@/app/components/IconButton";
 import { pingActivityFeed } from "../ActivityFeed";
 import { matchKoQuery } from "@/app/lib/hangul";
@@ -51,7 +46,7 @@ import { useConfirm } from "@/app/components/Feedback";
 // 발주 등록·수정 화면(OrderForm)이 저장 뒤 목록으로 넘어오면서 sessionStorage 에 남긴 차감 칸 안내 — 이 화면의 경고 배너로 이어받는다(키는 OrderForm.tsx 와 같아야 한다)
 const CHANNEL_NOTICE_KEY = "b2b.orders.channelNotice";
 
-type View = "list" | "calendar" | "weekly" | "production";
+type View = "list" | "calendar" | "weekly";
 
 export default function OrdersListPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -438,31 +433,6 @@ export default function OrdersListPage() {
       return;
     }
     await patchStatus(id, newStatus);
-  }
-
-  async function patchProduction(id: string, newProd: ProductionStatus) {
-    const target = orders.find((o) => o.id === id);
-    if (!target || target.production_status === newProd) return;
-    bumpRow(id); // 진행 중인 줄 새로고침(refreshRows)이 이 수정을 덮지 않게
-    const snapshot = orders;
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, production_status: newProd } : o)));
-    try {
-      const res = await fetch(`/api/b2b/orders/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ production_status: newProd }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setOrders(snapshot);
-        setError(data.error || "생산 상태를 변경하지 못했습니다. 다시 고르세요");
-      } else {
-        pingActivityFeed();
-      }
-    } catch (err) {
-      setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "생산 상태를 변경하지 못했습니다. 다시 고르세요");
-    }
   }
 
   // 발송일 등록 창 열기 — 기존 차수가 있으면 불러와 이어서 편집(복수 발송 세팅).
@@ -1192,21 +1162,8 @@ export default function OrdersListPage() {
         >
           주간 (발송일)
         </button>
-        {/* 생산 집계 — 생산관리로 이관되어 발주에선 숨김(SHOW_ORDER_PRODUCTION). 탭·화면·API 는 롤백 대비 보존 */}
-        {SHOW_ORDER_PRODUCTION && (
-          <button
-            type="button"
-            className={`sm-tab ${view === "production" ? "is-active" : ""}`}
-            onClick={() => setView("production")}
-          >
-            생산 집계
-          </button>
-        )}
       </div>
 
-      {view === "production" && SHOW_ORDER_PRODUCTION ? (
-        <ProductionView />
-      ) : (
       <div className="b2b-card">
         <div className="b2b-card-head" style={{ gap: 12, flexWrap: "wrap", justifyContent: "flex-start" }}>
           <input
@@ -1359,12 +1316,8 @@ export default function OrdersListPage() {
                   <th style={{ width: 52 }}></th>
                   <th style={{ width: "17%" }}>업체</th>
                   <th style={{ width: "22%" }}>품목</th>
-                  <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>
-                  {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
-                  <th className="b2b-col-date" style={{ width: 100 }}>발송일</th>
-                  <th className="num" style={{ width: 100 }}>합계(원)</th>{/* 2026-10-20: 84→100 — 8~9자리 금액("18,232,000")이 잘리지 않게. 발송일 −4·품목 −1% 로 표 폭 유지 */}
-                  {SHOW_ORDER_PRODUCTION && <th className="b2b-col-status">생산</th>}
-                  <th className="b2b-col-status">발송</th>
+                  <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>                  <th className="b2b-col-date" style={{ width: 100 }}>발송일</th>
+                  <th className="num" style={{ width: 100 }}>합계(원)</th>{/* 2026-10-20: 84→100 — 8~9자리 금액("18,232,000")이 잘리지 않게. 발송일 −4·품목 −1% 로 표 폭 유지 */}                  <th className="b2b-col-status">발송</th>
                   <th className="b2b-col-status">입금</th>
                   <th className="b2b-col-status">세금계산서</th>
                   <th style={{ width: 112 }}></th>
@@ -1413,9 +1366,7 @@ export default function OrdersListPage() {
                       <RowCell href={`/b2b/orders/${o.id}`}>
                         <ItemsPreview items={o.items} />
                       </RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>
-                      {SHOW_ORDER_PRODUCTION && <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>}
-                      {parent ? (
+                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>                      {parent ? (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                           {/* 복수발송은 날짜가 차수마다 달라 한 칸에 못 적는다 — 차수 창을 여는 입구만 둔다 */}
                           <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
@@ -1456,23 +1407,6 @@ export default function OrdersListPage() {
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {won(o.total)}
                       </RowCell>
-                      {SHOW_ORDER_PRODUCTION && (
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <select
-                          className="b2b-status-select"
-                          value={o.production_status}
-                          onChange={(e) => patchProduction(o.id, e.target.value as ProductionStatus)}
-                          style={{
-                            background: PRODUCTION_COLORS[o.production_status]?.bg,
-                            color: PRODUCTION_COLORS[o.production_status]?.fg,
-                          }}
-                        >
-                          {PRODUCTION_STATUSES.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      </td>
-                      )}
                       <td onClick={(e) => e.stopPropagation()}>
                         {parent ? (
                           <button
@@ -1553,7 +1487,7 @@ export default function OrdersListPage() {
                       <tr key={s.id} className="b2b-child-row">
                         <td></td>
                         <td></td>
-                        <td colSpan={SHOW_ORDER_PRODUCTION ? 11 : 9} style={{ padding: "8px 18px 8px 30px" }}>
+                        <td colSpan={9} style={{ padding: "8px 18px 8px 30px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                             <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                               <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>└ {s.seq}차</span>
@@ -1624,9 +1558,7 @@ export default function OrdersListPage() {
                         <UnlinkedNote o={o} />
                       </div>
                       <div className="b2b-order-card-dates">
-                        <span><em>발주</em>{dateShort(o.order_date)}</span>
-                        {SHOW_ORDER_PRODUCTION && <span><em>생산</em>{dateShort(o.production_date)}</span>}
-                        {/* 카드 전체가 상세로 가는 링크라 눌림을 여기서 끊는다 — 안 그러면 창 대신 상세가 열린다.
+                        <span><em>발주</em>{dateShort(o.order_date)}</span>                        {/* 카드 전체가 상세로 가는 링크라 눌림을 여기서 끊는다 — 안 그러면 창 대신 상세가 열린다.
                             손가락으로 누르는 화면이라 글자보다 넉넉한 영역을 준다. */}
                         <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                           <em>발송</em>
@@ -1641,11 +1573,6 @@ export default function OrdersListPage() {
                       <div className="b2b-order-card-foot">
                         <span className="b2b-order-card-total">{wonText(o.total)}</span>
                         <div className="b2b-order-card-pills">
-                          {SHOW_ORDER_PRODUCTION && (
-                          <span className="b2b-status-pill" style={{ background: PRODUCTION_COLORS[o.production_status]?.bg, color: PRODUCTION_COLORS[o.production_status]?.fg }}>
-                            {o.production_status}
-                          </span>
-                          )}
                           {parent ? (
                             <span
                               className="b2b-parent-toggle"
@@ -1701,7 +1628,6 @@ export default function OrdersListPage() {
           </>
         )}
       </div>
-      )}
 
       {exportOptions && (
         <ExportPickModal
