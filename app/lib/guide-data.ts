@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-10-27";
+export const GUIDE_UPDATED = "2026-10-29";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1625,26 +1625,6 @@ export const GUIDE: GuideCategory[] = [
               "비밀번호",
               "로그인",
               "추가"
-            ]
-          },
-          {
-            "href": "/factory/settings",
-            "label": "설정(Swit 알림)",
-            "what": "파도소리 입출고 Swit 알림 — 현재 미사용(도입 중단)",
-            "steps": [
-              "현재는 사용하지 않는다 — 알림 발송을 끈 상태로 둔다"
-            ],
-            "tips": [
-              "차기 메신저를 도입하면 이 설정 화면을 재활용할 예정이다"
-            ],
-            "keywords": [
-              "swit",
-              "스윗",
-              "알림",
-              "웹훅",
-              "연동",
-              "채널",
-              "메신저"
             ]
           }
         ]
