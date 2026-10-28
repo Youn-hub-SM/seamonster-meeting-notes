@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, isPending007, PENDING_007 } from "@/app/lib/factory-db";
-import { TXN_TYPES, kgStr, kgNum, kgBox, lotLabel, productLabel, signedKg, type HistEvent, type TxnType } from "@/app/lib/factory";
-import { notifyFactory, factoryMsg } from "@/app/lib/factory-notify";
+import { TXN_TYPES, kgNum, productLabel, signedKg, type HistEvent, type TxnType } from "@/app/lib/factory";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,7 +15,6 @@ const pending7 = () => NextResponse.json({ ok: false, error: PENDING_007, pendin
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIMIT = 1000; // PostgREST 한도 — 이보다 크게 달라고 해도 1000행에서 잘린다
 // 알림은 기다리되 오래 붙잡지 않는다 — 웹훅이 느려 함수가 시간 초과되면 저장됐는데 '실패'로 보인다
-const notifySoon = (p: Promise<void>) => Promise.race([p, new Promise<void>((r) => setTimeout(r, 4000))]);
 const num = (v: unknown) => (v == null ? null : Number(v));
 
 // 007 부터 수량은 kg. box_kg·boxes 는 입고 때 적은 참고 정보(없을 수 있다).
@@ -173,14 +171,6 @@ export async function POST(req: NextRequest) {
     if (saved.length === 0) return NextResponse.json({ ok: false, error: "현재 수량과 같아 바뀐 것이 없습니다." }, { status: 400 });
     if (!("kg" in saved[0])) return pending7(); // 옛 함수가 돌았다(007 미적용)
 
-    // 알림 1건(입력 1회) — 줄이 여러 개면 한 줄로 이어 붙인다
-    const parts = saved.map((t) => `${prod.get(t.product_id)?.name ?? "품목"}(${lotLabel({ mfg_date: t.mfg_date })}) ${Number(t.kg) < 0 ? "−" : "+"}${kgBox(Math.abs(Number(t.kg)), num(t.box_kg))}`);
-    const totalKg = saved.reduce((s, t) => s + Math.abs(Number(t.kg)), 0);
-    await notifySoon(notifyFactory(factoryMsg({
-      event: type,
-      label: `${parts.join(" / ")}${saved.length > 1 ? ` — ${saved.length}건 ${kgStr(totalKg)}` : ""}`,
-      dest: type === "출고" ? partner : null, who: u.name, memo,
-    })));
     return NextResponse.json({ ok: true, count: saved.length });
   } catch (err) {
     if (isPending005(err)) return pending();

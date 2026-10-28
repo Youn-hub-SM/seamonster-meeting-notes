@@ -56,8 +56,7 @@ export default function FactoryShell({ children }: { children: React.ReactNode }
             );
           })}
         </nav>
-        {/* 사용자 이름·알림 설정·씨몬스터 도구로 링크는 뺐다(2026-10-20 대표 지시) — 로그아웃만.
-            알림 설정 화면(/factory/settings)은 주소로만 연다. */}
+        {/* 사용자 이름·씨몬스터 도구로 링크는 뺐다(2026-10-20 대표 지시) — 로그아웃만. Swit 알림 설정은 2026-10-29 삭제. */}
         <div className="fac-sb-foot">
           <button type="button" onClick={logout}>로그아웃</button>
         </div>
