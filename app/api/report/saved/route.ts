@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { getSavedReports, addSavedReport, deleteSavedReport, updateSavedReport, type ReportSchedule } from "@/app/lib/report-saved";
-import { unresolvedVars, sendScheduledReport, SCHEDULE_ENABLED } from "@/app/lib/report-schedule";
+import { getSavedReports, addSavedReport, deleteSavedReport } from "@/app/lib/report-saved";
 import { assertSelectOnly } from "@/app/lib/report-ai";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
@@ -43,43 +42,6 @@ export async function POST(req: NextRequest) {
 }
 
 // DELETE ?id= → 삭제
-// PATCH { id, schedule: { freq, to[] } | null }  → 정기 발송 설정·해제(2026-10-19 개선안 3)
-//       { id, sendNow: true }                     → 지금 한 번 보내기(설정 확인용, lastSentOn 안 바꿈)
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export async function PATCH(req: NextRequest) {
-  try {
-    if (!SCHEDULE_ENABLED) return NextResponse.json({ ok: false, error: "정기 받기는 아직 열리지 않았습니다." }, { status: 403 });
-    const b = (await req.json().catch(() => ({}))) as { id?: string; schedule?: ReportSchedule | null; sendNow?: boolean };
-    const id = String(b.id || "");
-    if (!id) return NextResponse.json({ ok: false, error: "id 필요" }, { status: 400 });
-    const token = req.cookies.get("b2b_auth")?.value;
-    const user = (await verifySession(token)) || resolveUserName(token) || null;
-    const rep = (await getSavedReports()).find((x) => x.id === id);
-    if (!rep) return NextResponse.json({ ok: false, error: "저장 리포트를 찾을 수 없습니다." }, { status: 404 });
-
-    if (b.sendNow) {
-      if (!rep.schedule) return NextResponse.json({ ok: false, error: "먼저 정기 발송을 설정하세요." }, { status: 400 });
-      const r = await sendScheduledReport(rep, { force: true });
-      return r.ok ? NextResponse.json({ ok: true, result: r }) : NextResponse.json({ ok: false, error: r.error }, { status: 400 });
-    }
-    if (b.schedule === null) {
-      const rec = await updateSavedReport(id, { schedule: null });
-      return NextResponse.json({ ok: true, report: rec });
-    }
-    const s = b.schedule;
-    if (!s || !["daily", "weekly", "monthly"].includes(String(s.freq))) return NextResponse.json({ ok: false, error: "주기를 고르세요(매일·매주·매월)." }, { status: 400 });
-    const extra = unresolvedVars(rep.sql);
-    if (extra.length) return NextResponse.json({ ok: false, error: `값을 자동으로 채울 수 없는 변수가 있어 예약할 수 없습니다: ${extra.join(", ")} ({{시작일}}·{{종료일}}만 자동)` }, { status: 400 });
-    const to = (Array.isArray(s.to) ? s.to : []).map((x) => String(x).trim()).filter(Boolean);
-    const bad = to.filter((x) => !EMAIL_RE.test(x));
-    if (bad.length) return NextResponse.json({ ok: false, error: `메일 주소가 올바르지 않습니다: ${bad.join(", ")}` }, { status: 400 });
-    const rec = await updateSavedReport(id, { schedule: { freq: s.freq, to: to.slice(0, 20), lastSentOn: rep.schedule?.lastSentOn, setBy: user } });
-    return NextResponse.json({ ok: true, report: rec });
-  } catch (e) {
-    return NextResponse.json({ ok: false, error: extractErrorMsg(e, "정기 발송 설정 실패") }, { status: 500 });
-  }
-}
-
 export async function DELETE(req: NextRequest) {
   try {
     const id = new URL(req.url).searchParams.get("id");

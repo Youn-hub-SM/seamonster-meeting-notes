@@ -2981,7 +2981,6 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-fb-done { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .rp-badge { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--sm-border); border-radius: 999px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); background: var(--sm-white); }
 .rp-badge.is-warn { color: var(--sm-warning); border-color: var(--sm-warning); }
-.rp-sched { margin-left: 6px; }
 .rp-glossary-table td, .rp-glossary-table th { vertical-align: top; }
 .rp-glossary-table .b2b-input { width: 100%; }
 .rp-glossary-def { white-space: pre-line; }

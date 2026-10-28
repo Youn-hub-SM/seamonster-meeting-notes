@@ -2,7 +2,7 @@
 
 // AI 비서 — 클로드 코드식 대화 화면(2026-10-21 대표: "클로드 코드 대화창과 최대한 비슷하게"). 스레드는 서버(report_threads)에 저장.
 //  비서가 글로 말하고(스트리밍), 조사가 필요하면 중간에 도구를 쓰며(도구 줄), 결과 표는 그 아래 카드로 붙는다. [중지]·Esc 로 멈춘다.
-//  개선안(2026-10-19): 1 회사 용어 사전(비서 제안 → [사전에 저장]) · 3 저장 리포트(정기 받기는 숨김) + 표 카드 차트
+//  개선안(2026-10-19): 1 회사 용어 사전(비서 제안 → [사전에 저장]) · 3 저장 리포트(정기 받기는 2026-10-29 폐기 — Poke 자동화로) + 표 카드 차트
 //  · 5 답마다 데이터 최신일·숫자 대조 배지·[맞아요]/[틀려요] 피드백. 표 카드의 SQL 보기·리포트 저장·엑셀·루커 SQL 그대로.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
@@ -13,9 +13,7 @@ import LookerGuide from "./LookerGuide";
 type Chart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 type Looker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
 type Row = Record<string, unknown>;
-type ScheduleFreq = "daily" | "weekly" | "monthly";
-type Schedule = { freq: ScheduleFreq; to: string[]; lastSentOn?: string; setBy?: string | null };
-type Saved = { id: string; name: string; question: string; sql: string; chart: Chart; looker: Looker; createdAt: string; createdBy?: string | null; schedule?: Schedule | null };
+type Saved = { id: string; name: string; question: string; sql: string; chart: Chart; looker: Looker; createdAt: string; createdBy?: string | null };
 type AskTable = { title: string; sql: string; columns: string[]; rows: Row[]; rowCount: number; truncated: boolean; looker?: Looker };
 // /api/report/chat 계약(chat-assistant.ts) — 화면은 이 모양만 믿는다
 type ChatTable = AskTable & { id: string; toolUseId: string };
@@ -30,9 +28,6 @@ type RunResult = { rep: Saved; sql: string; columns: string[]; rows: Row[] };
 type SaveCtx = { question: string; sql: string; looker?: Looker; chart?: Chart };
 
 const TABLE_ROW_LIMIT = 1000;
-const RESERVED_VARS = ["시작일", "종료일"];
-const SCHEDULE_ENABLED = false; // 정기 받기(개선안 3) — 2026-10-19 대표 "배포 보류, 베타에서도 숨김". 코드는 두고 화면·API·크론을 모두 끈다(report-schedule.ts 와 같은 플래그)
-const FREQ_LABEL: Record<ScheduleFreq, string> = { daily: "매일", weekly: "매주 월요일", monthly: "매월 1일" };
 
 function fmt(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -47,7 +42,6 @@ function esc(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"
 function extractVars(sql: string): string[] {
   return [...new Set([...sql.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)].map((m) => m[1]))];
 }
-const unresolvedVars = (sql: string) => extractVars(sql).filter((v) => !RESERVED_VARS.includes(v));
 function fillVars(sql: string, values: Record<string, string>): string {
   let out = sql;
   for (const [k, v] of Object.entries(values)) out = out.replace(new RegExp(`\\{\\{\\s*${esc(k)}\\s*\\}\\}`, "g"), v);
@@ -256,12 +250,6 @@ export default function ReportPage() {
   const [saveSql, setSaveSql] = useState("");
   const [saveCtx, setSaveCtx] = useState<SaveCtx | null>(null);
   const [saveErr, setSaveErr] = useState<{ name?: string; sql?: string }>({});
-  // 정기 받기(개선안 3)
-  const [schedFor, setSchedFor] = useState<Saved | null>(null);
-  const [schedFreq, setSchedFreq] = useState<ScheduleFreq>("weekly");
-  const [schedTo, setSchedTo] = useState("");
-  const [schedErr, setSchedErr] = useState("");
-  const [schedBusy, setSchedBusy] = useState("");
   // 피드백(개선안 5)
   const [fbNoteFor, setFbNoteFor] = useState<number | null>(null);
   const [fbNote, setFbNote] = useState("");
@@ -432,35 +420,6 @@ export default function ReportPage() {
   }
   function copyText(text: string) {
     navigator.clipboard?.writeText(text).then(() => toast.success("답을 복사했습니다"), () => toast.error("복사하지 못했습니다"));
-  }
-
-  // ── 정기 받기 ──
-  function openSchedule(rep: Saved) {
-    const extra = unresolvedVars(rep.sql);
-    if (extra.length) { toast.error(`값을 자동으로 채울 수 없는 변수가 있어 예약할 수 없습니다: ${extra.join(", ")}. {{시작일}}·{{종료일}}만 자동으로 채워집니다`); return; }
-    setSchedFor(rep); setSchedFreq(rep.schedule?.freq || "weekly"); setSchedTo((rep.schedule?.to || []).join(", ")); setSchedErr("");
-  }
-  async function saveSchedule(clear = false) {
-    if (!schedFor) return;
-    setSchedBusy("save"); setSchedErr("");
-    try {
-      const to = schedTo.split(",").map((s) => s.trim()).filter(Boolean);
-      const j = await (await fetch("/api/report/saved", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: schedFor.id, schedule: clear ? null : { freq: schedFreq, to } }) })).json();
-      if (!j.ok) throw new Error(j.error || "정기 발송 설정 실패");
-      toast.success(clear ? "정기 발송을 해제했습니다" : `${FREQ_LABEL[schedFreq]} 아침에 받도록 설정했습니다`);
-      setSchedFor(null); loadSaved();
-    } catch (e) { setSchedErr(e instanceof Error ? e.message : String(e)); }
-    finally { setSchedBusy(""); }
-  }
-  async function sendScheduleNow() {
-    if (!schedFor) return;
-    setSchedBusy("send"); setSchedErr("");
-    try {
-      const j = await (await fetch("/api/report/saved", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: schedFor.id, sendNow: true }) })).json();
-      if (!j.ok) throw new Error(j.error || "발송 실패");
-      toast.success(`메일을 보냈습니다: ${(j.result?.to || []).join(", ")}`);
-    } catch (e) { setSchedErr(e instanceof Error ? e.message : String(e)); }
-    finally { setSchedBusy(""); }
   }
 
   // ── 저장 리포트(변수 치환·실행)·저장·엑셀 — 패널 안에서 ──
@@ -722,15 +681,13 @@ export default function ReportPage() {
                         <div key={s.id} className="rp-saved-item" onClick={() => { if (!busy) startSaved(s); }} title="클릭하면 실행">
                           <span className="rp-saved-name">
                             {s.name}{extractVars(s.sql).length ? <span className="rp-saved-var">변수</span> : null}
-                            {SCHEDULE_ENABLED && s.schedule && <span className="rp-badge rp-sched">{FREQ_LABEL[s.schedule.freq]}{s.schedule.lastSentOn ? ` · 마지막 ${s.schedule.lastSentOn}` : ""}</span>}
                           </span>
                           {s.question && <div className="rp-saved-q">{s.question}</div>}
                           <div className="rp-saved-meta">
                             <span>저장: {s.createdBy || "—"}</span>
                             <span>·</span>
                             <span>{dateFull(s.createdAt)}</span>
-                            {SCHEDULE_ENABLED && <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); openSchedule(s); }}>{s.schedule ? "정기 받기 바꾸기" : "정기 받기"}</button>}
-                            <button className="rp-saved-del2" onClick={async (e) => { e.stopPropagation(); if (await confirmModal({ title: `'${s.name}' 저장 리포트 삭제`, body: `저장한 질문과 SQL이 지워집니다.${SCHEDULE_ENABLED ? " 정기 발송도 함께 멈춥니다." : ""} 되돌릴 수 없습니다.`, action: "리포트 삭제" })) delSaved(s.id); }}>삭제</button>
+                            <button className="rp-saved-del2" onClick={async (e) => { e.stopPropagation(); if (await confirmModal({ title: `'${s.name}' 저장 리포트 삭제`, body: `저장한 질문과 SQL이 지워집니다. 되돌릴 수 없습니다.`, action: "리포트 삭제" })) delSaved(s.id); }}>삭제</button>
                           </div>
                         </div>
                       ))}
@@ -742,34 +699,6 @@ export default function ReportPage() {
               {panel === "looker" && <LookerGuide />}
             </div>
           </aside>
-        </div>
-      )}
-
-      {/* 정기 받기 설정 */}
-      {SCHEDULE_ENABLED && schedFor && (
-        <div className="rp-modal-bg" onClick={() => setSchedFor(null)}>
-          <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="b2b-card-head"><span className="b2b-card-title">정기 받기 — {schedFor.name}</span></div>
-            {schedErr && <div className="b2b-error">{schedErr}</div>}
-            <label className="sm-col rp-save-field">
-              <span className="b2b-field-label">주기</span>
-              <select className="b2b-select" value={schedFreq} onChange={(e) => setSchedFreq(e.target.value as ScheduleFreq)} aria-label="주기">
-                <option value="daily">매일 아침 (어제 하루)</option>
-                <option value="weekly">매주 월요일 아침 (지난주 월~일)</option>
-                <option value="monthly">매월 1일 아침 (지난달)</option>
-              </select>
-            </label>
-            <label className="sm-col rp-save-field">
-              <span className="b2b-field-label">받는 사람 <span className="opt">쉼표로 여러 명, 비우면 기본 수신자</span></span>
-              <input className="b2b-input" value={schedTo} onChange={(e) => setSchedTo(e.target.value)} placeholder="ceo@seamonster.kr, sales@seamonster.kr" aria-label="받는 사람" />
-            </label>
-            <div className="rp-modal-foot">
-              {schedFor.schedule && <button className="b2b-btn-secondary" onClick={() => saveSchedule(true)} disabled={!!schedBusy}>해제</button>}
-              {schedFor.schedule && <button className="b2b-btn-secondary" onClick={sendScheduleNow} disabled={!!schedBusy}>{schedBusy === "send" ? "보내는 중..." : "지금 한 번 보내기"}</button>}
-              <button className="b2b-btn-secondary" onClick={() => setSchedFor(null)} disabled={!!schedBusy}>그만두기</button>
-              <button className="b2b-btn-primary" onClick={() => saveSchedule(false)} disabled={!!schedBusy}>{schedBusy === "save" ? "저장 중..." : "정기 받기 저장"}</button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -789,7 +718,7 @@ export default function ReportPage() {
               {saveErr.name && <span className="b2b-field-error">{saveErr.name}</span>}
             </label>
             <label className="sm-col rp-save-field">
-              <span className="b2b-field-label">SQL<span className="req">*</span> <span className="opt"><code>{"{{이름}}"}</code> = 실행 때 입력받는 값{SCHEDULE_ENABLED && <>, <code>{"{{시작일}}"}</code>·<code>{"{{종료일}}"}</code> = 정기 받기 때 자동</>}</span></span>
+              <span className="b2b-field-label">SQL<span className="req">*</span> <span className="opt"><code>{"{{이름}}"}</code> = 실행 때 입력받는 값</span></span>
               <textarea className="b2b-input rp-save-sql" value={saveSql} onChange={(e) => setSaveSql(e.target.value)} aria-invalid={saveErr.sql ? "true" : undefined} />
               {saveErr.sql && <span className="b2b-field-error">{saveErr.sql}</span>}
             </label>
