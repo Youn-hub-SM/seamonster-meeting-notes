@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "next/link"; // 사이드바 링크는 prefetch={false} — 보이는 메뉴 71개가 페이지마다 미리 요청되면 Vercel 호출이 그만큼 늘어난다(2026-10-28, docs/vercel-invocation-plan.md)
 import { useRouter, usePathname } from "next/navigation";
 import { NAV, sortByNavOrder, navLabelParts, navHrefActive, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
@@ -134,7 +134,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
         <div className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
           {hasMenu ? (
             // 라벨 클릭 = 대표 페이지 이동(+접혀 있으면 펼침) — 매일 첫 진입 2클릭→1클릭(2026-08-28 대표 확정). 접기는 우측 화살표.
-            <Link href={t.href} className="app-sb-tool" aria-expanded={expanded} onClick={() => { if (!expanded) toggleTool(t.href); onNavigate?.(); }}>
+            <Link prefetch={false} href={t.href} className="app-sb-tool" aria-expanded={expanded} onClick={() => { if (!expanded) toggleTool(t.href); onNavigate?.(); }}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
               {t.beta && <Beta />}
@@ -148,7 +148,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               <span className="app-sb-ext" aria-hidden="true">↗</span>
             </a>
           ) : (
-            <Link href={t.href} className="app-sb-tool" onClick={onNavigate}>
+            <Link prefetch={false} href={t.href} className="app-sb-tool" onClick={onNavigate}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
               {t.beta && <Beta />}
@@ -175,11 +175,11 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
           <div className="app-sb-menu">
             {menu.map((m) => editFav ? (
               <div key={m.href} className="app-sb-menu-row">
-                <Link href={m.href} className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`} onClick={onNavigate}>{m.label}{m.beta && <Beta />}</Link>
+                <Link prefetch={false} href={m.href} className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`} onClick={onNavigate}>{m.label}{m.beta && <Beta />}</Link>
                 <FavToggle href={m.href} label={`${m.label} (${t.label})`} />
               </div>
             ) : (
-              <Link
+              <Link prefetch={false}
                 key={m.href}
                 href={m.href}
                 className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`}
@@ -213,7 +213,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
           </button>
         )}
         {/* 이제 홈으로 가는 유일한 입구 — 파도소리 계정에게 '/' 는 막힌 경로라 자기 홈으로 보낸다 */}
-        <Link href={isFactoryUser ? "/factory" : "/"} className="app-sb-brand" onClick={onNavigate}>
+        <Link prefetch={false} href={isFactoryUser ? "/factory" : "/"} className="app-sb-brand" onClick={onNavigate}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="씨몬스터" style={{ height: 22, width: "auto", display: "block" }} />
         </Link>
@@ -258,7 +258,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             </div>
             {favOpen && sortedFavorites.map((f) => (
               <div key={f.href} className={`app-sb-tool-row ${navHrefActive(f.href, pathname) ? "is-active" : ""}`}>
-                <Link href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
+                <Link prefetch={false} href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
                   <span className="app-sb-emoji"><Icon name={iconForHref(f.href)} /></span>
                   {(() => { const p = navLabelParts(f.href, f.label); return <span className="app-sb-tool-label">{p.main}{p.sub && <span className="app-sb-tool-sub">{p.sub}</span>}</span>; })()}
                 </Link>

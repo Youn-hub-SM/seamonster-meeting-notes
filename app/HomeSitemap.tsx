@@ -52,12 +52,12 @@ export default function HomeSitemap() {
                     {external(tool.href) ? (
                       <a href={tool.href} target="_blank" rel="noreferrer" className="home-map-tool-link">{head}</a>
                     ) : (
-                      <Link href={tool.href} className="home-map-tool-link">{head}</Link>
+                      <Link prefetch={false} href={tool.href} className="home-map-tool-link">{head}</Link>
                     )}
                     {menu.length > 0 && (
                       <div className="home-map-subs">
                         {menu.map((m) => (
-                          <Link key={m.href} href={m.href} className="home-map-sub">{m.label}{m.beta && <Beta />}</Link>
+                          <Link prefetch={false} key={m.href} href={m.href} className="home-map-sub">{m.label}{m.beta && <Beta />}</Link>
                         ))}
                       </div>
                     )}

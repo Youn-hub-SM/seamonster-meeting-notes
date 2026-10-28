@@ -36,32 +36,28 @@ Pro 전환 여부와 별개로, 아래는 낭비를 없애는 작업이라 플�
 
 ## 2. 실행 단계
 
-### 1단계 — 미들웨어 범위 축소 (1시간, `middleware.ts` matcher 만)
+### 1단계 — 미들웨어 범위 축소 (1시간, `middleware.ts` matcher 만) — 2026-10-28 완료
 
 지금은 정적 파일 몇 종만 빼고 모든 요청에 미들웨어가 돈다. 미들웨어 안에서 "자체 검증이 있어 통과" 처리하는 경로를
 matcher 자체에서 제외해 아예 실행되지 않게 한다.
 
 - 제외 대상: `/api/channel-commands`, `/api/mcp/*`, `/q/*`, `/api/b2b/schedule-digest`, `/api/analyst/cron`, `/api/b2b/deposits/webhook`,
   `/api/sms/otp`, `/api/instagram/webhook`, `/api/voc/tally`, `/api/naver/catalog/sync|upload`, `/api/claims/report`,
-  `/api/production/requests/draft`, `/api/subscription/sync` + 확장자 `html|txt|xml|json|webmanifest`.
+  `/api/production/requests/draft`, `/api/subscription/sync` + 확장자 `txt|xml|json|webmanifest`(public 의 html 2개는 로그인 보호 유지를 위해 제외하지 않음).
 - 효과: 데몬의 미들웨어 절반(월 약 28만)이 즉시 사라진다. 웹훅·크론 몫도 함께.
 - 주의: `link.seamonster.kr/코드` → `/q/코드` 리라이트는 단일 세그먼트 경로라 matcher 에 남는다(동작 유지).
   파도소리 도메인(pdsr.kr)에서 `/q/*` 를 치면 지금은 /factory 로 보내지만 바꾸면 QR 리다이렉트가 그대로 동작 — 실사용 영향 없음.
 - `middleware.ts` 는 공용 파일(CLAUDE.md 3b) — 다른 세션에 알리고 matcher 한 줄만 고친다.
 
-### 2단계 — 중계 데몬이 Vercel 대신 DB 를 보게 (반나절, 마이그레이션 + 데몬 + 중계 서버 재배포)
+### 2단계 — 중계 데몬 끄기, 2분 원샷 크론만 남김 (대표 결정 2026-10-28: 2분이면 충분)
 
-목표: 10초 체감은 유지(대표 결정 2026-09-09)하면서 빈 회차의 Vercel 호출을 0 으로.
+- 중계 서버 crontab 에서 데몬 워치독 줄(`*/5 … --daemon`)을 지우고, 떠 있는 데몬 프로세스를 내린다. 원샷 `*/2` 줄은 그대로.
+- 원샷은 큐가 비면 호출 한 번 하고 종료 → 하루 720건, 월 약 2만 건(1단계 뒤엔 미들웨어 몫 없음).
+- 체감: [적용] 뒤 평균 1분·최대 2분(2026-09-09 이전 동작으로 복귀). 선점·고아 재선점·결과 보고는 원샷 모드에도 동일.
+- 코드 변경·마이그레이션·중계 서버 파일 교체 없음. 2026-10-28 실행 시 자동 모드 분류기가 ssh 원격 변경을 막아 대표가 직접 실행(명령은 아래 §5).
+- (보류) Supabase 직접 확인 방식은 10초 체감이 다시 필요해질 때 꺼낸다.
 
-- migration 157: `channel_commands_pending()` — '대기' 명령이 있는지 true/false 만 돌려주는 security definer 함수, anon 키 RPC 허용. 명령 내용은 노출하지 않는다.
-- 데몬: 회차마다 Supabase RPC 로 대기 여부만 확인 → 있을 때만 기존 `?mode=claim` 호출. RPC 실패 시엔 지금처럼 claim 으로 폴백(안전망).
-- 중계 서버 `.env.local` 에 `SUPABASE_URL`·`SUPABASE_ANON_KEY` 추가(anon 키는 공개 전제 키라 중계 서버 보관 가능). esbuild 번들 → `bin/channel-commands-runner.cjs` 교체 → 데몬 재기동(워치독이 5분 안에 다시 띄움).
-- 원샷 백업 크론 `*/2` → `*/10` (데몬이 죽었을 때의 안전망 역할은 유지).
-- 효과: 데몬의 함수 절반(월 약 28만)이 사라진다. 1단계와 합쳐 전체의 절반.
-
-대안(B 가 부담스러우면): 데몬 주기를 '최근 3분 안에 명령이 있었으면 10초, 아니면 60초' 로. 코드만 고치면 되지만 유휴 뒤 첫 명령이 최대 60초 걸리고, 감축은 85% 선.
-
-### 3단계 — 사이드바 링크 미리 읽기 끄기 (30분, 코드만)
+### 3단계 — 사이드바 링크 미리 읽기 끄기 (30분, 코드만) — 2026-10-28 완료
 
 - `app/AppSidebar.tsx` 의 `<Link>` 6곳, `app/HomeSitemap.tsx`·`app/HomeQuickLaunch.tsx` 에 `prefetch={false}`.
 - 대가: 메뉴 클릭 뒤 페이지가 0.1~0.3초 늦게 뜸. 본문 링크(발주 목록 등)는 그대로.
@@ -89,6 +85,15 @@ matcher 자체에서 제외해 아예 실행되지 않게 한다.
 
 ## 4. 필요한 확인(대표)
 
-1. 2단계 방식: Supabase 직접 확인(권장, 10초 유지) vs 주기 완화(코드만, 첫 명령 최대 60초).
+1. (결정됨) 2단계 = 데몬 끄기, 2분 원샷만.
 2. 사용량 화면의 **사용 주기(Usage period) 날짜** — 언제 초기화되는지.
 3. Observability 의 미들웨어 경로·호스트 상위 목록(4단계용).
+
+## 5. 중계 서버 작업 명령 (2단계, 대표 실행)
+
+```bash
+ssh -i ~/.ssh/cloudways_ed25519 master_nnncfdcsyy@158.247.253.90 'cd ~/seamonster-sync && crontab -l > crontab.bak.20261028 && crontab -l | grep -v -- "--daemon" | crontab - && P=$(pgrep -f "^/usr/bin/node bin/channel-commands-runner[.]cjs .*--daemon" || true) && [ -n "$P" ] && kill $P; sleep 2; crontab -l | grep -n channel-commands; echo "daemon left: $(pgrep -f -- "--daemon" || echo none)"'
+```
+
+- 백업 `~/seamonster-sync/crontab.bak.20261028` 에 원래 crontab 이 남는다. 되돌리려면 `crontab crontab.bak.20261028`.
+- 확인: 출력에 `*/2 … channel-commands-runner.cjs` 한 줄만 보이고 `daemon left: none` 이면 끝.

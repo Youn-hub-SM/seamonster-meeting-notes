@@ -49,7 +49,7 @@ export default function HomeQuickLaunch() {
 
   // sub = 상위 툴 이름(하위 메뉴를 담았을 때) — 12px 회색으로 아래 줄. '툴 · 메뉴' 중점 결합은 2026-10-17 디자인 1차에서 없앴다.
   const Tile = ({ href, label, sub, icon }: { href: string; label: string; sub?: string | null; icon: IconName }) => (
-    <Link href={href} className="home-tool-card">
+    <Link prefetch={false} href={href} className="home-tool-card">
       <span className="sm-row" style={{ gap: 10, minWidth: 0 }}>
         <Icon name={icon} size={20} />
         <span className="sm-col" style={{ minWidth: 0 }}>

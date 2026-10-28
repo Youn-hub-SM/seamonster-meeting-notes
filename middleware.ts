@@ -138,5 +138,8 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   // 전체 게이팅: Next 내부·정적 이미지/폰트/스타일만 공개, 나머지(페이지·API·iframe html)는 로그인 필수.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|map)).*)"],
+  // 2026-10-28 호출 감축: 자체 검증이 있어 위에서 그냥 통과시키던 경로(웹훅·크론·채널 명령·MCP·QR)와 txt·xml·json 파일은(public 의 html 2개는 로그인 보호를 유지)
+  //  matcher 에서 아예 빼 미들웨어가 실행되지 않게 한다 — 미들웨어 실행도 Vercel 호출 한도(100만)에 함께 센다(10월 61%).
+  //  link.seamonster.kr/코드 리라이트는 단일 세그먼트 경로라 여전히 matcher 에 남는다. docs/vercel-invocation-plan.md
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|q/|api/mcp/|api/channel-commands(?:/|$)|api/b2b/schedule-digest(?:/|$)|api/analyst/cron(?:/|$)|api/b2b/deposits/webhook(?:/|$)|api/sms/otp(?:/|$)|api/instagram/webhook(?:/|$)|api/voc/tally(?:/|$)|api/naver/catalog/(?:sync|upload)(?:/|$)|api/claims/report(?:/|$)|api/production/requests/draft(?:/|$)|api/subscription/sync(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|map|txt|xml|json|webmanifest)).*)"],
 };
