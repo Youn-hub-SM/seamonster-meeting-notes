@@ -29,17 +29,11 @@ export type MasterNotifyEventKey = (typeof MASTER_NOTIFY_EVENTS)[number]["key"];
 
 export type MasterNotifyConfig = {
   enabled: boolean;
-  botId: string;       // Flow 봇 프로퍼티 (BFLOW_...)
-  receivers: string;   // 수신자 ID 목록(쉼표 구분) — 당사자들에게 개별 발송
-  title: string;       // 알림 제목
   events: Record<MasterNotifyEventKey, boolean>;
 };
 
 const DEFAULTS: MasterNotifyConfig = {
   enabled: false,
-  botId: "BFLOW_300003566171",
-  receivers: "",
-  title: "[업무도우미 변경알림]",
   events: { created: true, updated: true, deleted: true, bundle: true, import: true, prod_request: true, prod_updated: true, prod_started: true, prod_receipt: true, prod_receipt_cancel: true, prod_completed: true, prod_cancelled: true, prod_deleted: true, inv_move: true },
 };
 
@@ -50,9 +44,6 @@ export async function getMasterNotifyConfig(): Promise<MasterNotifyConfig> {
     const j = JSON.parse(raw) as Partial<MasterNotifyConfig>;
     return {
       enabled: j.enabled === true,
-      botId: String(j.botId || DEFAULTS.botId),
-      receivers: String(j.receivers || ""),
-      title: String(j.title || DEFAULTS.title),
       events: { ...DEFAULTS.events, ...(j.events || {}) },
     };
   } catch { return { ...DEFAULTS, events: { ...DEFAULTS.events } }; }

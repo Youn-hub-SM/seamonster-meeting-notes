@@ -30,7 +30,7 @@ export async function PUT(req: NextRequest) {
     const events = { ...prev.events };
     if (b.events) for (const e of MASTER_NOTIFY_EVENTS) if (typeof b.events[e.key] === "boolean") events[e.key as MasterNotifyEventKey] = b.events[e.key]!;
     const next: MasterNotifyConfig = {
-      ...prev, // botId·receivers·title 은 저장값 호환용으로 유지(미사용)
+      ...prev,
       enabled: b.enabled === undefined ? prev.enabled : b.enabled === true,
       events,
     };

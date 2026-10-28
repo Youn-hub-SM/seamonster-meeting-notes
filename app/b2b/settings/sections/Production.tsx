@@ -7,7 +7,7 @@ import { OnOff, Pill, SetCard, SetRow, SaveBar, Result, useDraft, useReportDirty
 
 // 생산·재고 — 생산·재고 알림 · 상품마스터 변경알림(Teams 변경알림 채널) · 주간 생산 요청서 초안 · 권장생산 기준(읽기 전용).
 
-type Mn = { enabled: boolean; botId: string; receivers: string; title: string; events: Record<string, boolean> };
+type Mn = { enabled: boolean; events: Record<string, boolean> };
 type MnEvent = { key: string; label: string; group?: string };
 type Draft = { ai: boolean; auto: boolean; time: string }; // AI 검토 포인트 · 자동 작성 · 작성 시각(수요일 KST)
 

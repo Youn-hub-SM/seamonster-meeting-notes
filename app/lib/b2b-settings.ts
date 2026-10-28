@@ -80,14 +80,7 @@ export async function setNotifyConfig(config: NotifyConfig): Promise<void> {
 }
 
 // ─────────────────────────────────────────────
-// Flow(플로우) 봇 알림 — flow.team Open API 로 B2B 알림을 지정 수신자에게 직접 발송(Zapier 대체, 비용 절감).
-//  API: POST https://api.flow.team/v1/bots/{botId}/notifications/bulk
-//  헤더: x-flow-api-key: <봇 키>   본문: { receivers:[{receiverId}], title, contents }
-//  응답: { response: { success, code, message, error? } }
-//  · flow_bot_id · flow_bot_api_key · flow_bot_receivers 가 모두 있으면 Zapier 대신 Flow 로 발송.
-//  · VOC용 flow_api_key(voc-flow.ts) 와는 별개의 봇 키라 flow_bot_api_key 로 분리 저장(서로 다른 키일 수 있음).
-//  · app_base_url 은 알림에 넣을 주문 상세 링크(/b2b/orders/{id})의 도메인. 미설정 시 Vercel 프로덕션 도메인.
-//  값은 b2b_settings kv({v:...}) 저장(코드/깃에 두지 않음).
+// 키-값 저장소(b2b_settings kv {v:...}) — 앱 설정값은 코드/깃에 두지 않는다.
 // ─────────────────────────────────────────────
 export async function getKv(key: string): Promise<string> {
   try {
@@ -105,54 +98,6 @@ export async function setKv(key: string, value: string): Promise<void> {
   if (error) throw error;
 }
 
-export const getFlowBotId = () => getKv("flow_bot_id");
-export const setFlowBotId = (s: string) => setKv("flow_bot_id", s);
-export const getFlowBotApiKey = () => getKv("flow_bot_api_key");
-export const setFlowBotApiKey = (s: string) => setKv("flow_bot_api_key", s);
-export const getFlowAlertTitle = async () => (await getKv("flow_alert_title")) || "씨몬스터 B2B 알림";
-export const setFlowAlertTitle = (s: string) => setKv("flow_alert_title", s);
-export const getFlowReceiversRaw = () => getKv("flow_bot_receivers");
-export const setFlowReceiversRaw = (s: string) => setKv("flow_bot_receivers", s);
-
-// 수신자: 줄바꿈/콤마/세미콜론/공백 구분 → 이메일 배열(이메일엔 공백이 없어 안전).
-export async function getFlowReceivers(): Promise<string[]> {
-  const raw = await getFlowReceiversRaw();
-  return raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
-}
-
-export type FlowBotConfig = { botId: string; apiKey: string; receivers: string[]; title: string };
-export async function getFlowBotConfig(): Promise<FlowBotConfig> {
-  const [botId, apiKey, receivers, title] = await Promise.all([
-    getFlowBotId(), getFlowBotApiKey(), getFlowReceivers(), getFlowAlertTitle(),
-  ]);
-  return { botId, apiKey, receivers, title };
-}
-// 봇 ID·API 키·수신자가 모두 있어야 Flow 로 발송(아니면 Zapier 폴백).
-export async function isFlowBotConfigured(): Promise<boolean> {
-  const c = await getFlowBotConfig();
-  return !!(c.botId && c.apiKey && c.receivers.length);
-}
-
-// ── '업무도우미 변경알림' 봇 — 생산·재고 알림 라우팅용 ──
-//  별도 설정을 두지 않고 생산관리 설정의 [업무도우미 변경알림] 봇(master_notify_config ·
-//  master_notify_api_key, master-notify.ts와 동일 KV)을 그대로 읽는다 — 봇 설정 단일화.
-//  enabled 플래그는 상품마스터 이벤트 게이팅용이라 여기서는 보지 않는다(봇 정보만 사용).
-export async function getHelperBotConfig(): Promise<FlowBotConfig> {
-  const raw = await getKv("master_notify_config");
-  let botId = "BFLOW_300003566171", receivers = "", title = "[업무도우미 변경알림]";
-  try {
-    const j = JSON.parse(raw || "{}") as { botId?: string; receivers?: string; title?: string };
-    botId = String(j.botId || botId);
-    receivers = String(j.receivers || "");
-    title = String(j.title || title);
-  } catch { /* 기본값 유지 */ }
-  const apiKey = (await getKv("master_notify_api_key")) || (await getKv("flow_bot_api_key")); // 전용 키 없으면 B2B 봇 키 폴백(master-notify와 동일)
-  return { botId, apiKey, receivers: receivers.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean), title };
-}
-export async function isHelperBotConfigured(): Promise<boolean> {
-  const c = await getHelperBotConfig();
-  return !!(c.botId && c.apiKey && c.receivers.length);
-}
 // 생산관리 설정 '발송할 변경 목록' 체크 — 생산·재고 알림도 이벤트별로 켜고 끈다. 미저장 키는 켜짐 취급.
 export async function isHelperEventEnabled(key: string): Promise<boolean> {
   const raw = await getKv("master_notify_config");
@@ -162,8 +107,6 @@ export async function isHelperEventEnabled(key: string): Promise<boolean> {
   } catch { return true; }
 }
 
-export const setAppBaseUrl = (s: string) => setKv("app_base_url", s);
-
 // 앱 접속 URL(끝 슬래시 제거). 설정 없으면 Vercel 프로덕션 도메인, 그것도 없으면 빈 문자열.
 export async function getAppBaseUrl(): Promise<string> {
   const s = await getKv("app_base_url");
@@ -172,7 +115,7 @@ export async function getAppBaseUrl(): Promise<string> {
   return prod ? `https://${prod}` : "";
 }
 
-// 이 이벤트(+결과 상태)를 Zapier 로 보낼지 판단.
+// 이 이벤트(+결과 상태)를 알림 채널로 보낼지 판단.
 export function shouldNotify(config: NotifyConfig, eventType: string, meta?: Record<string, unknown> | null): boolean {
   const v = config[notifyKeyFor(eventType)];
   if (v === undefined) return true; // 미정의 이벤트 → 안전하게 발송
