@@ -161,7 +161,6 @@
 .fac-f > span { font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
 .fac-f .b2b-input { width: 160px; font-size: 16px; }
 .fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 110px; text-align: right; }
-.fac-kg-chips { display: flex; gap: 6px; flex-wrap: wrap; flex-basis: 100%; }
 .fac-chip {
   font: inherit; font-size: 12px; font-weight: 700; line-height: 1.2; padding: 5px 10px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--sm-border); background: #fff; color: var(--sm-text-mid);
@@ -266,7 +265,6 @@
   .fac-txn-meta .b2b-input { font-size: 16px; }
   .fac-line:not(.is-lot) { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; }
   .fac-f .b2b-input, .fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 100%; min-width: 0; }
-  .fac-kg-chips { grid-column: 1 / -1; }
   .fac-blk-new { width: 100%; }
   .fac-new-row { display: grid; grid-template-columns: 1fr 1fr; }
   .fac-new-row .fac-f .b2b-input, .fac-f select.b2b-input { width: 100%; min-width: 0; }
