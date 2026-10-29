@@ -28,7 +28,7 @@ export type OverviewRow = {
   period_in: number; period_out: number; daily_out: number;
   auto_safety: number; promo_qty: number; depletion_days: number | null; low: boolean;
   promo_pool: number; // 프로모션 풀 잔량(113) — 소매 탭에서 현재고 옆 병기, 그 외 채널은 0
-  inbound: number;    // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 탭 — 부족 판정·권장 수식이 현재고에 더해 본다). 도매 탭 = 열린 도매 요청서 잔여(부족 판정 미포함). 도매 대량 탭은 0(프로모션 탭은 지금도 제조사 잔여가 보인다 — 코드와 계약이 어긋난 자리, 별건 결정 대기)
+  inbound: number;    // 입고 예정 = 확정된 제조사 요청서 잔여(소매·전체 탭 — 부족 판정·권장 수식이 현재고에 더해 본다). 도매 탭 = 열린 도매 요청서 잔여(부족 판정 미포함). 도매 대량 탭은 0(프로모션 탭은 지금도 제조사 잔여가 보인다 — 코드와 계약이 어긋난 자리, 별건 결정 대기)
   inbound_due: string | null; // 잔여가 있는 요청서 중 가장 이른 생산마감일
   inbound_overdue: number;    // 그중 마감이 지난 잔여(서버 판정 — 자동 제외 없음, 표시용)
   inbound_detail: string;     // 툴팁용 요청서별 내역("PR-000123 300 (마감 09-25)")
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     // 목표 일수(오늘 → 다음 요청분 판매 가능일)·부족 기준 일수(오늘 → 오늘 요청분 판매 가능일) — 권장 수식과 같은 일정
     const { leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable } = scheduleHorizon(today);
 
-    // 입고 예정(열린 제조사 요청서 잔여) — 소매·전체 탭에서 현재고 옆 병기 + 부족(low) 판정에 합산.
+    // 입고 예정(확정된 제조사 요청서 잔여) — 소매·전체 탭에서 현재고 옆 병기 + 부족(low) 판정에 합산.
     //  권장 수식(getInventoryRows)이 같은 값을 현재고에 더해 빼므로, 여기서도 더해야 '부족인데 권장 0' 모순이 없다.
     //  도매 탭은 제조사 잔여 대신 열린 도매 요청서 잔여(이동 대기)를 보인다 — 부족 판정에는 넣지 않는다(아래 low).
     //  집계 실패(null)면 0 으로 두고 meta.inboundOk=false 로 알린다.

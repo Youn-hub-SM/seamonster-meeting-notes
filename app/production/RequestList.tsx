@@ -104,7 +104,7 @@ export function RequestList() {
     return m;
   }, [requests]);
 
-  // 담당자 '확인' 버튼용 로그인 사용자 이름
+  // '확정' 버튼용 로그인 사용자 이름(담당자로 기록)
   const [userName, setUserName] = useState<string | null>(null);
   useEffect(() => {
     fetch("/api/b2b/auth", { cache: "no-store" }).then((r) => r.json()).then((j) => setUserName(j?.ok ? j.name || null : null)).catch(() => {});
@@ -366,9 +366,9 @@ export function RequestList() {
     return requests.filter((r) => r.purpose === "프로모션" && (r.status === "요청" || r.status === "진행중") && !!r.due_date && r.due_date <= t).length;
   }, [requests, tab]);
 
-  // 생산 담당자 확인 — 담당자=본인 기록 + 진행중 전환(제조사에 전달했다는 표시)
+  // 확정(옛 '담당 확인', 2026-10-29 대표) — 담당자=본인 기록 + 진행중 전환. 확정된 요청서만 재고 목록 '입고 예정'에 잡힌다(production-inbound).
   async function confirmRequest(r: ProductionRequest) {
-    await updateRequest(r.id, { assignee: userName || "확인", status: r.status === "요청" ? "진행중" : r.status, expect_status: r.status });
+    await updateRequest(r.id, { assignee: userName || "확정", status: r.status === "요청" ? "진행중" : r.status, expect_status: r.status });
   }
 
   return (
@@ -553,13 +553,14 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
           {releasePending ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>합류 미확인</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
-          {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}
+          {/* 확정 — 누르면 담당=본인 기록 + 진행중 전환. 확정된 요청서만 입고 예정에 잡힌다. 확정 뒤엔 담당 이름 옆에 '확정' 표시. */}
           {req.assignee ? (
             <span style={{ fontSize: 13, fontWeight: 600 }}>{req.assignee}
+              {req.status === "진행중" && <span className="b2b-status-pill" style={{ marginLeft: 5, fontSize: 11, background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>확정</span>}
               {(req.status === "완료" || req.status === "취소") && <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{req.status}</span>}
             </span>
           ) : (req.status === "요청" || req.status === "진행중") ? (
-            <button className="b2b-btn-secondary" style={{ padding: "2px 7px", fontSize: 12 }} disabled={busy} onClick={onConfirm}>담당 확인</button>
+            <button className="b2b-btn-primary" style={{ padding: "2px 9px", fontSize: 12 }} disabled={busy} onClick={onConfirm} title="확정하면 담당이 본인으로 기록되고, 재고 목록 입고 예정에 잡힙니다">확정</button>
           ) : (
             <span className="sm-faint" style={{ fontSize: 12 }}>{req.status}</span>
           )}

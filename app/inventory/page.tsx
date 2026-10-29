@@ -31,7 +31,7 @@ type ProdRow = {
   sku: string; name: string; stock: number | null; dailyOut: number; rawDailyOut: number;
   autoSafety: number; promoQty: number; adjust: number; adjustRaw: number; adjustExcludeRaw: number;
   adjustMemo: string; adjustUntil: string | null; safety: number; recommend: number; recommendGross?: number;
-  inbound?: number; inboundDue?: string | null; // 입고 예정(열린 제조사 요청서 잔여) — 권장에서 이미 뺀 양
+  inbound?: number; inboundDue?: string | null; // 입고 예정(확정된 제조사 요청서 잔여) — 권장에서 이미 뺀 양
   recommendNet?: number; wholesaleReq?: number;  // 도매 화면용 권장(도매 요청 잔여를 뺀 값)·도매 요청 잔여 — 제조사 합산에는 쓰지 않는다
   requestByDays: number | null; requestBy: string | null;
 };
@@ -249,8 +249,8 @@ export default function InventoryPage() {
   function toggleSort(key: SortKey) {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
   }
-  const Th = ({ k, label, num, w }: { k: SortKey; label: string; num?: boolean; w?: number | string }) => (
-    <th className={num ? "num" : undefined} onClick={() => toggleSort(k)} style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none", width: w }} title="클릭하여 정렬">
+  const Th = ({ k, label, num, w, title }: { k: SortKey; label: string; num?: boolean; w?: number | string; title?: string }) => (
+    <th className={num ? "num" : undefined} onClick={() => toggleSort(k)} style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none", width: w }} title={title ? `${title} (클릭하여 정렬)` : "클릭하여 정렬"}>
       {label}<span style={{ marginLeft: 3, color: sort.key === k ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 12 }}>{sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </th>
   );
@@ -353,7 +353,7 @@ export default function InventoryPage() {
       {/* 도매 탭 경고는 원인별 — 권장(생산 수치)의 잔여 집계 실패와 입고 예정 열(개요)의 집계 실패는 따로다. 소매 전용 실패(prodWarn)에 가리지 않는다 */}
       {!confirmedTab && channel === "도매" && prodWholeReqBad && <div className="sm-warn" style={{ marginBottom: 12 }}>'도매 요청 잔여'를 불러오지 못했습니다 — 권장생산이 이미 요청한 양을 빼지 못해 실제보다 크게 보일 수 있습니다.</div>}
       {!confirmedTab && channel === "도매" && !prodWholeReqBad && meta?.inboundOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>'입고 예정'(열린 도매 요청서 잔여)을 불러오지 못했습니다.</div>}
-      {!confirmedTab && (prodWarn || (channel !== "도매" && (prodInbBad || meta?.inboundOk === false))) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
+      {!confirmedTab && (prodWarn || (channel !== "도매" && (prodInbBad || meta?.inboundOk === false))) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(확정된 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
       {/* 행사 일정·보정 실패 — 여기서 고른 권장이 '선택 N종 생산 요청'으로 새 요청 창에 채워진다(그 창도 같은 경고를 띄운다) */}
       {!confirmedTab && channel !== "도매" && prodSettingsBad && <div className="sm-warn" style={{ marginBottom: 12 }}>행사 일정·안전재고 보정을 불러오지 못했습니다 — 권장생산에 행사 출고가 섞이고 보정이 빠져 실제와 다를 수 있습니다. 새로고침 후 다시 확인하세요.</div>}
 
@@ -452,7 +452,7 @@ export default function InventoryPage() {
               {hasSched && <Th k="scheduled_out" label="출고 예정" num w={pct(COL.sch)} />}
               {confirmedTab && <Th k="requested" label="요청량" num w={pct(COL.req)} />}
               {!confirmedTab && <><Th k="daily_out" label="하루 출고" num w={pct(COL.daily)} /><Th k="depletion_days" label="예상소진" num w={pct(COL.dep)} />
-              <Th k="inbound" label="입고 예정" num w={pct(COL.inb)} /><Th k="recommend" label="권장생산" num w={pct(COL.rec)} /></>}
+              <Th k="inbound" label="입고 예정" num w={pct(COL.inb)} title="확정된 생산 요청서의 잔여(요청수량 − 입고 누계). 아직 확정 안 한 요청서는 들어오지 않습니다" /><Th k="recommend" label="권장생산" num w={pct(COL.rec)} /></>}
               <Th k="period_in" label="총입고" num w={pct(COL.pin)} /><Th k="period_out" label="총출고" num w={pct(COL.pout)} />
               <Th k="value" label="재고자산" num w={pct(COL.val)} />
               <th style={{ width: pct(COL.act) }}></th>

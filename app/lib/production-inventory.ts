@@ -17,7 +17,7 @@ import { getOpenInboundByProduct, type InboundRow } from "./production-inbound";
 //  (production-schedule scheduleHorizon — 오늘 → 다음 요청일(수요일) 요청분 판매 가능일, 수요일 19일 → 화요일 13일).
 //  오늘 시킨 물량이 판매 가능일(D+8 영업일)에 오고, 그 뒤는 다음 요청분이 올 때까지 버텨야 하므로 두 구간을 다 덮는다.
 //  부족·요청 마감은 '오늘 요청분 판매 가능일까지'(보통 10~12일) 기준 — 지금 시켜도 그 전에 바닥나는가.
-// 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정)) — '입고 예정'은 열린 제조사 요청서의 잔여
+// 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정)) — '입고 예정'은 확정된 제조사 요청서의 잔여(2026-10-29, 초안 '요청'은 제외)
 //  (production-inbound). 시켜 둔 물량을 또 시키던 이중 발주의 차단 항(2026-09-17 대표 확정 1단계).
 // 도매 채널은 여기에 더해 '도매 요청 잔여'(열린 도매 납품 요청서의 요청 − 이동 배정)를 recommendNet 에만 뺀다
 //  (2026-09-29 대표 요청 — 도매 담당자가 이미 낸 요청을 또 내지 않게). recommend 는 gross 그대로다:
@@ -41,7 +41,7 @@ export interface InvRow {
   leadSafety: number;     // 부족 기준 = max(0, ceil(dailyOut × leadDays) + adjust) — 오늘 요청분 판매 가능일까지 버틸 양
   recommendGross: number; // 입고 예정 차감 전 권장(= max(0, 수요+목표−현재고)) — 전체 탭이 합계에서 ⑤를 한 번만 빼는 데 쓴다
   demand: number;         // B2B 생산대기·생산중 수요
-  inbound: number;        // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
+  inbound: number;        // 입고 예정 = 확정된 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
   inboundOverdue: number;       // 그중 마감이 지난 잔여(자동 제외 없음 — 표시용)
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정)) — 제조사 합산 ②는 이 값(gross)

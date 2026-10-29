@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PrPurpose } from "./wholesale-production";
 
-// '입고 예정'(입고 예정) — 열린 제조사 생산 요청서(상태 요청·진행중, 용도 '재고 보충')의 품목별 잔여
+// '입고 예정'(입고 예정) — 확정된 제조사 생산 요청서(상태 '진행중' = 화면의 '확정', 용도 '재고 보충')의 품목별 잔여
+//  (2026-10-29 대표: '확정 시 재고 목록 들어올 양에 반영' — 아직 '요청' 상태인 초안은 들어올 양이 아니다. 용도별 요청량(getOpenRequestedByProduct)·
+//   도매 납품 입고 예정은 종전대로 요청·진행중 모두 센다)
 //  (요청수량 − 입고 누계). 권장 수식이 '창고에 있는 것'만 보고 시켜 둔 물량을 또 시키던 문제의
 //  차감 항(2026-09-17 대표 확정 1단계). 규칙(대표 확정):
 //  · 마감이 지난 요청서도 '결국 전량 생산된다'고 보고 잔여를 그대로 둔다(자동 제외 없음) — 다음 주 입고분.
@@ -49,9 +51,11 @@ type Head = { id: string; req_no: string | null; status: string; request_date: s
 type Item = { id: string; request_id: string; product_id: string; requested_qty: number };
 type OpenSet = { heads: Head[]; items: Item[]; received: Map<string, number> };
 
-// 열린(요청·진행중) 요청서 중 그 용도의 머리·품목·입고(배정) 누계를 전량 읽는다. 오류·한도 초과면 null, 069 미적용이면 빈 결과.
+// 열린 요청서(statuses — 기본 요청·진행중) 중 그 용도의 머리·품목·입고(배정) 누계를 전량 읽는다. 오류·한도 초과면 null, 069 미적용이면 빈 결과.
 //  082(purpose) 미적용 환경은 전부 재고 보충으로 본다 — 다른 용도를 물으면 빈 결과(전 요청서를 그 용도로 오판하지 않는다).
-async function loadOpen(sb: SupabaseClient, purpose: PrPurpose): Promise<OpenSet | null> {
+const OPEN_STATUSES = ["요청", "진행중"] as const;
+const CONFIRMED_STATUSES = ["진행중"] as const; // 화면의 '확정'
+async function loadOpen(sb: SupabaseClient, purpose: PrPurpose, statuses: readonly string[] = OPEN_STATUSES): Promise<OpenSet | null> {
   const empty: OpenSet = { heads: [], items: [], received: new Map() };
   // 1) 열린 요청서 — 오류 메시지에 보이는 컬럼만 빼고 재시도(082 purpose·071 due_date 미적용 폴백).
   //    그 밖의 오류는 lite 로 흘리지 않는다(도매 납품·프로모션까지 합산되는 오판 방지) — null.
@@ -64,7 +68,7 @@ async function loadOpen(sb: SupabaseClient, purpose: PrPurpose): Promise<OpenSet
     let truncated = false;
     for (let off = 0; off < MAX_ROWS; off += PAGE) {
       const { data, error } = await sb.from("production_requests").select(sel)
-        .in("status", ["요청", "진행중"]).order("id", { ascending: true }).range(off, off + PAGE - 1);
+        .in("status", [...statuses]).order("id", { ascending: true }).range(off, off + PAGE - 1);
       if (error) { failed = error.message; break; }
       const rows = (data ?? []) as unknown as Head[];
       acc.push(...rows);
@@ -105,10 +109,10 @@ async function loadOpen(sb: SupabaseClient, purpose: PrPurpose): Promise<OpenSet
   return { heads, items, received };
 }
 
-// 품목별 잔여(요청수량 − 입고 누계) — 기본은 제조사(재고 보충) 요청서의 '입고 예정'.
+// 품목별 잔여(요청수량 − 입고 누계) — 기본은 제조사(재고 보충) 요청서의 '입고 예정' = 확정된 요청서만. 다른 용도는 열린 요청서 전부.
 export async function getOpenInboundByProduct(sb: SupabaseClient, today: string, purpose: PrPurpose = "재고 보충"): Promise<Map<string, InboundRow> | null> {
   try {
-    const open = await loadOpen(sb, purpose);
+    const open = await loadOpen(sb, purpose, purpose === "재고 보충" ? CONFIRMED_STATUSES : OPEN_STATUSES);
     if (open === null) return null;
     const out = new Map<string, InboundRow>();
     const headById = new Map(open.heads.map((h) => [h.id, h]));

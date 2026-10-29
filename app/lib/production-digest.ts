@@ -4,7 +4,7 @@ import { PR_PURPOSE_LABEL, DUE_LABEL, toPrPurpose, type ProductionRequest } from
 
 // B2B 일정 알림(다이제스트)에 붙는 '생산 요청 할 일' — 2026-10-06 대표 지시(새 요청서·행사일·종료일을 놓쳐서).
 //  상태 알림은 한 번 오고 묻히므로, 처리될 때까지 발송 시각마다 다시 보인다(처리하면 다음 발송에서 빠진다).
-//  ① 확인 안 된 열린 요청서(담당 없음) ② 행사일이 된 열린 프로모션('마감'하면 확보분이 소매로)
+//  ① 확정 안 된 열린 요청서(담당 없음 — 확정해야 입고 예정에 잡힌다) ② 행사일이 된 열린 프로모션('마감'하면 확보분이 소매로)
 //  ③ 목표일 지난 열린 제조사·도매·도매 대량 요청서 ④ 내일 행사 시작 프로모션(예고) ⑤ 소매 합류 미확인 프로모션(136).
 export type ProdTodo = { lines: string[]; count: number };
 
@@ -31,7 +31,7 @@ export async function buildProductionTodo(sb: SupabaseClient, today: string): Pr
   const promoTomorrow = open.filter((r) => isPromo(r) && r.due_date === tomorrow);
 
   const L: string[] = [];
-  if (unconfirmed.length) L.push("", `생산 요청 확인 필요 (${unconfirmed.length}건) — 생산 요청에서 '확인'`,
+  if (unconfirmed.length) L.push("", `생산 요청 확정 필요 (${unconfirmed.length}건) — 생산 요청에서 '확정'(확정해야 입고 예정에 잡힘)`,
     ` · ${cut(unconfirmed.map((r) => `${name(r)} 요청 ${md(String(r.request_date || ""))}`), 8)}`);
   if (promoDue.length) L.push("", `행사일이 된 프로모션 (${promoDue.length}건) — '마감'하면 확보분이 소매로`,
     ` · ${cut(promoDue.map((r) => { const d = daysBetween(String(r.due_date), today); return `${name(r)} 행사일 ${md(String(r.due_date))}${d > 0 ? ` ${d}일 지남` : " 오늘"}`; }), 8)}`);
