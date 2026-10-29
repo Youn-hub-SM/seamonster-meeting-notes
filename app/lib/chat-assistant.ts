@@ -12,6 +12,7 @@ import { supabaseAdmin } from "./supabase";
 import { getFeatureModel, effortParams, AiResponseError, readText } from "./ai-model";
 import { MODELS } from "./config";
 import { isAdminName } from "./b2b-auth";
+import { getKv, setKv } from "./b2b-settings";
 import { LOOKER_RELATIONS } from "./report-schema";
 import { gaCatalogPromptBlock } from "./ga-catalog";
 import { docsPromptBlock, manualKnowledgeBlock } from "./ms365-docs";
@@ -53,6 +54,32 @@ const SUMMARY_MAX = 4000;
 const THREAD_LIST_LIMIT = 40;
 
 export const PENDING_139 = "DB 준비 전입니다 — supabase/migrations/139_report_chat.sql 을 적용하세요.";
+
+// ── 백그라운드 실행 표식·중지 요청(2026-10-29 대표: "창을 옮기면 멈춘다") — b2b_settings kv ──
+//  턴은 화면 연결과 무관하게 서버에서 끝까지 돈다(send 라우트가 after() 로 붙잡는다). 화면은 chat_run 표식으로 '답하는 중'을 알고
+//  끝나면 DB 에서 다시 읽는다. [중지]는 chat_stop 표식 → send 라우트가 3초마다 보고 모델 호출을 끊는다. 표식은 턴이 끝나면 비운다.
+//  kv 는 컬럼 추가(마이그레이션) 없이 쓸 수 있어 골랐다. 5분 20초 넘은 표식은 죽은 것으로 본다(함수 최대 300초).
+const RUN_KEY = (id: string) => `chat_run:${id}`;
+const STOP_KEY = (id: string) => `chat_stop:${id}`;
+const RUN_STALE_MS = 320_000;
+const freshRun = (v: string) => { const t = Number(v); return v && t > 0 && Date.now() - t < RUN_STALE_MS ? t : null; };
+export async function getRunningSince(threadId: string): Promise<number | null> { return freshRun(await getKv(RUN_KEY(threadId))); }
+export async function markRunning(threadId: string): Promise<void> { await setKv(RUN_KEY(threadId), String(Date.now())); await setKv(STOP_KEY(threadId), ""); }
+export async function clearRunning(threadId: string): Promise<void> { await setKv(RUN_KEY(threadId), ""); await setKv(STOP_KEY(threadId), ""); }
+export async function requestStop(threadId: string): Promise<void> { await setKv(STOP_KEY(threadId), String(Date.now())); }
+export async function stopRequested(threadId: string): Promise<boolean> { return !!(await getKv(STOP_KEY(threadId))); }
+// 목록 배지용 — 살아 있는 실행 표식의 스레드 id 집합(한 번의 조회)
+export async function runningThreadIds(): Promise<Set<string>> {
+  const out = new Set<string>();
+  try {
+    const { data } = await supabaseAdmin().from("b2b_settings").select("key, value").like("key", "chat_run:%");
+    for (const r of (data ?? []) as { key: string; value: { v?: string } | string | null }[]) {
+      const v = typeof r.value === "string" ? r.value : r.value?.v;
+      if (freshRun(String(v || ""))) out.add(r.key.slice("chat_run:".length));
+    }
+  } catch { /* 표식 조회 실패 = 배지 없음 */ }
+  return out;
+}
 export function isPending139(err: unknown): boolean {
   const m = String((err as { message?: string })?.message ?? err ?? "");
   return /report_(threads|messages|tables)/.test(m) && /(does not exist|schema cache|Could not find)/i.test(m);

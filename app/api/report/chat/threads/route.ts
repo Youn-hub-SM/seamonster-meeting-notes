@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { listThreads, createThread, isPending139, PENDING_139 } from "@/app/lib/chat-assistant";
+import { listThreads, createThread, isPending139, PENDING_139, runningThreadIds } from "@/app/lib/chat-assistant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +16,8 @@ const pending = () => NextResponse.json({ ok: false, error: PENDING_139, pending
 export async function GET(req: NextRequest) {
   try {
     const user = await who(req);
-    const threads = await listThreads(user, req.nextUrl.searchParams.get("all") === "1");
-    return NextResponse.json({ ok: true, threads });
+    const [threads, running] = await Promise.all([listThreads(user, req.nextUrl.searchParams.get("all") === "1"), runningThreadIds()]);
+    return NextResponse.json({ ok: true, threads: threads.map((t) => ({ ...t, running: running.has(t.id) })) });
   } catch (e) {
     if (isPending139(e)) return pending();
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "대화 목록을 불러오지 못했습니다.") }, { status: 500 });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { loadThreadItems, archiveThread, isPending139, PENDING_139 } from "@/app/lib/chat-assistant";
+import { loadThreadItems, archiveThread, isPending139, PENDING_139, getRunningSince } from "@/app/lib/chat-assistant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +18,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   try {
     const { id } = await ctx.params;
     if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: "대화 번호가 올바르지 않습니다." }, { status: 400 });
-    const r = await loadThreadItems(id, await who(req));
+    const [r, runningSince] = await Promise.all([loadThreadItems(id, await who(req)), getRunningSince(id)]);
     if (!r) return NextResponse.json({ ok: false, error: "대화를 찾을 수 없습니다." }, { status: 404 });
-    return NextResponse.json({ ok: true, ...r });
+    return NextResponse.json({ ok: true, ...r, running: !!runningSince }); // running = 서버에서 턴이 도는 중(화면이 떠났다 돌아온 경우) — 화면은 끝날 때까지 몇 초마다 다시 읽는다
   } catch (e) {
     if (isPending139(e)) return pending();
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "대화를 불러오지 못했습니다.") }, { status: 500 });

@@ -23,7 +23,7 @@ type Item =
   | { role: "assistant"; text: string; live?: boolean; meta?: Meta; fb?: "ok" | "ng"; stopped?: boolean }
   | { role: "tool"; toolUseId: string; name: string; label: string; ok: boolean | null; ms?: number; table?: ChatTable }
 ;
-type Thread = { id: string; title: string; createdBy: string; createdAt: string; updatedAt: string; estUsd: number };
+type Thread = { id: string; title: string; createdBy: string; createdAt: string; updatedAt: string; estUsd: number; running?: boolean };
 type RunResult = { rep: Saved; sql: string; columns: string[]; rows: Row[] };
 type SaveCtx = { question: string; sql: string; looker?: Looker; chart?: Chart };
 
@@ -254,6 +254,10 @@ export default function ReportPage() {
   const [fbNoteFor, setFbNoteFor] = useState<number | null>(null);
   const [fbNote, setFbNote] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const leftRef = useRef(false);                         // 화면을 떠났다(언마운트) — 서버 턴은 계속, 화면만 조용히 끊는다
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null); // 돌아와 보니 턴이 도는 중일 때 끝날 때까지 다시 읽기
+  const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  useEffect(() => () => { leftRef.current = true; abortRef.current?.abort(); stopPoll(); }, []);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const isAdmin = me === "현석" || me === "관리자"; // AppSidebar 와 같은 판정
@@ -283,7 +287,7 @@ export default function ReportPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (abortRef.current) { abortRef.current.abort(); return; }
+      if (abortRef.current) { stop(); return; } // Esc = [중지]와 같은 경로(서버 표식 + 연결 끊기)
       if (panel) setPanel(null); else if (sideOpen) setSideOpen(false);
     };
     window.addEventListener("keydown", onKey);
@@ -311,8 +315,23 @@ export default function ReportPage() {
       const j = await (await fetch(`/api/report/chat/threads/${id}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "대화를 불러오지 못했습니다");
       setThreadId(id); setItems(j.items || []);
+      stopPoll();
+      if (j.running) watchRunning(id, j.items || []);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
+  }
+
+  // 서버에서 턴이 도는 스레드(화면을 떠났다 돌아온 경우) — 답하는 중 표시 + 6초마다 다시 읽어 끝나면 그대로 보여 준다(2026-10-29)
+  function watchRunning(id: string, base: Item[]) {
+    setLoading(true);
+    setItems([...base, { role: "assistant", text: "비서가 답하는 중입니다 — 화면을 떠나도 계속되고, 끝나면 여기에 나타납니다.", live: true }]);
+    pollRef.current = setInterval(async () => {
+      try {
+        const j = await (await fetch(`/api/report/chat/threads/${id}`, { cache: "no-store" })).json();
+        if (!j.ok || j.running) return;
+        stopPoll(); setItems(j.items || []); setLoading(false); loadThreads();
+      } catch { /* 다음 번에 다시 */ }
+    }, 6000);
   }
 
   async function deleteThread(t: Thread) {
@@ -324,7 +343,11 @@ export default function ReportPage() {
     loadThreads();
   }
 
-  function stop() { abortRef.current?.abort(); }
+  function stop() {
+    if (threadId) fetch(`/api/report/chat/threads/${threadId}/stop`, { method: "POST" }).catch(() => { /* 표식 실패면 연결만 끊긴다 — 서버 턴은 끝까지 */ });
+    abortRef.current?.abort(); stopPoll(); setLoading(false);
+    setItems((it) => [...it.map((x) => (x.role === "assistant" && x.live ? { ...x, live: false } : x)), { role: "assistant", text: "(중지했습니다)", stopped: true }]);
+  }
 
   // 한 턴 — 스레드가 없으면 먼저 만든다. 글자는 흘러오고, 도구 줄·표 카드·용어 제안은 그 자리에 끼어든다. [중지]는 연결을 끊는다(서버도 다음 차례를 멈춘다).
   async function send(text: string) {
@@ -396,15 +419,17 @@ export default function ReportPage() {
       });
       if (errText) throw new Error(errText);
     } catch (e) {
+      if (leftRef.current) return; // 화면을 떠남 — 서버 턴은 계속 돈다, 돌아오면 openThread 가 이어 보여 준다
       const aborted = ctrl.signal.aborted || (e instanceof DOMException && e.name === "AbortError");
-      if (aborted) setItems((it) => [...unlive(it), { role: "assistant", text: "(중지했습니다)", stopped: true }]);
-      else setErr(e instanceof Error ? e.message : String(e));
+      if (!aborted) setErr(e instanceof Error ? e.message : String(e)); // 중지 표시는 stop() 이 이미 붙였다
     } finally {
       abortRef.current = null;
-      setLoading(false);
-      setItems((it) => unlive(it));
-      loadThreads();
-      setTimeout(() => taRef.current?.focus(), 0);
+      if (!leftRef.current) {
+        setLoading(false);
+        setItems((it) => unlive(it));
+        loadThreads();
+        setTimeout(() => taRef.current?.focus(), 0);
+      }
     }
   }
 
@@ -499,6 +524,7 @@ export default function ReportPage() {
                 <div key={t.id} className={`rp-side-item ${t.id === threadId ? "is-active" : ""}`}>
                   <button type="button" className="rp-side-link" onClick={() => openThread(t.id)} disabled={loading} title={t.title}>
                     <span className="rp-side-title">{t.title}</span>
+                    {t.running && <span className="b2b-status-pill" style={{ marginLeft: 6, fontSize: 11, background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>답하는 중</span>}
                     {isAdmin && t.createdBy !== me && <span className="rp-side-who">{t.createdBy}</span>}
                   </button>
                   <button type="button" className="rp-side-del" onClick={() => deleteThread(t)} aria-label={`'${t.title}' 대화 지우기`}>지우기</button>
