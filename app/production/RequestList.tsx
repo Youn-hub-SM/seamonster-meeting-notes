@@ -370,6 +370,10 @@ export function RequestList() {
   async function confirmRequest(r: ProductionRequest) {
     await updateRequest(r.id, { assignee: userName || "확정", status: r.status === "요청" ? "진행중" : r.status, expect_status: r.status });
   }
+  // 확정 해제(드롭다운에서 '확정 필요'로 되돌림) — 담당 비우고 요청으로. 입고 예정에서 빠진다.
+  async function unconfirmRequest(r: ProductionRequest) {
+    await updateRequest(r.id, { assignee: "", status: "요청", expect_status: r.status });
+  }
 
   return (
     <div>
@@ -443,7 +447,7 @@ export function RequestList() {
                 <th className="b2b-col-date" style={{ width: "11%" }}>진행</th>
                 <th className="b2b-col-date" style={{ width: "9%" }}>요청일</th>
                 <th className="b2b-col-date" style={{ width: "11%" }}>마감일</th>
-                <th className="b2b-col-date" style={{ width: "8%" }}>담당</th>
+                <th className="b2b-col-date" style={{ width: "9%" }}>확정</th>
                 <th style={{ width: "18%" }}></th>
               </tr>
             </thead>
@@ -458,6 +462,7 @@ export function RequestList() {
                   onRerunRelease={() => rerunRelease(r)}
                   onStatus={(s) => patchStatus(r.id, s, r.status)}
                   onConfirm={() => confirmRequest(r)}
+                  onUnconfirm={() => unconfirmRequest(r)}
                   onEdit={() => { setError(""); setEditReq(r); }}
                   onDelete={() => removeRequest(r)}
                 />
@@ -498,7 +503,7 @@ function ProgressCell({ received, requested, released }: { received: number; req
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, onLink, onRerunRelease, onStatus, onConfirm, onEdit, onDelete }: {
+function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, onLink, onRerunRelease, onStatus, onConfirm, onUnconfirm, onEdit, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onCancelReceipt: (rid: string) => void;
@@ -507,6 +512,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
   onRerunRelease: () => void;
   onStatus: (s: PrStatus) => void;
   onConfirm: () => void;
+  onUnconfirm: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -553,16 +559,27 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
           {releasePending ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>합류 미확인</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
-          {/* 확정 — 누르면 담당=본인 기록 + 진행중 전환. 확정된 요청서만 입고 예정에 잡힌다. 확정 뒤엔 담당 이름 옆에 '확정' 표시. */}
-          {req.assignee ? (
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{req.assignee}
-              {req.status === "진행중" && <span className="b2b-status-pill" style={{ marginLeft: 5, fontSize: 11, background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>확정</span>}
-              {(req.status === "완료" || req.status === "취소") && <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{req.status}</span>}
+          {/* 확정 드롭다운(도매 발주의 상태 select 와 같은 모양, 2026-10-29 대표) — '확정 필요' ▸ '확정'. 확정 = 담당 본인 기록 + 진행중 전환 → 입고 예정에 잡힌다.
+              되돌리면 담당 비움 + 요청(입고 예정에서 빠짐). 닫힌 요청서(완료·취소)는 담당 이름과 상태만 보인다. */}
+          {(req.status === "요청" || req.status === "진행중") ? (() => {
+            const confirmed = req.status === "진행중";
+            const color = confirmed ? { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" } : { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" };
+            return (
+              <span style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
+                <select className="b2b-status-select" value={confirmed ? "확정" : "확정 필요"} disabled={busy}
+                  onChange={(e) => { if (e.target.value === "확정" && !confirmed) onConfirm(); else if (e.target.value === "확정 필요" && confirmed) onUnconfirm(); }}
+                  title={confirmed ? `담당 ${req.assignee || "-"} · 확정된 요청서만 재고 목록 입고 예정에 잡힙니다` : "확정하면 담당이 본인으로 기록되고 재고 목록 입고 예정에 잡힙니다"}
+                  style={{ background: color.bg, color: color.fg }}>
+                  <option value="확정 필요">확정 필요</option>
+                  <option value="확정">확정</option>
+                </select>
+                {confirmed && req.assignee && <span className="sm-faint" style={{ fontSize: 11, paddingLeft: 2 }}>{req.assignee}</span>}
+              </span>
+            );
+          })() : (
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{req.assignee || <span className="sm-faint">-</span>}
+              <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{req.status}</span>
             </span>
-          ) : (req.status === "요청" || req.status === "진행중") ? (
-            <button className="b2b-btn-primary" style={{ padding: "2px 9px", fontSize: 12 }} disabled={busy} onClick={onConfirm} title="확정하면 담당이 본인으로 기록되고, 재고 목록 입고 예정에 잡힙니다">확정</button>
-          ) : (
-            <span className="sm-faint" style={{ fontSize: 12 }}>{req.status}</span>
           )}
         </td>
         <td onClick={(e) => e.stopPropagation()} style={{ paddingLeft: 8, paddingRight: 8 }}>
