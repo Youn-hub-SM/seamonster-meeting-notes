@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
       readScheduledOut(sb, today, chan),
       getPromotionsWithOk(), // 행사 일정 — 남은 행사분(표시)·기간에 겹친 예상 판매량(하루 출고에서 뺌). 실패면 ok=false 로 알린다(S4)
       getAllBundles(sb),
-      chan === "도매" ? getOpenInboundByProduct(sb, today, "도매 납품") // 도매 탭 = 열린 도매 요청서 잔여(소매→도매 이동 대기, 2026-09-29)
+      chan === "도매" ? getOpenInboundByProduct(sb, today, "도매 납품") // 도매 탭 = 확정된 도매 요청서 잔여(소매→도매 이동 대기, 2026-09-29 · 확정만 2026-10-29)
         : chan !== "도매 대량" && chan !== "프로모션" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()), // 제조사 입고는 소매로만 온다 — 확정형 칸엔 '입고 예정'이 없다
       getUntracked(sb),
       reqPurpose ? getOpenRequestedByProduct(sb, reqPurpose) : Promise.resolve(new Map<string, RequestedRow>()),
