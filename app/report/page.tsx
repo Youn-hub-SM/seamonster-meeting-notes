@@ -254,6 +254,8 @@ export default function ReportPage() {
   const [fbNoteFor, setFbNoteFor] = useState<number | null>(null);
   const [fbNote, setFbNote] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const threadIdRef = useRef<string | null>(null); // Esc 핸들러(의존성 []) 안의 stop() 이 최신 스레드를 보게
+  threadIdRef.current = threadId;
   const leftRef = useRef(false);                         // 화면을 떠났다(언마운트) — 서버 턴은 계속, 화면만 조용히 끊는다
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null); // 돌아와 보니 턴이 도는 중일 때 끝날 때까지 다시 읽기
   const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
@@ -344,7 +346,8 @@ export default function ReportPage() {
   }
 
   function stop() {
-    if (threadId) fetch(`/api/report/chat/threads/${threadId}/stop`, { method: "POST" }).catch(() => { /* 표식 실패면 연결만 끊긴다 — 서버 턴은 끝까지 */ });
+    const tid = threadIdRef.current;
+    if (tid) fetch(`/api/report/chat/threads/${tid}/stop`, { method: "POST" }).catch(() => { /* 표식 실패면 연결만 끊긴다 — 서버 턴은 끝까지 */ });
     abortRef.current?.abort(); stopPoll(); setLoading(false);
     setItems((it) => [...it.map((x) => (x.role === "assistant" && x.live ? { ...x, live: false } : x)), { role: "assistant", text: "(중지했습니다)", stopped: true }]);
   }
