@@ -444,7 +444,11 @@ export default function ReportPage() {
     if (!j.ok) { toast.error(j.error || "피드백을 남기지 못했습니다"); return; }
     setItems((list) => list.map((x, k) => (k === i && x.role === "assistant" ? { ...x, fb: ok ? "ok" : "ng" } : x)));
     setFbNoteFor(null); setFbNote("");
-    toast.success("피드백을 남겼습니다");
+    // 틀려요 + 사유(2026-10-29 대표 "이어서 대화할 수 있도록"): 기록만 남기고 끝내지 않고, 사유를 비서에게 그대로 보내 고친 답을 받는다.
+    //  사유 없이 누르면 기록만(대화는 그대로 이어서 할 수 있다).
+    const reason = (note || "").trim();
+    if (!ok && reason) { toast.success("피드백을 남겼고, 비서에게 이어서 전달합니다"); void send(`앞 답이 틀렸습니다: ${reason}\n어디가 왜 틀렸는지 확인하고 고친 답을 주세요.`); return; }
+    toast.success(ok ? "피드백을 남겼습니다 — 이어서 질문할 수 있습니다" : "피드백을 남겼습니다 — 틀린 점을 입력창에 적으면 비서가 고칩니다");
   }
   function copyText(text: string) {
     navigator.clipboard?.writeText(text).then(() => toast.success("답을 복사했습니다"), () => toast.error("복사하지 못했습니다"));
@@ -597,7 +601,7 @@ export default function ReportPage() {
                         <button type="button" className="b2b-link-btn" onClick={() => copyText(turnText(i))}>복사</button>
                         {it.fb ? <span className="rp-fb-done">{it.fb === "ok" ? "맞아요로 남겼습니다" : "틀려요로 남겼습니다"}</span> : fbNoteFor === i ? (
                           <span className="rp-fb-note">
-                            <input className="b2b-input" placeholder="어디가 틀렸나요? (선택)" value={fbNote} onChange={(e) => setFbNote(e.target.value)} aria-label="틀린 이유"
+                            <input className="b2b-input" placeholder="어디가 틀렸나요? 적으면 비서가 이어서 고칩니다 (비워도 됨)" value={fbNote} onChange={(e) => setFbNote(e.target.value)} aria-label="틀린 이유"
                               onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); sendFeedback(i, false, fbNote); } }} />
                             <button className="b2b-btn-secondary" onClick={() => sendFeedback(i, false, fbNote)}>보내기</button>
                             <button className="b2b-link-btn" onClick={() => { setFbNoteFor(null); setFbNote(""); }}>그만두기</button>
