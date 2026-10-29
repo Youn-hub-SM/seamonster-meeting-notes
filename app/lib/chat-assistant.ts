@@ -252,6 +252,37 @@ function toModelMessages(t: ThreadRow, msgs: MessageRow[]): Anthropic.MessagePar
 }
 const charsOf = (ms: Anthropic.MessageParam[]) => ms.reduce((s, m) => s + JSON.stringify(m.content).length, 0);
 
+// ── 대화 캐시 지점(2026-10-29) ──
+//  캐시 접두사는 tools → system → messages 순이라, 시스템만 캐시하면 대화·도구 결과는 도구 차례마다 전액 입력으로 다시 과금된다(한 턴 최대 12차례).
+//  요청마다 마지막 블록(새 질문 또는 tool_result)에 지점을 옮겨 찍으면 그 앞은 캐시에서 읽고 새 블록만 쓴다(문서 "멀티턴 대화 이어가기").
+//  이전 턴의 질문 블록에도 지점 하나를 더 둔다 — 한 턴에 블록이 20개 넘게 쌓이면(도구 차례 ×3~4) 다음 턴의 뒤돌아보기(20블록)가
+//  지난 턴 초반의 항목을 못 찾아 대화 전체를 다시 쓰기 때문. 지점 수 = 시스템 1 + 이전 질문 1 + 마지막 1 = 3(한도 4).
+//  TTL 1시간: 사람이 답을 읽고 다음 질문을 하기까지 5분을 넘기기 쉽다 — 5분 캐시는 턴마다 대화 전체를 다시 썼다(쓰기 1.25배 vs 1시간 2배, 읽기 0.025~0.05배).
+//  주의: 1시간 항목은 5분 항목보다 앞에 있어야 하므로 대화 지점도 전부 1시간으로 맞춘다. thinking 블록엔 지점을 못 찍는다(마지막 메시지는 늘 사용자라 무관).
+const CACHE_1H = { type: "ephemeral" as const, ttl: "1h" as const };
+function markCacheBreakpoints(messages: Anthropic.MessageParam[]): void {
+  type B = Anthropic.ContentBlockParam & { cache_control?: Anthropic.CacheControlEphemeral | null };
+  const toBlocks = (m: Anthropic.MessageParam): B[] => {
+    if (typeof m.content === "string") { m.content = [{ type: "text", text: m.content }]; }
+    return m.content as B[];
+  };
+  for (const m of messages) if (Array.isArray(m.content)) for (const b of m.content as B[]) if (b.cache_control) delete b.cache_control;
+  if (!messages.length) return;
+  const last = messages[messages.length - 1];
+  const lb = toBlocks(last); const lastBlock = lb[lb.length - 1];
+  if (lastBlock && lastBlock.type !== "thinking" && lastBlock.type !== "redacted_thinking") lastBlock.cache_control = CACHE_1H;
+  // 이전 턴 질문(마지막 메시지 앞에서 가장 가까운, 사용자 글로만 된 메시지)
+  for (let i = messages.length - 2; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "user") continue;
+    const bs = Array.isArray(m.content) ? (m.content as B[]) : null;
+    const isQuestion = typeof m.content === "string" || (bs !== null && bs.length > 0 && bs.every((b) => b.type === "text"));
+    if (!isQuestion) continue;
+    const qb = toBlocks(m); qb[qb.length - 1].cache_control = CACHE_1H;
+    break;
+  }
+}
+
 async function nextSeq(threadId: string): Promise<number> {
   const { data, error } = await sb().from("report_messages").select("seq").eq("thread_id", threadId).order("seq", { ascending: false }).limit(1);
   if (error) throw error;
@@ -299,7 +330,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (!thread.title) await sb().from("report_threads").update({ title }).eq("id", p.threadId);
 
   const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: systemChat(instructions, knowledge, schemaIndex), cache_control: { type: "ephemeral" } },
+    { type: "text", text: systemChat(instructions, knowledge, schemaIndex), cache_control: { type: "ephemeral", ttl: "1h" } },
     { type: "text", text: [
       `[오늘] 기준일(Asia/Seoul): ${kstTodayLabel()} — '오늘·어제·이번 주·이번 달·올해·최근 N일' 등 상대 기간은 반드시 이 날짜 기준. 학습 시점의 연도를 가정하지 않습니다.`,
       dataDate ? `[데이터 최신일] 매출 원장(sales_orders)은 ${dataDate}까지 들어 있습니다. 그 뒤 날짜는 아직 없으니 답에 "데이터는 ${dataDate}까지"라고 적습니다.` : "",
@@ -329,6 +360,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
       const timeout = Math.max(30_000, Math.min(finalTurn ? 150_000 : 90_000, left - 10_000));
 
       let res: Anthropic.Message;
+      markCacheBreakpoints(messages);
       try {
         const stream = anthropic.messages.stream({
           model, max_tokens: MAX_TOKENS, system, messages,
@@ -480,7 +512,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
       await addAssistantUsage(usage.estUsd);
       await sb().from("report_threads").update({ updated_at: new Date().toISOString(), model, est_usd: (Number(thread.est_usd) || 0) + usage.estUsd }).eq("id", p.threadId);
     }
-    console.log(`[chat] user=${p.user} thread=${p.threadId.slice(0, 8)} q="${text.slice(0, 40).replace(/\s+/g, " ")}" tools=${toolCount} ms=${elapsedMs} usd=${usage.estUsd}${downgraded ? " downgraded" : ""}${timedOut ? " timedOut" : ""}`);
+    console.log(`[chat] user=${p.user} thread=${p.threadId.slice(0, 8)} q="${text.slice(0, 40).replace(/\s+/g, " ")}" tools=${toolCount} ms=${elapsedMs} usd=${usage.estUsd} in=${usage.input} cacheRead=${usage.cacheRead} cacheWrite=${usage.cacheWrite}${downgraded ? " downgraded" : ""}${timedOut ? " timedOut" : ""}`);
   }
 
   p.send({ type: "done", model, usage, downgraded, timedOut, elapsedMs: Date.now() - startedAt, title, seq: lastAssistantSeq, dataDate });

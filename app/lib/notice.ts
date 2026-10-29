@@ -300,7 +300,7 @@ export async function generateNotice(input: NoticeInput): Promise<NoticeResult> 
   const response = await anthropic.messages.create({
     model,
     max_tokens: 8000, // 2026-10-20 4096→8000(effort medium 의 생각 토큰) · 유형·항목 JSON + 공지 한 편 — 5.x 는 생각 토큰도 이 한도에 들어간다. 출력 길이는 채널 한도·프롬프트가 묶는다
-    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral", ttl: "1h" } }], // 2026-10-29 1시간 TTL — 비서 도구로 띄엄띄엄 불려 5분 안에 재사용되는 일이 드물다
     messages: [{ role: "user", content: user }],
     ...effortParams(model, "medium"), // 2026-10-20 low→medium(대표 "품질을 과감히")
   }, { timeout: 55_000, maxRetries: 1 }); // 라우트 maxDuration 120 안(55초 × 2)

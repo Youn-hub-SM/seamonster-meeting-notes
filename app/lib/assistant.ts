@@ -436,6 +436,7 @@ export function addUsage(acc: AskUsage, model: string, u: Anthropic.Usage): void
   const inp = u.input_tokens || 0, out = u.output_tokens || 0, cr = u.cache_read_input_tokens || 0, cw = u.cache_creation_input_tokens || 0;
   acc.input += inp; acc.output += out; acc.cacheRead += cr; acc.cacheWrite += cw;
   const p = priceOf(model);
-  acc.estUsd = Math.round((acc.estUsd + (inp * p.in + out * p.out + cr * p.cr + cw * p.cw) / 1e6) * 10000) / 10000;
+  const cw1h = (u as { cache_creation?: { ephemeral_1h_input_tokens?: number } | null }).cache_creation?.ephemeral_1h_input_tokens || 0; // 1시간 TTL 쓰기 = 기본 입력의 2배(5분은 1.25배)
+  acc.estUsd = Math.round((acc.estUsd + (inp * p.in + out * p.out + cr * p.cr + (cw - cw1h) * p.cw + cw1h * p.in * 2) / 1e6) * 10000) / 10000;
   if (p.approx) acc.estNote = FABLE_NOTE;
 }
