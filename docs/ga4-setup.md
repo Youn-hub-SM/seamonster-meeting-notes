@@ -34,6 +34,8 @@ Vercel → 프로젝트 → Settings → Environment Variables 에 셋을 넣는
 
 ## 3. 클로드 코드에 GA MCP 붙이기 (내 PC)
 
+> 다른 PC 에 붙이는 절차(키 파일 옮기기·pipx·등록·확인·막힐 때)는 `docs/ga-mcp-other-pc.md`(2026-10-29). 실제 등록 명령은 `python -m pipx run analytics-mcp` 형태로 둔다(이 PC 의 ~/.claude.json 과 동일).
+
 구글 공식 서버 `analytics-mcp`(PyPI). 파이썬 3.13 은 있고 pipx 는 없다.
 
 ```bash
