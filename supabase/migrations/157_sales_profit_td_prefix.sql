@@ -2,8 +2,8 @@
 --
 --  증상: 톡딜 주문의 관리코드는 'TD_DSC-100-K-100X5' 처럼 상품마스터 코드 앞에 TD_ 가 붙는다. sales_profit_summary 는
 --        products.sku 와 정확히 같을 때만 원가·중량을 가져오므로 이 줄들은 원가 0·중량 0 → 톡스토어 매출총이익률이 97% 로 보였다.
---  수정: 정확 일치가 없으면 앞의 'TD_' 를 뗀 코드로 한 번 더 찾는다(원가·중량·미매칭 판정 모두). 정확 일치가 있으면 그것이 우선.
---        같은 규칙을 sales_profit_unmatched 에도 넣어 '미매칭 SKU' 카드에서 TD_ 줄이 빠진다.
+--  수정: 정확 일치가 없거나, 있어도 원가가 0(세트인데 구성품 미등록)이면 앞의 'TD_' 를 뗀 코드로 한 번 더 찾는다(원가·중량·미매칭 판정 모두).
+--        TD_ 는 세트 상품이라 원칙은 상품마스터에 구성품(product_bundles)과 함께 등록하는 것 — 이 폴백은 등록 전의 안전망이다(대표 지적 2026-10-30).
 --  범위 밖: 상품마스터에 아예 없는 코드(11팩 증정 구성 P_*-100X1+100, SH-100-K-100X5 등)는 그대로 미매칭 — 상품마스터에 세트로 등록해야 원가가 잡힌다.
 --  146 의 함수 본문을 그대로 두고 resolved 조인만 바꿨다(주문 1건 키·택배보냉비 묶음·수수료·배송비매출 규칙 변경 없음). 멱등 — 재실행 안전.
 
@@ -37,12 +37,12 @@ language sql stable as $$
       min(o.order_date)                                       as od,
       sum(o.subtotal_amount)                              as revenue,
       sum(o.shipping_fee)                                 as actual_ship,
-      sum(o.quantity * coalesce(rx.cost, rs.cost, 0))    as pcost,       -- 157: 정확 일치(rx) 없으면 TD_ 뗀 코드(rs)
-      round(sum(o.quantity * coalesce(rx.weight, rs.weight, 0)), 1) as wt,
+      sum(o.quantity * coalesce(nullif(rx.cost, 0), nullif(rs.cost, 0), 0))         as pcost, -- 157: 정확 일치(rx)가 없거나 원가 0 이면 TD_ 뗀 코드(rs)
+      round(sum(o.quantity * coalesce(nullif(rx.weight, 0), nullif(rs.weight, 0), 0)), 1) as wt,
       bool_or(o.product_name ilike '%정기배송%')          as is_sub
     from sales_orders o
     left join resolved rx on rx.sku = o.sku_code
-    left join resolved rs on rx.sku is null and o.sku_code like 'TD\_%' and rs.sku = substr(o.sku_code, 4)
+    left join resolved rs on o.sku_code like 'TD\_%' and rs.sku = substr(o.sku_code, 4)
     where o.order_date between p_from and p_to
     group by o.channel, coalesce(o.order_unit, 'row:' || o.id::text)
   ),
@@ -97,7 +97,7 @@ language sql stable as $$
   order by chan.pay_amount desc;
 $$;
 
--- 미매칭 SKU 목록(045 본문 + TD_ 폴백)
+-- 미매칭 SKU 목록(045 본문 + TD_ 폴백) — 정확 일치와 TD_ 뗀 코드 둘 다 못 쓸 때만 미매칭
 create or replace function sales_profit_unmatched(p_from date, p_to date)
 returns table(sku_code text, line_count bigint, qty_sum bigint, amount_sum bigint, channels text)
 language sql stable as $$
@@ -127,14 +127,14 @@ language sql stable as $$
     string_agg(distinct o.channel, ', ') as channels
   from sales_orders o
   left join resolved rx on rx.sku = o.sku_code
-  left join resolved rs on rx.sku is null and o.sku_code like 'TD\_%' and rs.sku = substr(o.sku_code, 4)
+  left join resolved rs on o.sku_code like 'TD\_%' and rs.sku = substr(o.sku_code, 4)
   where o.order_date between p_from and p_to
-    and ((rx.sku is null and rs.sku is null) or coalesce(rx.bad, rs.bad))
+    and (rx.sku is null or rx.bad) and (rs.sku is null or rs.bad)
   group by o.sku_code
   order by amount_sum desc;
 $$;
 
-comment on function sales_profit_summary(date, date) is '채널별 매출·원가·택배보냉비·수수료율(기간). 원가=상품마스터 products.cost_price(세트는 구성품 합), 톡딜 TD_ 접두는 떼고 매칭(157). 미매칭은 원가 0.';
-comment on function sales_profit_unmatched(date, date) is '기간 내 상품마스터에 없거나 원가·중량이 빈 관리코드(TD_ 접두는 떼고 비교, 157). 채널별 이익 화면의 "미매칭 SKU" 카드.';
+comment on function sales_profit_summary(date, date) is '채널별 매출·원가·택배보냉비·수수료율(기간). 원가=상품마스터 products.cost_price(세트는 구성품 합), 톡딜 TD_ 접두는 떼고 매칭(157, 정확 일치 원가 0 이어도). 미매칭은 원가 0.';
+comment on function sales_profit_unmatched(date, date) is '기간 내 상품마스터에 없거나 원가·중량이 빈 관리코드(TD_ 접두는 떼고도 비교, 157). 채널별 이익 화면의 "미매칭 SKU" 카드.';
 
 notify pgrst, 'reload schema';
