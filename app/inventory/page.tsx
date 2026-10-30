@@ -56,7 +56,7 @@ const COL = {
 // 전체 열 합 1106 — 사이드바(237)+스크롤바(15) 더해도 1366 창에 들어간다.
 // 확정형 탭(프로모션·도매 대량)은 판단 열(체크·하루 출고·예상소진·입고 예정·권장생산)이 빠져 더 좁다.
 // 요청량(req)은 확정형 탭 전용 — 그 칸 용도의 열린 요청서 요청수량 합.
-// 출고 예정(sch)은 그 탭에 오늘 뒤 날짜로 이미 뺀 출고가 있을 때만 현재고 바로 뒤에 붙는다(대개 도매·도매 대량·전체의 B2B 선점).
+// 출고 예정(sch)은 현재고 바로 뒤에 붙는다 — 도매·전체 탭은 항상, 그 밖 탭은 오늘 뒤 날짜로 이미 뺀 출고가 있을 때만(대개 B2B 선점).
 type ColKey = keyof typeof COL;
 const FULL_COLS = (Object.keys(COL) as ColKey[]).filter((k) => k !== "req" && k !== "sch");
 const CONFIRMED_COLS: ColKey[] = ["sku", "name", "qty", "req", "pin", "pout", "val", "act"];
@@ -95,7 +95,8 @@ export default function InventoryPage() {
   //  (하루 출고 평균·예상소진·권장생산·부족)이 무의미하다. 생산은 요청서에서 제조사와 협의(기획 5절).
   //  입고 예정도 숨긴다: 제조사 입고는 소매 칸으로 들어오므로 이 칸의 '들어올 양'이 아니다.
   const confirmedTab = (RESERVED_CHANNELS as readonly string[]).includes(channel);
-  const hasSched = rows.some((r) => (r.scheduled_out ?? 0) > 0);
+  // 출고 예정 열 — 도매·전체 탭은 늘 보인다(대표 2026-10-30: 도매에도 전체처럼 고정 칸으로). 소매·확정형 탭은 오늘 뒤 날짜로 이미 뺀 출고가 있을 때만.
+  const hasSched = channel === "도매" || channel === "전체" || rows.some((r) => (r.scheduled_out ?? 0) > 0);
   const cols = withSched(confirmedTab ? CONFIRMED_COLS : FULL_COLS, hasSched);
   const tableMin = cols.reduce((a, k) => a + COL[k], 0);
   const pct = (px: number) => `${((px / tableMin) * 100).toFixed(3)}%`;
