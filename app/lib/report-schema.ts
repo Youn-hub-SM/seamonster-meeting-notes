@@ -18,13 +18,15 @@ export const BLOCKED_RELATIONS = [
   "bank_deposits", "bank_deposit_names", "tax_invoices",
   // 회사 문서 본문(비서는 docs_* 도구로만)
   "ms365_doc_index",
+  // 폐기된 옛 표(오답 방지 — 2026-10-30 비서가 이 표로 원가를 계산해 톡스토어 이익률을 잘못 설명). 원가의 단일 기준은 products.cost_price(044 이후). 표 자체는 docs/db-orphans.md 결정대로 보존.
+  "sales_sku_cost",
   // 비서 자체(okr_checkins·briefings 표는 2026-10-20 migration 142 로 삭제)
   "report_threads", "report_messages", "report_tables", "report_feedback",
 ];
 const BLOCKED_SET = new Set(BLOCKED_RELATIONS);
 export const isBlockedRelation = (name: string) => BLOCKED_SET.has(name.toLowerCase());
 // 차단 목록 사람 설명(프롬프트 '조회 불가' 절)
-export const BLOCKED_NOTE = "sales_customers(고객 전화·이름), fulfill_customers(단골·블랙 고객 메모), companies·shipments(원본 — companies_report·shipments_report 뷰 사용), survey_responses(설문 원문), b2b_settings·utm_settings·channel_commands(토큰·설정), app_users(계정), bank_deposits·bank_deposit_names(입금 내역), tax_invoices(사업자 정보), ms365_doc_index(문서 본문 색인 — docs_search 로만), report_*(비서 자체 저장소). public 밖 스키마·pg_catalog·information_schema 도 조회하지 않습니다 — 특히 '파도소리'(제조사)의 재고·품목은 factory 스키마에 있어 비서가 볼 수 없습니다. 그런 질문엔 '파도소리 재고는 별도 도구(/factory)라 조회할 수 없다'고 답합니다.";
+export const BLOCKED_NOTE = "sales_customers(고객 전화·이름), fulfill_customers(단골·블랙 고객 메모), companies·shipments(원본 — companies_report·shipments_report 뷰 사용), survey_responses(설문 원문), b2b_settings·utm_settings·channel_commands(토큰·설정), app_users(계정), bank_deposits·bank_deposit_names(입금 내역), tax_invoices(사업자 정보), ms365_doc_index(문서 본문 색인 — docs_search 로만), report_*(비서 자체 저장소), sales_sku_cost(2026-07 폐기된 옛 원가표 — 원가는 products.cost_price). public 밖 스키마·pg_catalog·information_schema 도 조회하지 않습니다 — 특히 '파도소리'(제조사)의 재고·품목은 factory 스키마에 있어 비서가 볼 수 없습니다. 그런 질문엔 '파도소리 재고는 별도 도구(/factory)라 조회할 수 없다'고 답합니다.";
 
 // 루커스튜디오(looker_ro)가 볼 수 있는 뷰(원장·재고·products 는 못 봄)
 export const LOOKER_RELATIONS = [
