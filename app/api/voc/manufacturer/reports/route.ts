@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { MFG_FAULT } from "@/app/lib/voc-manufacturer";
+import { factsColMissing } from "@/app/lib/voc-monthly-facts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// 월간 VOC 리포트 저장/조회 (migration 086 voc_monthly_reports).
-//  GET  ?month=YYYY-MM → 그 달의 저장 리포트들 + 수신처(제조사명) 자동완성 목록
+// 월간 VOC 리포트 저장/조회 (migration 086 voc_monthly_reports + 159 facts).
+//  GET  ?month=YYYY-MM → 그 달의 저장 리포트들(draft·counts·facts) + 수신처(제조사명) 자동완성 목록
 //                        + 손해 청구 섹션용 '제조사 귀책' 클레임 원본(설문 제외).
-//  POST { month, recipient, draft, counts } → (월, 수신처) 단위 upsert(자동 저장).
-//  086 미적용 환경: 저장/목록만 비활성(needsMigration=true), 클레임 조회는 정상 동작.
+//  POST { month, recipient, draft, counts, facts? } → (월, 수신처) 단위 upsert(자동 저장). facts 가 오면 generated_at 도 갱신(생성 때만 보냄).
+//  086 미적용 환경: 저장/목록만 비활성(needsMigration=true), 클레임 조회는 정상 동작. 159 미적용: facts 없이 저장·조회(화면은 건수만).
 
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const isMissingTable = (msg: string) => /voc_monthly_reports|42P01/i.test(msg);
@@ -32,12 +33,17 @@ export async function GET(req: NextRequest) {
       .order("received_at", { ascending: true });
     if (cErr) throw cErr;
 
-    let reports: { recipient: string; draft: string; counts: unknown; updated_at: string }[] = [];
+    let reports: { recipient: string; draft: string; counts: unknown; facts?: unknown; generated_at?: string | null; updated_at: string }[] = [];
     let recipients: string[] = [];
     let needsMigration = false;
-    const r1 = await sb.from("voc_monthly_reports")
-      .select("recipient, draft, counts, updated_at")
+    let factsCol = true;
+    let r1: { data: unknown[] | null; error: { message: string } | null } = await sb.from("voc_monthly_reports")
+      .select("recipient, draft, counts, facts, generated_at, updated_at")
       .eq("month", month).order("updated_at", { ascending: false });
+    if (r1.error && factsColMissing(r1.error)) {
+      factsCol = false; // 159 미적용 — facts 없이
+      r1 = await sb.from("voc_monthly_reports").select("recipient, draft, counts, updated_at").eq("month", month).order("updated_at", { ascending: false });
+    }
     if (r1.error) {
       if (!isMissingTable(r1.error.message)) throw r1.error;
       needsMigration = true; // 086 미적용 — 저장 없이 진행
@@ -47,7 +53,7 @@ export async function GET(req: NextRequest) {
       recipients = [...new Set(((r2.data ?? []) as { recipient: string }[]).map((x) => x.recipient))].sort((a, b) => a.localeCompare(b, "ko"));
     }
 
-    return NextResponse.json({ ok: true, reports, recipients, claims: claims ?? [], needsMigration });
+    return NextResponse.json({ ok: true, reports, recipients, claims: claims ?? [], needsMigration, factsCol });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "리포트 조회 실패") }, { status: 500 });
   }
@@ -55,24 +61,30 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const b = (await req.json().catch(() => ({}))) as { month?: string; recipient?: string; draft?: string; counts?: unknown };
+    const b = (await req.json().catch(() => ({}))) as { month?: string; recipient?: string; draft?: string; counts?: unknown; facts?: unknown };
     const month = MONTH_RE.test(String(b.month || "")) ? String(b.month) : "";
     if (!month) return NextResponse.json({ ok: false, error: "month(YYYY-MM)이 필요합니다." }, { status: 400 });
     const draft = String(b.draft || "");
     if (!draft.trim()) return NextResponse.json({ ok: false, error: "저장할 내용이 없습니다." }, { status: 400 });
     const recipient = String(b.recipient || "").slice(0, 100);
 
-    const { error } = await supabaseAdmin().from("voc_monthly_reports").upsert(
-      { month, recipient, draft, counts: b.counts ?? null, updated_at: new Date().toISOString() },
-      { onConflict: "month,recipient" },
-    );
+    const sb = supabaseAdmin();
+    const base = { month, recipient, draft, counts: b.counts ?? null, updated_at: new Date().toISOString() };
+    const withFacts = b.facts && typeof b.facts === "object" ? { ...base, facts: b.facts, generated_at: new Date().toISOString() } : base;
+    let { error } = await sb.from("voc_monthly_reports").upsert(withFacts, { onConflict: "month,recipient" });
+    let factsSaved = withFacts !== base;
+    if (error && factsSaved && factsColMissing(error)) {
+      // 159 미적용 — facts 칸만 빼고 저장(화면은 그 달을 다시 열 때 건수만 보인다)
+      factsSaved = false;
+      ({ error } = await sb.from("voc_monthly_reports").upsert(base, { onConflict: "month,recipient" }));
+    }
     if (error) {
       if (isMissingTable(error.message)) {
         return NextResponse.json({ ok: false, needsMigration: true, error: "저장하려면 마이그레이션 086(voc_monthly_reports)을 적용하세요." }, { status: 400 });
       }
       throw error;
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, factsSaved });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "리포트 저장 실패") }, { status: 500 });
   }
