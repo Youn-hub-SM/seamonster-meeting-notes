@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
+import { maskPii, answerBody } from "@/app/lib/report-voice";
 
 export const dynamic = "force-dynamic";
 // 데이터가 많은 달은 AI 생성이 60초를 넘겨 플랫폼이 함수를 끊었다(클라이언트엔 JSON 아닌
@@ -11,18 +12,22 @@ export const maxDuration = 300; // 큰 달 + 생각 — AI 요청 280초 상한(
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const MAX_CLAIMS = 300;
 const MAX_SURVEYS = 200;
+const MAX_INQUIRIES = 200; // 스마트스토어 고객문의·상품문의(137) — 한 달치, 질문 500자·답변 300자 상한
+const NAVER = "스마트스토어";  // channel_inquiries.channel — report-voice.ts 와 같은 값
 
 // 제조사 공유용 '고객 반응' 서술형 초안 — 실제 양식(고객 문의·설문 / 긍정·부정 / 공통·제품별)에 맞춤.
+//  2026-11-02 대표: 스마트스토어 고객문의·상품문의(137 channel_inquiries, 주간 리포트 '고객의 소리'와 같은 대장)도 '2. 고객 문의'에 반영.
 function buildSystem(y: string, m: string): string {
   return `당신은 씨몬스터(냉동 수산물 가공·판매)에서 매월 제조사에 보낼 '고객 반응' 자료를 작성합니다.
-아래 JSON은 ${y}년 ${m}월 한 달간 접수된 고객 클레임/문의(claims)와 설문 응답(surveys)입니다.
+아래 JSON은 ${y}년 ${m}월 한 달간의 ① 업무도우미에 접수된 고객 클레임/문의(claims), ② 스마트스토어 고객문의·상품문의의 질문과 답변(inquiries), ③ 설문 응답(surveys)입니다.
 이를 제조사가 보기 좋게 정성적으로 요약한 문서를 작성하세요.
 
 [작성 규칙]
 - 한국어. 데이터에 있는 내용만(추측·과장·창작 금지). 비슷한 의견은 묶고, 제품이 특정되면 제품별로 분류.
-- 불릿은 명사형/간결체("~함", "~발견", "~요청"). 건수 표기는 입력의 catCounts(유형별 서버 집계)에 있는 값만 그대로 쓴다 — 목록을 직접 세서 (N건)을 만들지 말 것(세다 틀린다). catCounts 에 없는 임의 묶음의 건수는 표기하지 않는다.
+- 불릿은 명사형/간결체("~함", "~발견", "~요청"). 건수 표기는 입력의 catCounts(클레임 유형별)·inquiryCounts(스마트스토어 문의 종류별·미답변) 서버 집계에 있는 값만 그대로 쓴다 — 목록을 직접 세서 (N건)을 만들지 말 것(세다 틀린다). 집계에 없는 임의 묶음의 건수는 표기하지 않는다.
 - 제품이 특정되지 않은 공통 의견은 '공통'으로, 특정 제품 의견은 그 제품명으로 묶음.
 - 클레임(품질·이물·가시·포장·해동 등 문제 제기)과 단순 문의(질문: 검사 여부·원물 크기·가공 방식 등)를 구분.
+- inquiries(스마트스토어 문의)도 같은 기준으로 나눈다: 문제 제기는 '가. 클레임', 질문은 '나. 그 외 문의'. 답변이 있으면 불릿 끝에 "(답변: 요지)"를 짧게 덧붙인다. claims 와 같은 사례로 보이면 한 번만 적는다. 고객 이름·아이디·연락처는 옮겨 쓰지 않는다.
 - 모든 불릿은 "- 라벨 : 내용" 형태로 시작한다. 라벨 = 분류(가시/이물·포장·해동 등) 또는 제품명, 콜론(:) 필수. 화면·Word 가 라벨을 굵게 표시하므로 형태가 어긋나면 서식이 빠진다. (단 '1. 이번 달 종합' 섹션은 서술형 불릿 허용)
 - '1. 이번 달 종합'의 비교는 입력의 prevSummary(전월 집계)만 근거로 한다. 전월 데이터가 없으면 "- 전월 데이터 없음" 한 줄. '앞으로의 요구'는 이번 달 데이터에 근거해 제조사에 요청할 개선·확인 사항만 적고, 없으면 "- 해당 없음".
 - 설문은 긍정의견과 개선/부정의견으로 나누고, 개선/부정은 공통 → 제품별 순.
@@ -85,6 +90,29 @@ export async function POST(req: NextRequest) {
       cause: r.cause ? cut(String(r.cause), 240) : undefined,
     }));
 
+    // 1-2) 이달 스마트스토어 고객문의·상품문의(137 channel_inquiries) — 문의 등록 시각(KST)이 그 달인 것.
+    //  개인정보: 이름·아이디는 137 에 없고, 질문·답변 본문은 maskPii 로 연락처·이메일·긴 번호를 가린다. 137 미적용이면 조용히 생략(counts.inquiries = null).
+    const mStart = `${month}-01T00:00:00+09:00`;
+    const nextD = new Date(Number(y), Number(m), 1);
+    const mEnd = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, "0")}-01T00:00:00+09:00`;
+    const inqRes = await sb.from("channel_inquiries")
+      .select("kind, product_name, category, title, question, answer, answered, asked_at")
+      .eq("channel", NAVER).gte("asked_at", mStart).lt("asked_at", mEnd)
+      .order("asked_at", { ascending: true }).limit(MAX_INQUIRIES);
+    const inqMissing = !!inqRes.error && /channel_inquiries|42P01|PGRST205/i.test(`${inqRes.error.message} ${inqRes.error.code}`);
+    if (inqRes.error && !inqMissing) throw inqRes.error;
+    const tidy = (v: string | null | undefined, n: number) => { const t = maskPii(String(v || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()); return t ? cut(t, n) : undefined; };
+    const kstMd = (iso: string | null) => (iso ? new Date(Date.parse(iso) + 9 * 3600e3).toISOString().slice(5, 10) : "");
+    const inquiries = (inqRes.data ?? []).map((r) => ({
+      kind: r.kind, date: kstMd(r.asked_at), product: tidy(r.product_name, 60), category: tidy(r.category, 30), title: tidy(r.title, 80),
+      question: tidy(r.question, 500) || "(본문 없음)", answer: r.answered ? tidy(answerBody(r.answer), 300) : undefined, answered: !!r.answered,
+    }));
+    const inquiryCounts = inqMissing ? null : {
+      고객문의: inquiries.filter((q) => q.kind === "고객문의").length,
+      상품문의: inquiries.filter((q) => q.kind === "상품문의").length,
+      미답변: inquiries.filter((q) => !q.answered).length,
+    };
+
     // 2) 이달 설문 응답 (submitted_at 또는 created_at 기준)
     const { data: srData } = await sb
       .from("survey_responses")
@@ -112,13 +140,16 @@ export async function POST(req: NextRequest) {
     const prevCat = new Map<string, number>();
     for (const r of prevVoc ?? []) prevCat.set(r.category || "미분류", (prevCat.get(r.category || "미분류") || 0) + 1);
     const prevSurveyCnt = (srData ?? []).filter((r) => String((r.submitted_at as string) || (r.created_at as string) || "").slice(0, 7) === prevMonth).length;
+    const prevInq = inqMissing ? null : await sb.from("channel_inquiries").select("id", { count: "exact", head: true })
+      .eq("channel", NAVER).gte("asked_at", `${prevMonth}-01T00:00:00+09:00`).lt("asked_at", mStart);
+    const prevInqCnt = prevInq && !prevInq.error ? (prevInq.count ?? 0) : null;
     const catTop = [...prevCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c, n]) => `${c} ${n}건`).join(" · ");
-    const prevSummary = (prevVoc?.length || prevSurveyCnt)
-      ? `전월(${Number(prevMonth.slice(5, 7))}월): 클레임·문의 ${prevVoc?.length ?? 0}건${catTop ? ` (${catTop})` : ""} · 설문 ${prevSurveyCnt}건`
+    const prevSummary = (prevVoc?.length || prevSurveyCnt || prevInqCnt)
+      ? `전월(${Number(prevMonth.slice(5, 7))}월): 클레임·문의 ${prevVoc?.length ?? 0}건${catTop ? ` (${catTop})` : ""}${prevInqCnt != null ? ` · 스마트스토어 문의 ${prevInqCnt}건` : ""} · 설문 ${prevSurveyCnt}건`
       : "전월 데이터 없음";
 
-    if (claims.length === 0 && surveys.length === 0) {
-      return NextResponse.json({ ok: false, error: `${y}년 ${m}월에 집계할 클레임·설문이 없습니다.`, counts: { claims: 0, surveys: 0 } }, { status: 400 });
+    if (claims.length === 0 && surveys.length === 0 && inquiries.length === 0) {
+      return NextResponse.json({ ok: false, error: `${y}년 ${m}월에 집계할 클레임·문의·설문이 없습니다.`, counts: { claims: 0, surveys: 0, inquiries: inqMissing ? null : 0 } }, { status: 400 });
     }
 
     // 유형별 서버 집계 — AI 가 목록을 직접 세다 (4건)/(3건) 식으로 틀리는 것 방지(대표 발견, 2026-08-28)
@@ -134,7 +165,7 @@ export async function POST(req: NextRequest) {
       max_tokens: 16000, // 데이터 많은 달에 4000 으로는 출력이 문장 중간에서 끊겼다 — 5.x 는 생각 토큰도 이 한도에 들어간다
       ...effortParams(model, "low"), // 집계는 서버가 미리 함 — 이미 지연 한계에 가까워 low
       system: buildSystem(y, mNum),
-      messages: [{ role: "user", content: JSON.stringify({ prevSummary, catCounts, claims, surveys }) }],
+      messages: [{ role: "user", content: JSON.stringify({ prevSummary, catCounts, inquiryCounts, claims, inquiries, surveys }) }],
     }, { timeout: 280_000, maxRetries: 0 }); // 라우트 maxDuration 300 안
     let draft = readText(resp, { allowTruncated: true }); // 잘려도 초안은 보여 주고 아래에서 표시한다(거절은 오류)
     draft = draft.replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/i, "").trim();
@@ -143,7 +174,7 @@ export async function POST(req: NextRequest) {
       draft += "\n\n(주의: 내용이 길어 뒷부분이 잘렸습니다 — '다시 생성'을 누르거나, 이 문단을 지우고 직접 보완하세요)";
     }
 
-    return NextResponse.json({ ok: true, draft, counts: { claims: claims.length, surveys: surveys.length } });
+    return NextResponse.json({ ok: true, draft, counts: { claims: claims.length, surveys: surveys.length, inquiries: inqMissing ? null : inquiries.length } });
   } catch (err) {
     console.error("[voc/manufacturer/digest]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "초안 생성 실패") }, { status: 500 });

@@ -106,7 +106,7 @@ function clean(s: string | null | undefined, max: number, cut: { n: number }): s
   return t;
 }
 // 답변 앞뒤 인사말(안녕하세요 … / 감사합니다 …)은 뜻이 없어 뺀다(토큰 절약) — 빼고 남는 게 없으면 원문 그대로
-const answerBody = (s: string | null | undefined) => {
+export const answerBody = (s: string | null | undefined) => {
   const t = (s || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
   const body = t
     .replace(/^(안녕하세요|안녕하십니까)[\s,.!~^]*(고객님[\s,.!~^]*)?/, "")

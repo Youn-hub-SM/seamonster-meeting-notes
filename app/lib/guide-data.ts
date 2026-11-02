@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-10-29";
+export const GUIDE_UPDATED = "2026-11-02";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -2193,7 +2193,7 @@ export const GUIDE: GuideCategory[] = [
           {
             "href": "/voc/manufacturer",
             "label": "월간 VOC 리포트",
-            "what": "클레임·설문을 AI가 월 단위로 정리한 제조사 공유용 리포트와 정산 데이터 — 맨 위에 이번 달 종합(지난달 비교·이번 달 주요 정리·앞으로의 요구)이 붙는다",
+            "what": "클레임·스마트스토어 문의·설문을 AI가 월 단위로 정리한 제조사 공유용 리포트와 정산 데이터 — 맨 위에 이번 달 종합(지난달 비교·이번 달 주요 정리·앞으로의 요구)이 붙는다",
             "steps": [
               "'대상 월'을 고른다 — 이전에 만든 달이면 저장본이 자동으로 열린다",
               "필요하면 수신 제조사명을 입력한다 (이전에 쓴 이름이 자동완성으로 뜬다 · 문서 수신 표기용)",
@@ -2205,7 +2205,8 @@ export const GUIDE: GuideCategory[] = [
             "tips": [
               "'다시 생성'을 누르면 편집한 초안이 새 초안으로 덮어써진다. 고친 내용은 먼저 복사해 둔다",
               "저장은 (월, 수신 제조사명) 단위다 — 같은 달이라도 제조사명을 바꾸면 각각 따로 저장된다",
-              "손해 청구 정리는 개선요청서와 같은 기준(손해 귀책 '제조사'인 클레임, 설문 제외)이다"
+              "손해 청구 정리는 개선요청서와 같은 기준(손해 귀책 '제조사'인 클레임, 설문 제외)이다",
+              "'2. 고객 문의'에는 업무도우미 VOC와 스마트스토어 고객문의·상품문의(주간 리포트 '고객의 소리'와 같은 대장)가 함께 들어간다 — 생성 버튼 옆 '스마트스토어 문의 N건'이 반영 건수다"
             ],
             "keywords": [
               "월간 리포트",

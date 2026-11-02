@@ -1,6 +1,7 @@
 "use client";
 
 // 월간 VOC 리포트 — AI 초안 생성 + (월, 수신 제조사) 단위 자동 저장(086) + 손해 청구 섹션.
+//  초안 입력 = 업무도우미 VOC(설문 소스 제외) + 스마트스토어 고객문의·상품문의(137, 2026-11-02) + 설문.
 //  · 생성/편집하면 자동 저장되고, 화면을 다시 열면 저장본을 바로 불러온다(재생성 불필요).
 //  · 제조사명을 넣으면 개선요청서와 같은 기준(제조사 귀책·설문 제외)의 손해 청구 정리가
 //    인쇄 미리보기에 붙고, Word 다운로드에도 같은 내용이 텍스트 섹션으로 들어간다.
@@ -13,13 +14,14 @@ import { won, qty, qtyText, wonText, dateShort, dateTime } from "@/app/lib/forma
 const THIS_MONTH = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 7); // KST
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
-type SavedReport = { recipient: string; draft: string; counts: { claims: number; surveys: number } | null; updated_at: string };
+type Counts = { claims: number; surveys: number; inquiries?: number | null }; // inquiries = 스마트스토어 문의(137), null = 137 미적용
+type SavedReport = { recipient: string; draft: string; counts: Counts | null; updated_at: string };
 
 export default function VocManufacturerPage() {
   const [month, setMonth] = useState(THIS_MONTH());
   const [recipient, setRecipient] = useState("");
   const [draft, setDraft] = useState("");
-  const [counts, setCounts] = useState<{ claims: number; surveys: number } | null>(null);
+  const [counts, setCounts] = useState<Counts | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -110,7 +112,7 @@ export default function VocManufacturerPage() {
       // 함수가 시간 초과 등으로 끊기면 Vercel 이 JSON 아닌 텍스트("An error occurred...")를 내려보낸다
       //  → 무조건 res.json() 하면 "Unexpected token 'A'..." 파싱 오류만 보였다. 텍스트로 받고 직접 판별.
       const raw = await res.text();
-      let j: { ok?: boolean; draft?: string; counts?: { claims: number; surveys: number }; error?: string } | null = null;
+      let j: { ok?: boolean; draft?: string; counts?: Counts; error?: string } | null = null;
       try { j = JSON.parse(raw); } catch { /* 플랫폼 오류 텍스트 */ }
       if (!j) throw new Error(`초안을 생성하지 못했습니다 (HTTP ${res.status}). 데이터가 많은 달은 제한시간을 넘깁니다 — 관리자 › 설정 › AI 에서 'VOC 인사이트' 모델을 빠른 모델로 바꾸거나 [초안 생성]을 다시 누르세요`);
       if (!res.ok || !j.ok) throw new Error(j.error || "초안을 생성하지 못했습니다. [초안 생성]을 다시 누르세요");
@@ -194,7 +196,7 @@ export default function VocManufacturerPage() {
             <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="예: 바다식품" style={{ width: 200 }} /></label>
           <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
           <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "작성 중..." : draft ? "다시 생성" : "초안 생성"}</button>
-          {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건(설문 소스 제외) · 설문 {counts.surveys}건 반영</span>}
+          {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건(설문 소스 제외){counts.inquiries != null ? ` · 스마트스토어 문의 ${counts.inquiries}건` : ""} · 설문 {counts.surveys}건 반영</span>}
           {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("자동 저장하지") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
         </div>
       </section>
