@@ -29,12 +29,20 @@ const SECTION_EXTRAS: Record<VocAudience, Record<number, { charts: string[]; tab
   내부: { 1: { charts: ["trend"], tables: [] }, 2: { charts: ["species", "channel", "category_trend"], tables: ["species", "channel", "category_trend"] } },
 };
 const TITLE_OF = (a: VocAudience, y: string, m: string) => (a === "제조사" ? `${y}년 ${Number(m)}월 고객 반응` : `${y}년 ${Number(m)}월 VOC 분석 (내부용)`);
-const CHART_TITLE: Record<string, string> = {
-  trend: "최근 6개월 VOC 건수와 판매 1,000개당 VOC율",
-  species: "어종별 VOC율(판매 1,000개당)",
-  channel: "채널별 VOC율(택배 1,000건당)",
-  category_trend: "유형별 VOC 건수 6개월",
-  fault: "손해 귀책",
+// 용어 — 제조사용은 'VOC' 를 쓰지 않는다(2026-11-02 대표: 고객 불만 / 고객 불만 접수율). 내부용은 VOC 그대로.
+const TERMS: Record<VocAudience, { voc: string; rate: string; short: string }> = {
+  제조사: { voc: "고객 불만", rate: "고객 불만 접수율", short: "불만" },
+  내부: { voc: "VOC", rate: "VOC율", short: "VOC" },
+};
+const chartTitles = (a: VocAudience): Record<string, string> => {
+  const t = TERMS[a];
+  return {
+    trend: `최근 6개월 ${t.voc} 건수와 판매 1,000개당 ${t.rate}`,
+    species: `어종별 ${t.rate}(판매 1,000개당)`,
+    channel: `채널별 ${t.rate}(택배 1,000건당)`,
+    category_trend: `유형별 ${t.voc} 건수 6개월`,
+    fault: "손해 귀책",
+  };
 };
 const CATS = ["배송", "품질", "포장", "누락", "오배송", "가시", "이물", "기타"];
 const ymLabel = (ym: string) => `${Number(ym.slice(5, 7))}월`;
@@ -196,6 +204,8 @@ export default function VocManufacturerPage() {
   // 리포트를 섹션으로 나눈다 — 헤딩("N. ") 줄 기준. 제목 줄("YYYY년 M월 …")은 뺀다. 손해 청구 번호 = 마지막 섹션 번호 + 1.
   const body = useMemo(() => draft.replace(/^\s*\d{4}년\s*\d{1,2}월[^\n]*\n?/, ""), [draft]);
   const extras = SECTION_EXTRAS[audience];
+  const term = TERMS[audience];
+  const CHART_TITLE = chartTitles(audience);
   const sections = useMemo(() => {
     const out: { no: number | null; lines: string[] }[] = [];
     let cur: { no: number | null; lines: string[] } = { no: null, lines: [] };
@@ -225,12 +235,12 @@ export default function VocManufacturerPage() {
     const T: { key: string; title?: string; head: string[]; rows: string[][]; numCols?: number[] }[] = [];
     if (facts) {
       const sp = facts.by_species.filter((s) => s.voc || (s.sold_qty || 0) > 0);
-      if (sp.length) T.push({ key: "species", title: CHART_TITLE.species, head: ["어종", "판매 수량", "VOC 건수", "VOC율(1,000개당)", "전월 율", "주요 유형", "제조사 귀책", "손해액(원)"],
+      if (sp.length) T.push({ key: "species", title: CHART_TITLE.species, head: ["어종", "판매 수량", `${term.voc} 건수`, `${term.rate}(1,000개당)`, "전월 접수율", "주요 유형", "제조사 귀책", "손해액(원)"],
         rows: sp.map((s) => [s.name, s.sold_qty == null ? "-" : qty(s.sold_qty), String(s.voc), rate(s.rate), rate(s.prev_rate), s.top_category || "-", String(s.mfg), won(s.loss)]), numCols: [1, 2, 3, 4, 6, 7] });
       const ch = facts.by_channel;
       const chRows = ch.map((c) => [c.channel, c.parcels == null ? "-" : qty(c.parcels), String(c.voc), rate(c.rate), rate(c.prev_rate), c.top_category || "-"]);
       if (facts.wholesale) chRows.push(["도매(B2B)", facts.wholesale.shipments == null ? "-" : qty(facts.wholesale.shipments), String(facts.wholesale.voc), facts.wholesale.rate_qty == null ? "-" : `${rate(facts.wholesale.rate_qty)} (수량 1,000개당)`, "-", "-"]);
-      if (chRows.length && audience === "내부") T.push({ key: "channel", title: CHART_TITLE.channel, head: ["채널", "배송 건수", "VOC 건수", "VOC율(1,000건당)", "전월 율", "주요 유형"], rows: chRows, numCols: [1, 2, 3, 4] });
+      if (chRows.length && audience === "내부") T.push({ key: "channel", title: CHART_TITLE.channel, head: ["채널", "배송 건수", `${term.voc} 건수`, `${term.rate}(1,000건당)`, "전월 율", "주요 유형"], rows: chRows, numCols: [1, 2, 3, 4] });
       T.push({ key: "category_trend", title: CHART_TITLE.category_trend, head: ["월", ...CATS, "합계"],
         rows: facts.by_category_trend.map((m) => [ymLabel(m.ym), ...CATS.map((c) => String(m.counts[c] || 0)), String(Object.values(m.counts).reduce((a, b) => a + b, 0))]), numCols: CATS.map((_, i) => i + 1).concat(CATS.length + 1) });
     }
@@ -239,6 +249,7 @@ export default function VocManufacturerPage() {
       T.push({ key: "claims_detail", head: ["접수일", "제품", "유형", "내용", "손해(원)"], rows: mfg.items.map((r) => [(r.received_at || "").slice(5), r.product || "-", r.category, String(r.content || "").replace(/\s*\n+\s*/g, " "), won(r.loss_amount || 0)]), numCols: [4] });
     }
     return T;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facts, mfg, audience]);
 
   // Word 본문 — 섹션 뒤에 자리표시 줄을 끼운 텍스트 + 손해 청구
@@ -287,18 +298,19 @@ export default function VocManufacturerPage() {
   const charts = useMemo(() => {
     if (!facts) return null;
     const periods = facts.trend.map((t) => ymLabel(t.ym));
-    const trend = <ComboBarLine periods={periods} barSeries={[{ key: "VOC", values: facts.trend.map((t) => t.voc) }]} barColors={[PIE_COLORS[0]]}
+    const trend = <ComboBarLine periods={periods} barSeries={[{ key: term.voc, values: facts.trend.map((t) => t.voc) }]} barColors={[PIE_COLORS[0]]}
       lineValues={facts.trend.map((t) => t.rate_qty)} lineLabel="판매 1,000개당" lineFmt={(n) => n.toFixed(1)} lineUnit="건" barUnit="건" />;
     const catTrend = <StackedBar periods={periods} series={CATS.map((c) => ({ key: c, values: facts.by_category_trend.map((m) => m.counts[c] || 0) }))} colors={PIE_COLORS} unit="건" />;
     const species = <BarList title="" data={facts.by_species.filter((s) => s.rate != null).map((s) => [s.name, s.rate as number] as [string, number])} fmt={(n) => `${n.toFixed(1)}건`} accent={PIE_COLORS[1]}
-      sub={(label) => { const s = facts.by_species.find((x) => x.name === label); return s ? `VOC ${s.voc}건 · 판매 ${qty(s.sold_qty || 0)}${s.top_category ? ` · ${s.top_category}` : ""}${s.prev_rate != null ? ` · 전월 ${rate(s.prev_rate)}` : ""}` : null; }}
+      sub={(label) => { const s = facts.by_species.find((x) => x.name === label); return s ? `${term.short} ${s.voc}건 · 판매 ${qty(s.sold_qty || 0)}${s.top_category ? ` · ${s.top_category}` : ""}${s.prev_rate != null ? ` · 전월 ${rate(s.prev_rate)}` : ""}` : null; }}
       empty="율을 낼 판매 자료가 없습니다" />;
     const channel = <BarList title="" data={facts.by_channel.filter((c) => c.rate != null).map((c) => [c.channel, c.rate as number] as [string, number])} fmt={(n) => `${n.toFixed(1)}건`} accent={PIE_COLORS[2]}
-      sub={(label) => { const c = facts.by_channel.find((x) => x.channel === label); return c ? `VOC ${c.voc}건 · 배송 ${qty(c.parcels || 0)}건${c.top_category ? ` · ${c.top_category}` : ""}` : null; }}
+      sub={(label) => { const c = facts.by_channel.find((x) => x.channel === label); return c ? `${term.short} ${c.voc}건 · 배송 ${qty(c.parcels || 0)}건${c.top_category ? ` · ${c.top_category}` : ""}` : null; }}
       empty="율을 낼 배송 자료가 없습니다" />;
-    const fault = facts.by_fault.length ? <Donut data={facts.by_fault.map((f) => [f.fault, f.count] as [string, number])} colors={PIE_COLORS} center={String(facts.summary.voc_total)} centerSub="VOC" /> : null;
+    const fault = facts.by_fault.length ? <Donut data={facts.by_fault.map((f) => [f.fault, f.count] as [string, number])} colors={PIE_COLORS} center={String(facts.summary.voc_total)} centerSub={term.short} /> : null;
     return { trend, category_trend: catTrend, species, channel, fault } as Record<string, React.ReactNode>;
-  }, [facts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facts, audience]);
 
   const ChartCard = ({ k }: { k: string }) => charts?.[k] ? (
     <div data-chart={k} style={{ marginTop: 12, padding: "10px 12px", border: "1px solid var(--sm-border)", borderRadius: 8 }}>
@@ -309,12 +321,12 @@ export default function VocManufacturerPage() {
 
   // KPI 띠 — 숫자는 facts 그대로, 증감은 전월 대비
   const kpi = facts ? [
-    { label: "VOC율 (판매 1,000개당)", value: facts.summary.rate_qty == null ? "-" : `${rate(facts.summary.rate_qty)}건`, hint: facts.summary.prev.rate_qty != null && facts.summary.rate_qty != null ? `전월 ${rate(facts.summary.prev.rate_qty)}건` : facts.summary.sold_qty == null ? "매출 원장 없음" : `판매 ${qty(facts.summary.sold_qty)}개` },
-    { label: "VOC 건수", value: `${facts.summary.voc_total}건`, hint: `전월 ${facts.summary.prev.voc_total}건${pct(facts.summary.voc_total, facts.summary.prev.voc_total) != null ? ` (${(pct(facts.summary.voc_total, facts.summary.prev.voc_total) as number) >= 0 ? "+" : ""}${pct(facts.summary.voc_total, facts.summary.prev.voc_total)}%)` : ""}${facts.summary.yoy ? ` · 작년 ${facts.summary.yoy.voc_total}건` : ""}` },
+    { label: `${term.rate} (판매 1,000개당)`, value: facts.summary.rate_qty == null ? "-" : `${rate(facts.summary.rate_qty)}건`, hint: facts.summary.prev.rate_qty != null && facts.summary.rate_qty != null ? `전월 ${rate(facts.summary.prev.rate_qty)}건` : facts.summary.sold_qty == null ? "매출 원장 없음" : `판매 ${qty(facts.summary.sold_qty)}개` },
+    { label: `${term.voc} 건수`, value: `${facts.summary.voc_total}건`, hint: `전월 ${facts.summary.prev.voc_total}건${pct(facts.summary.voc_total, facts.summary.prev.voc_total) != null ? ` (${(pct(facts.summary.voc_total, facts.summary.prev.voc_total) as number) >= 0 ? "+" : ""}${pct(facts.summary.voc_total, facts.summary.prev.voc_total)}%)` : ""}${facts.summary.yoy ? ` · 작년 ${facts.summary.yoy.voc_total}건` : ""}` },
     { label: "제조사 귀책 손해액", value: `${won(facts.summary.loss_total)}원`, hint: `귀책 ${facts.summary.voc_mfg}건 · 전월 ${won(facts.summary.prev.loss_total)}원` },
     audience === "내부"
       ? { label: "스마트스토어 문의", value: facts.inquiries.ok ? `${facts.inquiries.total}건` : "-", hint: facts.inquiries.ok ? `미답변 ${facts.inquiries.unanswered}${facts.inquiries.rate_parcel != null ? ` · 택배 1,000건당 ${rate(facts.inquiries.rate_parcel)}` : ""}${facts.inquiries.avg_answer_h != null ? ` · 답변 평균 ${facts.inquiries.avg_answer_h}시간` : ""}` : facts.inquiries.note || "" }
-      : { label: "VOC율 최고 어종", value: facts.by_species[0] ? facts.by_species[0].name : "-", hint: facts.by_species[0] ? `${facts.by_species[0].rate != null ? `판매 1,000개당 ${rate(facts.by_species[0].rate)}건 · ` : ""}VOC ${facts.by_species[0].voc}건${facts.by_species[0].top_category ? ` · ${facts.by_species[0].top_category}` : ""}` : "이번 달 VOC 없음" },
+      : { label: `${term.rate} 최고 어종`, value: facts.by_species[0] ? facts.by_species[0].name : "-", hint: facts.by_species[0] ? `${facts.by_species[0].rate != null ? `판매 1,000개당 ${rate(facts.by_species[0].rate)}건 · ` : ""}${term.short} ${facts.by_species[0].voc}건${facts.by_species[0].top_category ? ` · ${facts.by_species[0].top_category}` : ""}` : `이번 달 ${term.voc} 없음` },
   ] : [];
 
   return (

@@ -23,6 +23,13 @@ const NAVER = "스마트스토어";  // channel_inquiries.channel — report-voi
 //  글은 나열이 아니라 종합 리포트처럼 해석 문장으로(사실 → 원인 확인됨/추정 → 제조사가 볼 점), 어종은 VOC 가 있는 것만.
 function buildSystem(y: string, m: string, audience: VocAudience): string {
   const mfg = audience === "제조사";
+  const text = buildSystemText(y, m, mfg);
+  // 제조사용 용어(2026-11-02 대표): 'VOC' 를 쓰지 않는다 — 고객 불만 / 고객 불만 접수율. 프롬프트 본문의 대문자 VOC 만 바꾼다(facts 필드명은 소문자라 무관).
+  return mfg
+    ? text.replace(/VOC율/g, "고객 불만 접수율").replace(/VOC/g, "고객 불만") + "\n- 용어: 'VOC'라는 말은 쓰지 않습니다. '고객 불만', 비율은 '고객 불만 접수율'로 씁니다. 헤딩도 '2. 판매 대비 고객 불만 분석'입니다."
+    : text;
+}
+function buildSystemText(y: string, m: string, mfg: boolean): string {
   const intro = mfg
     ? `당신은 씨몬스터(냉동 수산물 가공·판매)에서 매월 제조사(파도소리)에 제출하는 '고객 반응' 리포트를 작성합니다. 제조사가 그대로 읽을 완성본입니다(초안 아님).
 이 리포트는 제조·품질·포장에 관한 이야기만 다룹니다. facts 와 claims 는 이미 품질·가시·이물·포장 유형으로만 집계돼 있습니다. 배송 지연·누락·오배송·결제·쿠폰·주문 처리·채널 운영 같은 씨몬스터 쪽 일은 쓰지 않습니다(문의·설문에 섞여 있어도 뺍니다).`

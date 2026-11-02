@@ -349,8 +349,8 @@ export async function buildVocMonthlyFacts(sb: SupabaseClient, month: string, op
     surveys = (data || []).filter((r: { submitted_at?: string | null; created_at?: string | null }) => String(r.submitted_at || r.created_at || "").slice(0, 7) === month).length;
   } catch { /* 설문 표 없음 */ }
 
-  if (unmatchedProducts.size) notes.push(`구매상품이 상품마스터와 맞지 않아 어종 집계에서 뺀 VOC ${[...unmatchedProducts.values()].reduce((a, b) => a + b, 0)}건`);
-  if (unmatchedPlaces.size) notes.push(`구매처를 매출 채널로 맞추지 못해 채널 집계에서 뺀 VOC ${[...unmatchedPlaces.values()].reduce((a, b) => a + b, 0)}건`);
+  if (unmatchedProducts.size) notes.push(`구매상품이 상품마스터와 맞지 않아 어종 집계에서 뺀 접수 ${[...unmatchedProducts.values()].reduce((a, b) => a + b, 0)}건`);
+  if (unmatchedPlaces.size) notes.push(`구매처를 매출 채널로 맞추지 못해 채널 집계에서 뺀 접수 ${[...unmatchedPlaces.values()].reduce((a, b) => a + b, 0)}건`);
 
   return {
     month, generated_at: new Date().toISOString(), sales_as_of: salesAsOf, notes,
