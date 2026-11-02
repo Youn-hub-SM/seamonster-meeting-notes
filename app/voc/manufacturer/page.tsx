@@ -370,7 +370,7 @@ export default function VocManufacturerPage() {
                   const t = line.trim();
                   if (!t) return <div key={i} style={{ height: 8 }} />;
                   if (/^\d+\.\s/.test(t)) return <div key={i} style={{ fontSize: 16, fontWeight: 800, marginTop: si === 0 && i === 0 ? 0 : 18, marginBottom: 4, borderBottom: "1px solid var(--sm-border)", paddingBottom: 4 }}>{t}</div>;
-                  if (/^[가-힣]\.\s/.test(t)) return <div key={i} style={{ fontSize: 14, fontWeight: 700, marginTop: 10, marginBottom: 2 }}>{t}</div>;
+                  if (/^[가-힣]\.\s/.test(t) || t === "한 줄 요약") return <div key={i} style={{ fontSize: 14, fontWeight: 700, marginTop: 10, marginBottom: 2 }}>{t}</div>;
                   const m = t.match(/^-\s*([^:：]{1,24})\s*[:：]\s*(.*)$/);
                   if (m) return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>- <strong>{m[1].trim()}</strong> : {m[2]}</div>;
                   return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>{line.trimEnd()}</div>;

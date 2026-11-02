@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       }
       if (/^\d+\.\s/.test(trimmed)) {
         paras.push(new Paragraph({ spacing: { before: 280, after: 90 }, children: [new TextRun({ text: trimmed, bold: true, size: 30 })] }));
-      } else if (/^[가-힣]\.\s/.test(trimmed)) {
+      } else if (/^[가-힣]\.\s/.test(trimmed) || trimmed === "한 줄 요약") {
         paras.push(new Paragraph({ spacing: { before: 140, after: 50 }, children: [new TextRun({ text: trimmed, bold: true, size: 26 })] }));
       } else if (/^-\s/.test(trimmed)) {
         const sub = /^\s{2,}/.test(line);

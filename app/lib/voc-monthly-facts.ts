@@ -20,9 +20,10 @@ export const TREND_MONTHS = 6;                   // 대표 결정 3
 const B2B_SHIP_BY = "B2B 자동출고";              // app/lib/b2b-shipments.ts B2B_SHIP_BY 와 같은 값(순환 import 피함)
 const NAVER = "스마트스토어";                    // channel_inquiries.channel
 
-// SKU 어종 코드 → 이름(대표 확인 2026-11-02). 표에 없는 코드는 코드 그대로 보인다.
+// SKU 어종 코드 → 이름 — 셰어포인트 '상품 등록 › 상품코드(sku code) 생성 규칙' 2절 그대로(2026-11-02 대표: DAL 달고기 등 누락 보완).
+//  표에 없는 코드(부자재 STEAMER 등)는 어종 집계에서 뺀다 — VOC 가 그 코드에 걸리면 코드 글자 그대로 보인다.
 export const FISH_NAMES: Record<string, string> = {
-  DSC: "삼치", CD: "참돔", GA: "광어", AG: "아귀", NA: "농어", DG: "대구", YA: "연어", SH: "새우", T: "틸라피아",
+  AG: "아귀", CD: "참돔", DG: "대구", DSC: "삼치", GA: "광어", NA: "농어", YA: "연어", T: "틸라피아", SQ: "오징어", SH: "새우", DAL: "달고기",
 };
 // VOC 구매처 표기 → 매출 채널명(sales_orders.channel). 키는 공백 제거·소문자.
 const CHANNEL_ALIAS: Record<string, string> = {
@@ -78,7 +79,7 @@ export function fishCodesOf(sku: string | null | undefined): string[] {
   const out: string[] = [];
   for (const tok of s.split(".")) {
     const m = tok.match(/^[A-Z]+/);
-    if (m && !out.includes(m[0])) out.push(m[0]);
+    if (m && FISH_NAMES[m[0]] && !out.includes(m[0])) out.push(m[0]); // 어종 코드표에 있는 것만(부자재 STEAMER 등 제외)
   }
   return out;
 }
@@ -277,19 +278,19 @@ export async function buildVocMonthlyFacts(sb: SupabaseClient, month: string): P
     .map((fault) => ({ fault, count: curRows.filter((r) => ((r.fault || "미분류").trim() || "미분류") === fault).length, loss: curRows.filter((r) => ((r.fault || "미분류").trim() || "미분류") === fault).reduce((s, r) => s + r.loss, 0) }))
     .sort((a, b) => b.count - a.count);
 
-  // 어종별 — 이번 달 VOC 가 있거나 판매가 있는 어종 전부(율 내림차순, 율 없으면 뒤)
+  // 어종별 — 이번 달 VOC 가 있는 어종만(대표 2026-11-02: 모든 어종을 늘어놓지 않는다). 분모(판매 수량)는 그 어종의 매출로.
   const topCat = (rows: Tagged[]): { top: string | null; cats: [string, number][] } => {
     const m = new Map<string, number>(); for (const r of rows) m.set(catOf(r), (m.get(catOf(r)) || 0) + 1);
     const cats = [...m.entries()].sort((a, b) => b[1] - a[1]); return { top: cats[0]?.[0] ?? null, cats };
   };
-  const speciesCodes = new Set<string>([...curRows.flatMap((r) => r.fishes), ...(hasSales(month) ? [...(soldByMonthFish.get(month) || new Map()).keys()] : [])]);
+  const speciesCodes = new Set<string>(curRows.flatMap((r) => r.fishes));
   const by_species: FactsSpecies[] = [...speciesCodes].map((code) => {
     const rows = curRows.filter((r) => r.fishes.includes(code)), prow = prevRows.filter((r) => r.fishes.includes(code));
     const sold = hasSales(month) ? soldByMonthFish.get(month)?.get(code) || 0 : null;
     const psold = hasSales(prevYm) ? soldByMonthFish.get(prevYm)?.get(code) || 0 : null;
     const tc = topCat(rows);
     return { code, name: fishName(code), voc: rows.length, mfg: rows.filter((r) => r.mfg).length, loss: rows.reduce((s, r) => s + r.loss, 0), sold_qty: sold, rate: per1k(rows.length, sold), prev_rate: per1k(prow.length, psold), top_category: tc.top, categories: tc.cats };
-  }).filter((s) => s.voc || (s.sold_qty || 0) > 0)
+  }).filter((s) => s.voc > 0)
     .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.voc - a.voc || (b.sold_qty ?? 0) - (a.sold_qty ?? 0));
 
   // 채널별(소매 채널 + 도매는 따로)
