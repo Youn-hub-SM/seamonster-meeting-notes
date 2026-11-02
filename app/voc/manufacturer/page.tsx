@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildManufacturerReport } from "@/app/lib/voc-manufacturer";
 import type { Voc } from "@/app/lib/voc";
-import type { VocMonthlyFacts } from "@/app/lib/voc-monthly-facts";
+import type { VocMonthlyFacts, VocAudience } from "@/app/lib/voc-monthly-facts";
 import { won, qty, dateTime } from "@/app/lib/format";
 import { ComboBarLine, StackedBar, BarList, Donut, PIE_COLORS } from "@/app/components/charts";
 
@@ -20,12 +20,15 @@ const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 1
 type Counts = { claims: number; surveys: number; inquiries?: number | null }; // inquiries = 스마트스토어 문의(137), null = 137 미적용
 type SavedReport = { recipient: string; draft: string; counts: Counts | null; facts?: VocMonthlyFacts | null; generated_at?: string | null; updated_at: string };
 
+// 용도(2026-11-02 대표): 제조사용(품질·가시·이물·포장만, 제조사 제출) / 내부용(전체 종합). 저장은 (월, 수신처) 단위라 내부용은 수신처를 고정 이름으로.
+const INTERNAL_RECIPIENT = "내부용";
 // 섹션 뒤에 끼우는 차트·표 — 화면은 React 로 그리고, Word 는 같은 자리에 "[[chart:키]]"/"[[table:키]]" 줄을 넣어 보낸다(docx 라우트가 치환).
-//  키 번호 = 섹션 번호("1." 뒤 → trend …). 리포트 헤딩이 바뀌어도(옛 저장본) 번호가 없으면 끼우지 않는다.
-const SECTION_EXTRAS: Record<number, { charts: string[]; tables: string[] }> = {
-  1: { charts: ["trend"], tables: [] },
-  2: { charts: ["species", "channel", "category_trend"], tables: ["species", "channel", "category_trend"] },
+//  키 번호 = 섹션 번호("1." 뒤 → trend …). 리포트 헤딩이 바뀌어도(옛 저장본) 번호가 없으면 끼우지 않는다. 채널별은 내부용에만.
+const SECTION_EXTRAS: Record<VocAudience, Record<number, { charts: string[]; tables: string[] }>> = {
+  제조사: { 1: { charts: ["trend"], tables: [] }, 2: { charts: ["species", "category_trend"], tables: ["species", "category_trend"] } },
+  내부: { 1: { charts: ["trend"], tables: [] }, 2: { charts: ["species", "channel", "category_trend"], tables: ["species", "channel", "category_trend"] } },
 };
+const TITLE_OF = (a: VocAudience, y: string, m: string) => (a === "제조사" ? `${y}년 ${Number(m)}월 고객 반응` : `${y}년 ${Number(m)}월 VOC 분석 (내부용)`);
 const CHART_TITLE: Record<string, string> = {
   trend: "최근 6개월 VOC 건수와 판매 1,000개당 VOC율",
   species: "어종별 VOC율(판매 1,000개당)",
@@ -58,7 +61,9 @@ async function svgToPng(svg: SVGSVGElement, scale = 2): Promise<{ png: string; w
 
 export default function VocManufacturerPage() {
   const [month, setMonth] = useState(THIS_MONTH());
+  const [audience, setAudience] = useState<VocAudience>("제조사");
   const [recipient, setRecipient] = useState("");
+  const effRecipient = audience === "내부" ? INTERNAL_RECIPIENT : recipient; // 저장 키
   const [draft, setDraft] = useState("");
   const [counts, setCounts] = useState<Counts | null>(null);
   const [facts, setFacts] = useState<VocMonthlyFacts | null>(null);
@@ -100,20 +105,32 @@ export default function VocManufacturerPage() {
         setNeedsMigration(!!j.needsMigration);
         setFactsCol(j.factsCol !== false);
         const list = (j.reports || []) as SavedReport[];
-        // 현재 수신처와 일치하는 저장본 우선, 없으면 가장 최근 저장본
-        const pick = list.find((r) => r.recipient === recipient) || list[0];
+        // 용도별로 고른다 — 내부용은 고정 수신처, 제조사용은 현재 수신처와 일치하는 저장본 우선(없으면 가장 최근 제조사용 저장본)
+        const pick = audience === "내부"
+          ? list.find((r) => r.recipient === INTERNAL_RECIPIENT)
+          : list.find((r) => r.recipient === recipient && r.recipient !== INTERNAL_RECIPIENT) || list.find((r) => r.recipient !== INTERNAL_RECIPIENT);
         applySaved(pick);
-        if (pick?.recipient && !recipient) setRecipient(pick.recipient);
+        if (audience === "제조사" && pick?.recipient && !recipient) setRecipient(pick.recipient);
       } catch { /* 저장 기능 없이도 생성은 가능 */ }
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
+  // 용도를 바꾸면 그 용도의 저장본으로 전환(없으면 빈 화면 — 생성 전). 편집 중이던 본문은 이미 자동 저장됨.
+  function onAudienceChange(a: VocAudience) {
+    setAudience(a); setError("");
+    const pick = a === "내부"
+      ? savedReports.find((r) => r.recipient === INTERNAL_RECIPIENT)
+      : savedReports.find((r) => r.recipient === recipient && r.recipient !== INTERNAL_RECIPIENT) || savedReports.find((r) => r.recipient !== INTERNAL_RECIPIENT);
+    applySaved(pick);
+    if (a === "제조사" && pick?.recipient && !recipient) setRecipient(pick.recipient);
+  }
+
   // 수신처를 바꿨을 때 그 수신처의 저장본이 있으면 전환해서 보여준다(편집 중이던 다른 수신처 본문은 이미 자동 저장됨).
   function onRecipientChange(v: string) {
     setRecipient(v);
-    const pick = savedReports.find((r) => r.recipient === v);
+    const pick = savedReports.find((r) => r.recipient === v && r.recipient !== INTERNAL_RECIPIENT);
     if (pick) applySaved(pick);
     else if (loadedKey.current) loadedKey.current = `${month}|${v}`; // 수신처만 바뀐 새 문서 취급 — 기존 본문 유지(같은 달 다른 제조사로 보낼 때 복제해 편집하는 흐름)
   }
@@ -134,7 +151,7 @@ export default function VocManufacturerPage() {
         const old = prev.find((r) => r.recipient === rcpt);
         return [{ recipient: rcpt, draft: text, counts: cts, facts: fx ?? old?.facts ?? null, updated_at: new Date().toISOString() }, ...rest];
       });
-      if (rcpt && !recipients.includes(rcpt)) setRecipients((p) => [...p, rcpt].sort((a, b) => a.localeCompare(b, "ko")));
+      if (rcpt && rcpt !== INTERNAL_RECIPIENT && !recipients.includes(rcpt)) setRecipients((p) => [...p, rcpt].sort((a, b) => a.localeCompare(b, "ko")));
     } catch (e) { setSaveNote(`자동 저장하지 못했습니다 — ${e instanceof Error ? e.message : ""}. [다시 생성]을 누르면 다시 저장합니다`); }
   }
 
@@ -143,13 +160,13 @@ export default function VocManufacturerPage() {
     setDraft(text);
     if (!loadedKey.current || needsMigration) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { if (text.trim()) persist(text, recipient, counts); }, 1500);
+    saveTimer.current = setTimeout(() => { if (text.trim()) persist(text, effRecipient, counts); }, 1500);
   }
 
   async function generate() {
     setLoading(true); setError(""); setCopied(false);
     try {
-      const res = await fetch("/api/voc/manufacturer/digest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ month }) });
+      const res = await fetch("/api/voc/manufacturer/digest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ month, audience }) });
       // 함수가 시간 초과 등으로 끊기면 Vercel 이 JSON 아닌 텍스트("An error occurred...")를 내려보낸다
       //  → 무조건 res.json() 하면 "Unexpected token 'A'..." 파싱 오류만 보였다. 텍스트로 받고 직접 판별.
       const raw = await res.text();
@@ -161,8 +178,8 @@ export default function VocManufacturerPage() {
       setDraft(text);
       setCounts(j.counts || null);
       setFacts(j.facts || null);
-      loadedKey.current = `${month}|${recipient}`;
-      if (!needsMigration && text.trim()) persist(text, recipient, j.counts || null, j.facts || null); // 생성 즉시 자동 저장(facts 포함)
+      loadedKey.current = `${month}|${effRecipient}`;
+      if (!needsMigration && text.trim()) persist(text, effRecipient, j.counts || null, j.facts || null); // 생성 즉시 자동 저장(facts 포함)
     } catch (e) { setError(e instanceof Error ? e.message : "리포트를 생성하지 못했습니다. [리포트 생성]을 다시 누르세요"); }
     setLoading(false);
   }
@@ -176,8 +193,9 @@ export default function VocManufacturerPage() {
   const mfg = useMemo(() => buildManufacturerReport(claims, month), [claims, month]);
   const showClaim = !!draft;
 
-  // 리포트를 섹션으로 나눈다 — 헤딩("N. ") 줄 기준. 제목 줄은 뺀다. 손해 청구 번호 = 마지막 섹션 번호 + 1.
-  const body = useMemo(() => draft.replace(/^\s*\d{4}년\s*\d{1,2}월\s*고객\s*반응\s*\n?/, ""), [draft]);
+  // 리포트를 섹션으로 나눈다 — 헤딩("N. ") 줄 기준. 제목 줄("YYYY년 M월 …")은 뺀다. 손해 청구 번호 = 마지막 섹션 번호 + 1.
+  const body = useMemo(() => draft.replace(/^\s*\d{4}년\s*\d{1,2}월[^\n]*\n?/, ""), [draft]);
+  const extras = SECTION_EXTRAS[audience];
   const sections = useMemo(() => {
     const out: { no: number | null; lines: string[] }[] = [];
     let cur: { no: number | null; lines: string[] } = { no: null, lines: [] };
@@ -194,13 +212,13 @@ export default function VocManufacturerPage() {
   // Word 용 텍스트 섹션 — 리포트와 같은 구조("숫자. / 가. / - 불릿")라 docx 변환기가 그대로 서식화한다. 표는 [[table:claims]] 로.
   const claimText = useMemo(() => {
     if (!showClaim) return "";
-    const L: string[] = ["", `${claimNo}. 손해 청구 (제조사 귀책)`];
+    const L: string[] = ["", `${claimNo}. ${audience === "제조사" ? "손해 청구 (제조사 귀책)" : "손해 현황 (제조사 귀책 청구분)"}`];
     if (!mfg.summary.count) { L.push("- 해당 없음"); return L.join("\n"); }
     L.push(`- 총 ${mfg.summary.count}건 · 청구 손해액 ${won(mfg.summary.claimable)}원 · 대상 제품 ${mfg.summary.productCount}종`);
     if (facts?.by_fault?.length) L.push("[[chart:fault]]");
     L.push("가. 제품별", "[[table:claims_product]]", "나. 접수 상세", "[[table:claims_detail]]");
     return L.join("\n");
-  }, [showClaim, mfg, claimNo, facts]);
+  }, [showClaim, mfg, claimNo, facts, audience]);
 
   // Word 표 — facts·손해 청구에서 만든다(숫자는 화면과 같은 값)
   const wordTables = useMemo(() => {
@@ -212,7 +230,7 @@ export default function VocManufacturerPage() {
       const ch = facts.by_channel;
       const chRows = ch.map((c) => [c.channel, c.parcels == null ? "-" : qty(c.parcels), String(c.voc), rate(c.rate), rate(c.prev_rate), c.top_category || "-"]);
       if (facts.wholesale) chRows.push(["도매(B2B)", facts.wholesale.shipments == null ? "-" : qty(facts.wholesale.shipments), String(facts.wholesale.voc), facts.wholesale.rate_qty == null ? "-" : `${rate(facts.wholesale.rate_qty)} (수량 1,000개당)`, "-", "-"]);
-      if (chRows.length) T.push({ key: "channel", title: CHART_TITLE.channel, head: ["채널", "배송 건수", "VOC 건수", "VOC율(1,000건당)", "전월 율", "주요 유형"], rows: chRows, numCols: [1, 2, 3, 4] });
+      if (chRows.length && audience === "내부") T.push({ key: "channel", title: CHART_TITLE.channel, head: ["채널", "배송 건수", "VOC 건수", "VOC율(1,000건당)", "전월 율", "주요 유형"], rows: chRows, numCols: [1, 2, 3, 4] });
       T.push({ key: "category_trend", title: CHART_TITLE.category_trend, head: ["월", ...CATS, "합계"],
         rows: facts.by_category_trend.map((m) => [ymLabel(m.ym), ...CATS.map((c) => String(m.counts[c] || 0)), String(Object.values(m.counts).reduce((a, b) => a + b, 0))]), numCols: CATS.map((_, i) => i + 1).concat(CATS.length + 1) });
     }
@@ -221,15 +239,15 @@ export default function VocManufacturerPage() {
       T.push({ key: "claims_detail", head: ["접수일", "제품", "유형", "내용", "손해(원)"], rows: mfg.items.map((r) => [(r.received_at || "").slice(5), r.product || "-", r.category, String(r.content || "").replace(/\s*\n+\s*/g, " "), won(r.loss_amount || 0)]), numCols: [4] });
     }
     return T;
-  }, [facts, mfg]);
+  }, [facts, mfg, audience]);
 
   // Word 본문 — 섹션 뒤에 자리표시 줄을 끼운 텍스트 + 손해 청구
   function composeWordText(): string {
-    const title = draft.match(/^\s*\d{4}년\s*\d{1,2}월\s*고객\s*반응/)?.[0]?.trim() || `${y}년 ${Number(mm)}월 고객 반응`;
+    const title = draft.match(/^\s*\d{4}년\s*\d{1,2}월[^\n]*/)?.[0]?.trim() || TITLE_OF(audience, y, mm);
     const parts: string[] = [title, ""];
     for (const s of sections) {
       parts.push(...s.lines);
-      const ex = s.no != null && facts ? SECTION_EXTRAS[s.no] : undefined;
+      const ex = s.no != null && facts ? extras[s.no] : undefined;
       if (ex) {
         for (const k of ex.charts) if (k === "trend" || k === "category_trend") parts.push(`[[chart:${k}]]`); // 그림은 SVG 차트만(막대 목록은 표로)
         for (const k of ex.tables) parts.push(`[[table:${k}]]`);
@@ -248,7 +266,7 @@ export default function VocManufacturerPage() {
         if (!svg || !key) continue;
         try { images.push({ key, ...(await svgToPng(svg as SVGSVGElement)) }); } catch { /* 그 차트만 생략 */ }
       }
-      const body = { month, recipient, draft: composeWordText(), images, tables: wordTables };
+      const body = { month, recipient: audience === "내부" ? "" : recipient, draft: composeWordText(), images, tables: wordTables };
       const res = await fetch("/api/voc/manufacturer/docx", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error((j as { error?: string }).error || "Word 파일을 만들지 못했습니다. 리포트를 다시 생성하세요"); }
       const blob = await res.blob();
@@ -294,7 +312,9 @@ export default function VocManufacturerPage() {
     { label: "VOC율 (판매 1,000개당)", value: facts.summary.rate_qty == null ? "-" : `${rate(facts.summary.rate_qty)}건`, hint: facts.summary.prev.rate_qty != null && facts.summary.rate_qty != null ? `전월 ${rate(facts.summary.prev.rate_qty)}건` : facts.summary.sold_qty == null ? "매출 원장 없음" : `판매 ${qty(facts.summary.sold_qty)}개` },
     { label: "VOC 건수", value: `${facts.summary.voc_total}건`, hint: `전월 ${facts.summary.prev.voc_total}건${pct(facts.summary.voc_total, facts.summary.prev.voc_total) != null ? ` (${(pct(facts.summary.voc_total, facts.summary.prev.voc_total) as number) >= 0 ? "+" : ""}${pct(facts.summary.voc_total, facts.summary.prev.voc_total)}%)` : ""}${facts.summary.yoy ? ` · 작년 ${facts.summary.yoy.voc_total}건` : ""}` },
     { label: "제조사 귀책 손해액", value: `${won(facts.summary.loss_total)}원`, hint: `귀책 ${facts.summary.voc_mfg}건 · 전월 ${won(facts.summary.prev.loss_total)}원` },
-    { label: "스마트스토어 문의", value: facts.inquiries.ok ? `${facts.inquiries.total}건` : "-", hint: facts.inquiries.ok ? `미답변 ${facts.inquiries.unanswered}${facts.inquiries.rate_parcel != null ? ` · 택배 1,000건당 ${rate(facts.inquiries.rate_parcel)}` : ""}${facts.inquiries.avg_answer_h != null ? ` · 답변 평균 ${facts.inquiries.avg_answer_h}시간` : ""}` : facts.inquiries.note || "" },
+    audience === "내부"
+      ? { label: "스마트스토어 문의", value: facts.inquiries.ok ? `${facts.inquiries.total}건` : "-", hint: facts.inquiries.ok ? `미답변 ${facts.inquiries.unanswered}${facts.inquiries.rate_parcel != null ? ` · 택배 1,000건당 ${rate(facts.inquiries.rate_parcel)}` : ""}${facts.inquiries.avg_answer_h != null ? ` · 답변 평균 ${facts.inquiries.avg_answer_h}시간` : ""}` : facts.inquiries.note || "" }
+      : { label: "VOC율 최고 어종", value: facts.by_species[0] ? facts.by_species[0].name : "-", hint: facts.by_species[0] ? `${facts.by_species[0].rate != null ? `판매 1,000개당 ${rate(facts.by_species[0].rate)}건 · ` : ""}VOC ${facts.by_species[0].voc}건${facts.by_species[0].top_category ? ` · ${facts.by_species[0].top_category}` : ""}` : "이번 달 VOC 없음" },
   ] : [];
 
   return (
@@ -317,11 +337,15 @@ export default function VocManufacturerPage() {
 
       <section className="b2b-card no-print" style={{ marginBottom: 16 }}>
         <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          {/* 용도 — 제조사용(품질·가시·이물·포장만, 제조사 제출) / 내부용(전체 종합). 저장본도 용도별로 따로 */}
+          <div className="sm-tabs" role="tablist" aria-label="용도">
+            {(["제조사", "내부"] as VocAudience[]).map((a) => <button key={a} role="tab" aria-selected={audience === a} className={`sm-tab ${audience === a ? "is-active" : ""}`} onClick={() => onAudienceChange(a)}>{a === "제조사" ? "제조사용" : "내부용"}</button>)}
+          </div>
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>대상 월
             <input className="b2b-input" type="month" value={month} max={THIS_MONTH()} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }} /></label>
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>수신(선택)
-            <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="예: 바다식품" style={{ width: 200 }} /></label>
-          <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
+          {audience === "제조사" && <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>수신(선택)
+            <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="예: 바다식품" style={{ width: 200 }} /></label>}
+          <datalist id="voc-mfg-recipients">{recipients.filter((r) => r !== INTERNAL_RECIPIENT).map((r) => <option key={r} value={r} />)}</datalist>
           <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "작성 중..." : draft ? "다시 생성" : "리포트 생성"}</button>
           {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건(설문 소스 제외){counts.inquiries != null ? ` · 스마트스토어 문의 ${counts.inquiries}건` : ""} · 설문 {counts.surveys}건 반영{facts?.sales_as_of ? ` · 매출 반영 ~${facts.sales_as_of}` : ""}</span>}
           {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("자동 저장하지") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
@@ -345,8 +369,8 @@ export default function VocManufacturerPage() {
       {draft ? (
         <section ref={printRef} className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "32px 34px", maxWidth: 860, boxShadow: "var(--sm-shadow-card)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
-            <div><div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {Number(mm)}월 고객 반응</h2></div>
-            <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>작성일 {TODAY()}{recipient && <div>수신 {recipient}</div>}</div>
+            <div><div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{TITLE_OF(audience, y, mm)}</h2></div>
+            <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>작성일 {TODAY()}{audience === "제조사" && recipient && <div>수신 {recipient}</div>}</div>
           </div>
 
           {/* KPI 띠 — facts(코드 집계). 옛 저장본(facts 없음)은 띠 없이 본문만 */}
@@ -375,7 +399,7 @@ export default function VocManufacturerPage() {
                   if (m) return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>- <strong>{m[1].trim()}</strong> : {m[2]}</div>;
                   return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>{line.trimEnd()}</div>;
                 })}
-                {s.no != null && SECTION_EXTRAS[s.no]?.charts.map((k) => <ChartCard key={k} k={k} />)}
+                {s.no != null && extras[s.no]?.charts.map((k) => <ChartCard key={k} k={k} />)}
               </div>
             ))}
           </div>
@@ -383,7 +407,7 @@ export default function VocManufacturerPage() {
           {/* 손해 청구 (제조사 귀책) — 개선요청서와 동일 기준 */}
           {showClaim && (
             <div style={{ marginTop: 26 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>{claimNo}. 손해 청구 (제조사 귀책)</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>{claimNo}. {audience === "제조사" ? "손해 청구 (제조사 귀책)" : "손해 현황 (제조사 귀책 청구분)"}</h3>
               {mfg.summary.count === 0 ? (
                 <p style={{ fontSize: 13, marginTop: 8 }}>- 해당 없음</p>
               ) : (

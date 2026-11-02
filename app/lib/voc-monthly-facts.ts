@@ -149,8 +149,17 @@ const missingFn = (e: unknown, name: string) => {
 };
 const missingCol = (e: unknown, col: string) => new RegExp(`\\b${col}\\b`, "i").test(String((e as { message?: string } | null)?.message || "")) && /column|schema cache|does not exist/i.test(String((e as { message?: string } | null)?.message || ""));
 
-export async function buildVocMonthlyFacts(sb: SupabaseClient, month: string): Promise<VocMonthlyFacts> {
+// 용도(2026-11-02 대표): 제조사용은 제조·품질·포장에 관한 유형만, 내부용은 전체.
+export type VocAudience = "제조사" | "내부";
+export const MFG_CATEGORIES = ["품질", "가시", "이물", "포장"] as const;
+export const audienceOf = (v: unknown): VocAudience => (v === "내부" ? "내부" : "제조사");
+export const categoriesFor = (a: VocAudience): readonly string[] | null => (a === "제조사" ? MFG_CATEGORIES : null); // null = 전체
+
+export async function buildVocMonthlyFacts(sb: SupabaseClient, month: string, opts: { categories?: readonly string[] | null } = {}): Promise<VocMonthlyFacts> {
   const notes: string[] = [];
+  const catFilter = opts.categories && opts.categories.length ? new Set(opts.categories) : null;
+  const inScope = (r: { category: string | null }) => !catFilter || catFilter.has((r.category || "").trim());
+  if (catFilter) notes.push(`집계 범위: ${[...catFilter].join("·")} 유형만(제조·품질·포장 관련). 배송·누락·오배송 등은 내부용 리포트에서 봅니다`);
   const months = Array.from({ length: TREND_MONTHS }, (_, i) => addMonths(month, i - (TREND_MONTHS - 1))); // 오래된 → 이번 달
   const prevYm = addMonths(month, -1);
   const yoyYm = addMonths(month, -12);
@@ -161,13 +170,14 @@ export async function buildVocMonthlyFacts(sb: SupabaseClient, month: string): P
   const VOC_SEL = "id, received_at, product, purchase_place, order_no, category, fault, loss_amount, buyer_type";
   const readVoc = (a: string, b: string, label: string) => fetchAllPages<VocRow>((lo, hi) => sb.from("voc").select(VOC_SEL)
     .neq("source", "설문").gte("received_at", a).lte("received_at", b).order("received_at", { ascending: true }).order("id", { ascending: true }).range(lo, hi), { cap: 20000, label });
-  const [vocAll, vocYoy, products, bundles] = await Promise.all([
+  const [vocAllRaw, vocYoyRaw, products, bundles] = await Promise.all([
     readVoc(from, to, "VOC"),
     readVoc(yoyFrom, yoyTo, "VOC(전년)"),
     fetchAllPages<ProductRow>((lo, hi) => sb.from("products").select("id, sku, name").order("id", { ascending: true }).range(lo, hi), { cap: 20000, label: "상품마스터" }),
     fetchAllPages<BundleRow>((lo, hi) => sb.from("product_bundles").select("parent_id, component_id, qty").order("parent_id", { ascending: true }).order("component_id", { ascending: true }).range(lo, hi), { cap: 20000, label: "묶음" })
       .catch(() => [] as BundleRow[]), // 037 미적용이면 세트 전개 없이
   ]);
+  const vocAll = vocAllRaw.filter(inScope), vocYoy = vocYoyRaw.filter(inScope);
   const fish = makeFishResolver(products, bundles);
 
   // 2) 매출 분모(159 함수) — 없으면 율 없이
