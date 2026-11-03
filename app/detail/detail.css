@@ -1,18 +1,46 @@
 /* 상세페이지 전송(/detail) 전용 — 접두사 .dp-* (공용 .b2b-* 신설 금지) */
 
-.dp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 1100px) { .dp-grid { grid-template-columns: minmax(0, 1fr); } }
+/* KPI 3타일 — 다른 화면의 .b2b-dash-grid 와 같은 틀, 여백만 카드 간격에 맞춤 */
+.dp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sm-space-3); margin-bottom: var(--sm-space-5); }
 
-.dp-src-list { display: flex; flex-wrap: wrap; gap: 8px; }
+/* ① 소스: 왼쪽 목록 + 오른쪽 편집 */
+.dp-src-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--sm-space-4); align-items: start; padding-top: var(--sm-space-4); }
+@media (max-width: 1000px) { .dp-src-grid { grid-template-columns: minmax(0, 1fr); } }
 
-.dp-code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--sm-fs-xs); line-height: 1.5; min-height: 320px; resize: vertical; white-space: pre; overflow: auto; tab-size: 2; }
-.dp-nos { min-height: 96px; resize: vertical; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--sm-fs-base); }
+.dp-src-list { display: flex; flex-direction: column; gap: var(--sm-space-2); }
+.dp-src-item {
+  display: block; width: 100%; text-align: left;
+  background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius);
+  padding: 12px 14px; cursor: pointer; font: inherit; color: var(--sm-black);
+}
+.dp-src-item:hover:not(.is-active) { background: var(--sm-bg-subtle); }
+.dp-src-item.is-active { background: var(--sm-orange-light); border-color: var(--sm-orange-border); }
+.dp-src-item.is-new { border-style: dashed; color: var(--sm-text-mid); font-weight: 600; }
+.dp-src-name { display: block; font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-src-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
+.dp-src-meta .num { font-variant-numeric: tabular-nums; }
 
-.dp-preview-wrap { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-bg-subtle); padding: 12px; overflow: auto; }
-.dp-preview { display: block; margin: 0 auto; background: var(--sm-bg); border: 1px solid var(--sm-border); height: 720px; width: 100%; max-width: 860px; }
+/* 편집 폼 */
+.dp-editor .b2b-field { margin-bottom: var(--sm-space-4); }
+.dp-code { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); line-height: 1.55; min-height: 360px; resize: vertical; white-space: pre; overflow: auto; tab-size: 2; }
+.dp-code.is-readonly { min-height: 160px; background: var(--sm-bg-subtle); }
+.dp-nos { min-height: 88px; resize: vertical; font-family: var(--sm-mono); font-size: var(--sm-fs-base); }
+.dp-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
+
+/* ② 미리보기 */
+.dp-preview-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
+.dp-preview-wrap { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-bg-subtle); padding: var(--sm-space-4); overflow: auto; }
+.dp-preview { display: block; margin: 0 auto; background: var(--sm-white); border: 1px solid var(--sm-border); height: 640px; width: 100%; max-width: 860px; }
 .dp-preview.is-mobile { max-width: 390px; }
+.dp-preview-raw { margin-top: var(--sm-space-3); }
+.dp-preview-raw summary { cursor: pointer; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 
-.dp-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-.dp-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
-.dp-filters .b2b-field { margin: 0; min-width: 160px; }
+/* ③ 상품 */
+.dp-send-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sm-space-4); align-items: start; padding-top: var(--sm-space-4); }
+@media (max-width: 1000px) { .dp-send-grid { grid-template-columns: minmax(0, 1fr); } }
+.dp-send-foot { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-top: var(--sm-space-4); }
+
+/* 적용 현황 */
+.dp-filter-select { width: 220px; max-width: 100%; }
 .dp-err-cell { max-width: 320px; white-space: normal; color: var(--sm-danger); font-size: var(--sm-fs-xs); }
+.dp-section { margin-bottom: var(--sm-space-6); }
