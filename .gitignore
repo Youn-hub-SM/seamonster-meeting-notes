@@ -59,6 +59,7 @@ next-env.d.ts
 !/scripts/cafe24-catalog-sync.mjs
 !/scripts/cafe24-auth.mjs
 !/scripts/channel-commands-runner.mjs
+!/scripts/detail-apply-runner.mjs
 !/scripts/claims-poll.mjs
 !/scripts/cafe24-subscription-sync.mjs
 !/scripts/backup-supabase.mjs

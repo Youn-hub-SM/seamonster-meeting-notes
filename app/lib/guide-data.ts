@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-11-02";
+export const GUIDE_UPDATED = "2026-11-03";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1634,6 +1634,39 @@ export const GUIDE: GuideCategory[] = [
   {
     "category": "마케팅",
     "tools": [
+      {
+        "tool": "상세페이지 전송",
+        "entries": [
+          {
+            "href": "/detail",
+            "label": "상세페이지 전송",
+            "what": "공식몰 상품 상세설명에 넣을 HTML 소스를 저장하고 상품번호로 전송",
+            "steps": [
+              "'+ 새 소스'를 누르거나 기존 소스를 고른다",
+              "소스 이름·넣는 자리(전체 교체/기존 맨 앞/기존 맨 뒤)·HTML 을 입력한다",
+              "'저장'을 누른다 (HTML 이 바뀌면 버전이 올라간다)",
+              "'변환해 보기'로 PC·모바일 미리보기를 확인한다",
+              "적용할 상품번호를 쉼표나 줄바꿈으로 입력하고 상품명을 확인한다",
+              "'쏘기'를 누른다 (관리자) — 대기열에 들어가고 중계 실행기가 공식몰에 반영한다",
+              "적용 현황에서 소스·상품번호로 걸러 상태와 마커 확인 결과를 본다"
+            ],
+            "tips": [
+              "같은 소스를 다시 쏘면 상세설명 안의 그 소스 자리만 바뀐다 — 중복으로 쌓이지 않는다",
+              "'(구버전)' 표시는 소스를 고친 뒤 아직 다시 쏘지 않은 상품이다"
+            ],
+            "keywords": [
+              "상세페이지",
+              "상세설명",
+              "공식몰 상세",
+              "카페24 상세",
+              "HTML 전송",
+              "GEO",
+              "SEO",
+              "소스 적용 상품"
+            ]
+          }
+        ]
+      },
       {
         "tool": "UTM 만들기",
         "entries": [

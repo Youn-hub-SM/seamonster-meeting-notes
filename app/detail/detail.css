@@ -1,0 +1,18 @@
+/* 상세페이지 전송(/detail) 전용 — 접두사 .dp-* (공용 .b2b-* 신설 금지) */
+
+.dp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .dp-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.dp-src-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.dp-code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--sm-fs-xs); line-height: 1.5; min-height: 320px; resize: vertical; white-space: pre; overflow: auto; tab-size: 2; }
+.dp-nos { min-height: 96px; resize: vertical; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--sm-fs-base); }
+
+.dp-preview-wrap { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-bg-subtle); padding: 12px; overflow: auto; }
+.dp-preview { display: block; margin: 0 auto; background: var(--sm-bg); border: 1px solid var(--sm-border); height: 720px; width: 100%; max-width: 860px; }
+.dp-preview.is-mobile { max-width: 390px; }
+
+.dp-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.dp-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.dp-filters .b2b-field { margin: 0; min-width: 160px; }
+.dp-err-cell { max-width: 320px; white-space: normal; color: var(--sm-danger); font-size: var(--sm-fs-xs); }
