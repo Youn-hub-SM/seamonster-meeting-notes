@@ -1,5 +1,16 @@
 /* 상세페이지 전송(/detail) 전용 — 접두사 .dp-* (공용 .b2b-* 신설 금지) */
 
+/* 사용 규칙(참고) — 접힌 상태가 기본, 경계 카드 */
+.dp-rules { background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); padding: 0 var(--sm-space-4); margin-bottom: var(--sm-space-5); }
+.dp-rules > summary { cursor: pointer; padding: 12px 0; font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black); list-style: none; display: flex; align-items: center; gap: var(--sm-space-2); }
+.dp-rules > summary::-webkit-details-marker { display: none; }
+.dp-rules > summary::before { content: "▸"; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.dp-rules[open] > summary::before { content: "▾"; }
+.dp-rules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--sm-space-4) var(--sm-space-5); padding: var(--sm-space-2) 0 var(--sm-space-4); border-top: 1px solid var(--sm-border); }
+.dp-rules-title { font-size: var(--sm-fs-xs); font-weight: 600; color: var(--sm-text-mid); letter-spacing: var(--sm-ls-label); margin: var(--sm-space-2) 0 var(--sm-space-1); }
+.dp-rules-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.dp-rules-list li { font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-black); }
+
 /* KPI 3타일 — 다른 화면의 .b2b-dash-grid 와 같은 틀, 여백만 카드 간격에 맞춤 */
 .dp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sm-space-3); margin-bottom: var(--sm-space-5); }
 

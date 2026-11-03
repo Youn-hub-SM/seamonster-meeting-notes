@@ -184,6 +184,52 @@ export default function DetailSendPage() {
 
       {err && <div className="b2b-error">{err}</div>}
 
+      <details className="dp-rules">
+        <summary>사용 규칙</summary>
+        <div className="dp-rules-grid">
+          <div>
+            <div className="dp-rules-title">넣는 자리</div>
+            <ul className="dp-rules-list">
+              <li>공통 블록은 기존 맨 앞 또는 기존 맨 뒤로만 쏜다.</li>
+              <li>전체 교체는 그 상품의 기존 상세설명을 전부 지운다. 상품 상세를 통째로 새로 쓸 때만 쓴다.</li>
+              <li>넣는 자리는 그 상품에 처음 들어갈 때만 쓰인다. 이미 들어간 소스는 원래 자리에서 바뀐다.</li>
+            </ul>
+          </div>
+          <div>
+            <div className="dp-rules-title">다시 쏘기</div>
+            <ul className="dp-rules-list">
+              <li>같은 소스를 다시 쏘면 상세설명 안의 그 소스 블록만 바뀐다. 다른 소스와 상품 고유 영역은 그대로다.</li>
+              <li>소스를 고치면 적용 현황에 구버전이 표시된다. 그 상품번호로 다시 쏜다.</li>
+              <li>블록 순서는 바뀌지 않는다. 순서를 바꾸려면 전체 교체로 다시 구성한다.</li>
+            </ul>
+          </div>
+          <div>
+            <div className="dp-rules-title">카페24 편집기</div>
+            <ul className="dp-rules-list">
+              <li>전송한 상품을 편집기에서 열어 저장해도 소스 블록은 유지된다(2026-11-03 실측).</li>
+              <li>소스 블록 안쪽은 편집기에서 고치지 않는다. 다음 전송 때 덮어쓴다.</li>
+              <li>블록 바깥의 상품 고유 영역은 편집기에서 고쳐도 전송이 건드리지 않는다.</li>
+            </ul>
+          </div>
+          <div>
+            <div className="dp-rules-title">소스 HTML</div>
+            <ul className="dp-rules-list">
+              <li>텍스트로 쓴다. h2·h3 제목에 상품명이나 그룹명을 넣고, 보관·조리·대상 같은 사실은 한 문장씩 쓴다.</li>
+              <li>인라인 style과 script는 넣지 않는다. 꾸밈은 스킨 CSS 클래스로 한다.</li>
+              <li>이미지에는 alt를 쓴다. 핵심 텍스트를 숨김 영역에 두지 않는다.</li>
+            </ul>
+          </div>
+          <div>
+            <div className="dp-rules-title">반영</div>
+            <ul className="dp-rules-list">
+              <li>쏘기 뒤 2분 안에 공식몰에 반영된다. 적용 현황의 상태와 마커 확인으로 본다.</li>
+              <li>모바일 상세설명을 따로 쓰는 상품은 거기에도 같이 들어간다.</li>
+              <li>실패한 건은 오류 칸을 보고 고친 뒤 같은 상품번호로 다시 쏜다.</li>
+            </ul>
+          </div>
+        </div>
+      </details>
+
       <div className="dp-kpis">
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">소스</div>
