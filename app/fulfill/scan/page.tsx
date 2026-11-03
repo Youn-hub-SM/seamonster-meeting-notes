@@ -136,12 +136,17 @@ export default function ScanPage() {
     } catch { /* 소리 장치 없음 — 화면 메시지로 충분 */ }
   }
 
+  const verRef = useRef(""); // 서버가 준 풀 상태 버전 — 폴링 때 보내 '변화 없음'이면 집계를 건너뛴다
   const loadState = useCallback(async (silent = false) => {
     if (!silent) setError("");
     const seq0 = seqRef.current;
     try {
-      const j = await (await fetch("/api/fulfill/scan/state", { cache: "no-store" })).json();
+      // 폴링(silent)은 들고 있는 버전을 보내 서버가 변화 없으면 집계를 건너뛰게 한다(2026-11-03 CPU 감축). 첫 로드·명시 새로고침은 전량.
+      const v = silent && verRef.current ? `?v=${encodeURIComponent(verRef.current)}` : "";
+      const j = await (await fetch(`/api/fulfill/scan/state${v}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "스캔 현황을 불러오지 못했습니다. 새로고침하세요.");
+      if (j.unchanged) return; // 업로드·스캔·초기화 없음 — 화면 그대로
+      if (typeof j.version === "string") verRef.current = j.version;
       // 출발 뒤 스캔·초기화가 있었거나 처리 중이면 이 응답은 낡았다 — 대상 건수만 반영
       if (seqRef.current !== seq0 || processingRef.current || queueRef.current.length > 0) {
         setSt((s) => (s ? { ...s, totalInvoices: j.totalInvoices } : s));

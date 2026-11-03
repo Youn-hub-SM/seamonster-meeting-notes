@@ -334,3 +334,28 @@ export function buildScanTally(
     .map(([key, v]) => ({ key, sku: v.sku, name: v.name, qty: v.qty, unknown: v.unknown, zone: v.zone }))
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, "ko"));
 }
+
+// 풀 상태의 '버전' — 집계에 영향을 주는 표들의 마지막 변경 시각·건수만 묶은 문자열(작은 조회 5개, 전량 읽기 없음).
+//  /api/fulfill/scan/state 가 30초 폴링마다 전량 집계(2.5초·CPU)를 하던 것을 막는다(2026-11-03 Vercel Active CPU 1위 경로):
+//  화면이 들고 있는 버전과 같으면 집계 없이 '변화 없음'만 돌려준다. 업로드·스캔·초기화·되돌리기·품목 변경이 있으면 버전이 바뀐다.
+export async function scanStateVersion(sb: Sb): Promise<string> {
+  const one = async (q: PromiseLike<{ data: unknown[] | null; error: { message?: string } | null }>, key: string): Promise<string> => {
+    const r = await q;
+    if (r.error) return `err:${key}`; // 오류면 버전을 매번 다르게 해 전량 경로로(캐시 안 함)
+    const row = (r.data ?? [])[0] as Record<string, unknown> | undefined;
+    return String(row ? row[key] ?? "" : "");
+  };
+  const cnt = async (q: PromiseLike<{ count: number | null; error: { message?: string } | null }>): Promise<string> => {
+    const r = await q; return r.error ? "err" : String(r.count ?? 0);
+  };
+  const [upAt, upN, scAt, clAt, openN, prAt] = await Promise.all([
+    one(sb.from("fulfill_scan_uploads").select("created_at").order("created_at", { ascending: false }).limit(1), "created_at"),
+    cnt(sb.from("fulfill_scan_uploads").select("id", { count: "exact", head: true })),
+    one(sb.from("fulfill_scan_events").select("scanned_at").order("scanned_at", { ascending: false }).limit(1), "scanned_at"),
+    one(sb.from("fulfill_scan_events").select("cleared_at").not("cleared_at", "is", null).order("cleared_at", { ascending: false }).limit(1), "cleared_at")
+      .then((v) => (v.startsWith("err:") ? "" : v)), // 125 미적용이면 칸이 없어 오류 — 버전 요소에서 뺀다
+    cnt(sb.from("fulfill_scan_events").select("invoice_no", { count: "exact", head: true }).is("cleared_at", null)).then((v) => (v === "err" ? "" : v)),
+    one(sb.from("products").select("updated_at").order("updated_at", { ascending: false }).limit(1), "updated_at"),
+  ]);
+  return [upAt, upN, scAt, clAt, openN, prAt].join("|");
+}
