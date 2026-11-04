@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { IDX as ORDER_IDX } from "@/app/lib/order-fulfill";
 import { loadFlaggedCustomers, matchFlaggedCustomers } from "@/app/lib/fulfill-customers";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
+import { buildCnplus, cnRowOrderOf, type CodeInfo } from "@/app/lib/order-fulfill";
 import { getAllBundles } from "@/app/lib/product-bundles";
 import { normalizeHistory, ratesFor, normalizeBoxCats } from "@/app/lib/fulfill-rates";
 import { batchSig, orderKey } from "@/app/lib/fulfill-sig";
@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const file = form.get("file") as File | null;
     const keywords = String(form.get("keywords") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const rowOrder = cnRowOrderOf(form.get("rowOrder")); // CN 파일 행 순서 — 기본 정리 순서, "input" 이면 올린 순서 그대로
     if (!file) return NextResponse.json({ ok: false, error: "엑셀 파일을 첨부하세요." }, { status: 400 });
 
     const wb = new ExcelJS.Workbook();
@@ -219,7 +220,7 @@ export async function POST(req: NextRequest) {
     const rates = ratesFor(normalizeHistory(rateRow?.value ?? {}), kstToday());
     const boxCats = normalizeBoxCats((rateRow?.value as { boxCats?: unknown })?.boxCats); // 배송일지 박스 종류(설정)
 
-    const res = buildCnplus(rows, codeMap, keywords, rates, boxCats);
+    const res = buildCnplus(rows, codeMap, keywords, rates, boxCats, rowOrder);
 
     // 이 파일의 주문 키(두 산식 모두)를 배치 서명으로 임시 보관 — ④ '출고 완료' 때 확정 등록(079).
     //  서명은 주문 키까지 섞은 batchSig — SKU 합이 같은 별개 파일과 충돌하지 않는다.

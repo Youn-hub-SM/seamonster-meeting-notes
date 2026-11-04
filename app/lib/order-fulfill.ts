@@ -71,7 +71,10 @@ const kg3 = (w: number) => Math.round(w * 1000) / 1000;
 
 // rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어.
 //  rates: 요율(기본운임 구간·도착보장 추가).
-export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS): FulfillResult {
+export type CnRowOrder = "label" | "input"; // label = 정리 순서(단일→복수, SKU), input = 올린 순서 그대로(순서대로 발송해야 할 때 — 2026-11-04 대표)
+export const cnRowOrderOf = (v: unknown): CnRowOrder => (v === "input" ? "input" : "label");
+
+export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS, rowOrder: CnRowOrder = "label"): FulfillResult {
   const catNames = cats.map((c) => c.name);
   const boxTypeR = (w: number) => boxTypeOf(w, rates.boxTiers);
   const baseFeeR = (w: number) => baseFeeOf(w, rates.boxTiers);
@@ -191,8 +194,7 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     const sa = skuOf(a), sb = skuOf(b);
     return sa < sb ? -1 : sa > sb ? 1 : 0;
   };
-  normal.sort(byLabelOrder);
-  guarantee.sort(byLabelOrder);
+  if (rowOrder === "label") { normal.sort(byLabelOrder); guarantee.sort(byLabelOrder); } // input 이면 올린 순서 그대로
 
   // 택배량: 합배송 병합 후 박스 단위로 박스종류별 일반/도착보장 개수 집계
   //  (병합된 박스는 합산 중량으로 종류·기본운임 산정 — 실제 발송 박스와 일치)

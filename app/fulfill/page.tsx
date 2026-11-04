@@ -47,6 +47,7 @@ type OpenBatch = { sig: string; file_name: string | null; order_count: number | 
 type UnmRow = { id: string; dispatch_date: string; order_no: string | null; codes: { sku: string; qty: number; registered: boolean }[] };
 
 const KW_KEY = "fulfill_addr_keywords";
+const RO_KEY = "fulfill.cnRowOrder"; // CN 파일 행 순서 선택(label|input)
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const STEPS = ["발주엑셀 업로드", "CN 파일 다운로드", "배송일지 기록", "상품 출고"];
 // 확인 모달(공용 useConfirm) 문구 — 나가기는 파괴가 아니라 danger:false
@@ -75,6 +76,7 @@ export default function FulfillPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("");
   const [keywords, setKeywords] = useState("");
+  const [rowOrder, setRowOrder] = useState<"label" | "input">("label"); // CN 파일 행 순서 — 정리 순서(기본) / 올린 순서 그대로(순서대로 발송할 때). 이 브라우저에 기억
   const [msgAck, setMsgAck] = useState(false);
   const [custAck, setCustAck] = useState(false);     // 단골·블랙 고객 확인
   const [loading, setLoading] = useState(false);
@@ -101,7 +103,7 @@ export default function FulfillPage() {
   const [unmRows, setUnmRows] = useState<UnmRow[]>([]);
   const [sideBusy, setSideBusy] = useState("");
 
-  useEffect(() => { setKeywords(localStorage.getItem(KW_KEY) || ""); }, []);
+  useEffect(() => { setKeywords(localStorage.getItem(KW_KEY) || ""); try { if (localStorage.getItem(RO_KEY) === "input") setRowOrder("input"); } catch { /* 저장 못 해도 기본값 */ } }, []);
 
   // CN 을 받았지만 출고 안 한 배치 · 재고가 빠지지 않은 코드 — ① 화면에 계속 띄운다(S9·S12)
   async function loadSide() {
@@ -161,6 +163,7 @@ export default function FulfillPage() {
   }, [leaveRisk]);
   const okToLeave = async () => !leaveRisk || (await confirm(LEAVE_ASK));
   function saveKeywords(v: string) { setKeywords(v); localStorage.setItem(KW_KEY, v); }
+  function saveRowOrder(v: "label" | "input") { setRowOrder(v); try { localStorage.setItem(RO_KEY, v); } catch { /* 무시 */ } }
 
   // res 갱신 시 상품 출고 미리보기(재고 확인) 자동 로드
   useEffect(() => {
@@ -185,7 +188,7 @@ export default function FulfillPage() {
     setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setCustAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setLoading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file); fd.append("keywords", keywords);
+      fd.append("file", file); fd.append("keywords", keywords); fd.append("rowOrder", rowOrder);
       const j = await (await fetch("/api/fulfill/generate", { method: "POST", body: fd })).json();
       if (!j.ok) throw new Error(j.error || "발주 파일을 만들지 못했습니다. 주문 엑셀을 다시 올리세요.");
       setRes(j as Result);
@@ -387,6 +390,13 @@ export default function FulfillPage() {
             <div className="b2b-field" style={{ marginBottom: 12 }}>
               <label className="b2b-field-label">주소 경고어 <span className="opt">(쉼표로 구분, 이 브라우저에만 저장)</span></label>
               <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="제주마루 702호, 군부대, 사서함" />
+            </div>
+            <div className="b2b-field" style={{ marginBottom: 12 }}>
+              <label className="b2b-field-label">CN 파일 행 순서 <span className="opt">(이 브라우저에만 저장)</span></label>
+              <select className="b2b-input" value={rowOrder} onChange={(e) => saveRowOrder(e.target.value === "input" ? "input" : "label")} style={{ width: "auto" }}>
+                <option value="label">정리 순서 — 단일상품(SKU·수량 순) 먼저, 복수상품은 품목 조합 순</option>
+                <option value="input">올린 순서 그대로 — 순서대로 발송해야 할 때</option>
+              </select>
             </div>
             <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <button className="b2b-btn-primary" onClick={async () => { if (await okToLeave()) fileRef.current?.click(); }} disabled={loading}>{loading ? "만드는 중..." : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
