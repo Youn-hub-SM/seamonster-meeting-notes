@@ -74,6 +74,17 @@ const kg3 = (w: number) => Math.round(w * 1000) / 1000;
 export type CnRowOrder = "label" | "input"; // label = 정리 순서(단일→복수, SKU), input = 올린 순서 그대로(순서대로 발송해야 할 때 — 2026-11-04 대표)
 export const cnRowOrderOf = (v: unknown): CnRowOrder => (v === "input" ? "input" : "label");
 
+// SKU 계열(라벨 정리 1차 묶음) — 셰어포인트 'SKU 생성 규칙' 기준. 톡딜 TD_ 접두는 떼고 본다.
+//  v100 = 100g 진공 소포장(접두사 없음, '-100-원산지-100' 또는 '…X5' 등 묶음) · bulk = BULK- 대용량 · other = 1kg(P_)·간편식(R-)·120g 더 깨끗한·세트·부자재.
+export type SkuFamily = "v100" | "bulk" | "other";
+export const CN_BOX_TIERS: SkuFamily[] = ["v100", "bulk", "other"]; // CN 파일 행 순서의 1차 묶음 순서(대표 2026-11-04)
+export function skuFamilyOf(sku: string): SkuFamily {
+  const s = (sku || "").trim().toUpperCase().replace(/^TD_/, "");
+  if (s.startsWith("BULK-")) return "bulk";
+  if (/^[A-Z]+-100-[A-Z]-100(X\d+)?$/.test(s)) return "v100";
+  return "other";
+}
+
 export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS, rowOrder: CnRowOrder = "label"): FulfillResult {
   const catNames = cats.map((c) => c.name);
   const boxTypeR = (w: number) => boxTypeOf(w, rates.boxTiers);
@@ -175,16 +186,26 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   });
 
   // 3b) 행 순서 — 라벨 정리용(2026-11-04 대표: "같은 종류끼리 모아야 좋다"). CJ 시스템이 파일 순서대로 송장을 뽑는다.
-  //  박스 = 합배송 병합까지 적용한 실제 박스(find). 단일상품(박스에 SKU 1종) → 복수상품 순, 단일은 SKU → 수량 → 박스, 복수는 품목 조합(SKU 정렬 '+' 연결) → 박스 → SKU.
+  //  박스 = 합배송 병합까지 적용한 실제 박스(find).
+  //  1차 묶음(대표 2026-11-04 고도화) = 박스 안 품목의 계열: 100g 진공만 → BULK 만 → 그 밖(1kg·간편식·120g·세트·섞임). CN_BOX_TIERS 순서.
+  //  2차 = 단일상품(SKU 1종) → 복수상품, 단일은 SKU → 수량 → 박스, 복수는 품목 조합(SKU 정렬 '+' 연결) → 박스 → SKU.
   //  정렬은 안정적이라 그 밖은 입력 순서 유지. 경고의 행 번호(rowNo)는 입력 기준 그대로.
   const skuOf = (r: unknown[]) => String(r[IDX.sku] ?? "").trim().toUpperCase();
   const boxOf = (r: unknown[]) => find(gkey(r));
   const boxSkus = new Map<string, Set<string>>();
   for (const r of kept) { const b = boxOf(r); const set = boxSkus.get(b) ?? new Set<string>(); set.add(skuOf(r)); boxSkus.set(b, set); }
   const boxCombo = new Map<string, string>();
-  for (const [b, set] of boxSkus) boxCombo.set(b, [...set].sort().join("+"));
+  const boxTier = new Map<string, number>();
+  for (const [b, set] of boxSkus) {
+    boxCombo.set(b, [...set].sort().join("+"));
+    const fams = new Set([...set].map(skuFamilyOf));
+    const fam = fams.size === 1 ? [...fams][0] : "other";            // 한 계열로만 찬 박스만 그 계열, 섞이면 그 밖
+    boxTier.set(b, Math.max(0, CN_BOX_TIERS.indexOf(fam)));
+  }
   const byLabelOrder = (a: unknown[], b: unknown[]): number => {
     const ba = boxOf(a), bb = boxOf(b);
+    const ta = boxTier.get(ba) ?? CN_BOX_TIERS.length, tb = boxTier.get(bb) ?? CN_BOX_TIERS.length;
+    if (ta !== tb) return ta - tb;                                   // 계열: 100g 진공만 → BULK 만 → 그 밖
     const ma = (boxSkus.get(ba)?.size ?? 1) > 1 ? 1 : 0, mb = (boxSkus.get(bb)?.size ?? 1) > 1 ? 1 : 0;
     if (ma !== mb) return ma - mb;                                   // 단일상품 먼저
     const ca = boxCombo.get(ba) ?? "", cb = boxCombo.get(bb) ?? "";
