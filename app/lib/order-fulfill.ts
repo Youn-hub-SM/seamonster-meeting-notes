@@ -7,6 +7,8 @@
 //  · R 기본운임 = U 구간 (≤2.7→2700, ≤5.2→3300, >5.2→3900)
 //  주문 총중량 U = 같은 (주문번호 B, 주소 E, 배송타입) 라인들의 Σ( 코드 총중량 × 수량 I ).
 //  배송타입 = M열 '네이버 도착보장' 여부. 일반/도착보장은 다른 박스로 나가므로 혼합 주문은 타입별 2박스.
+//  행 순서(2026-11-04 대표): CJ 시스템이 파일 순서대로 송장을 뽑으므로 정리하기 쉽게 — 단일상품 박스(품목 1종) 먼저 SKU·수량 순,
+//  복수상품 박스는 뒤에 품목 조합 순. 같은 박스(합배송 병합 포함)의 줄은 붙어 있고 박스 안은 SKU 순. 행 내용은 그대로.
 
 import { type FulfillRates, type BoxCat, DEFAULT_RATES, DEFAULT_BOX_CATS, boxTypeOf, baseFeeOf, boxCategoryOf } from "./fulfill-rates";
 
@@ -168,6 +170,29 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
       }
     }
   });
+
+  // 3b) 행 순서 — 라벨 정리용(2026-11-04 대표: "같은 종류끼리 모아야 좋다"). CJ 시스템이 파일 순서대로 송장을 뽑는다.
+  //  박스 = 합배송 병합까지 적용한 실제 박스(find). 단일상품(박스에 SKU 1종) → 복수상품 순, 단일은 SKU → 수량 → 박스, 복수는 품목 조합(SKU 정렬 '+' 연결) → 박스 → SKU.
+  //  정렬은 안정적이라 그 밖은 입력 순서 유지. 경고의 행 번호(rowNo)는 입력 기준 그대로.
+  const skuOf = (r: unknown[]) => String(r[IDX.sku] ?? "").trim().toUpperCase();
+  const boxOf = (r: unknown[]) => find(gkey(r));
+  const boxSkus = new Map<string, Set<string>>();
+  for (const r of kept) { const b = boxOf(r); const set = boxSkus.get(b) ?? new Set<string>(); set.add(skuOf(r)); boxSkus.set(b, set); }
+  const boxCombo = new Map<string, string>();
+  for (const [b, set] of boxSkus) boxCombo.set(b, [...set].sort().join("+"));
+  const byLabelOrder = (a: unknown[], b: unknown[]): number => {
+    const ba = boxOf(a), bb = boxOf(b);
+    const ma = (boxSkus.get(ba)?.size ?? 1) > 1 ? 1 : 0, mb = (boxSkus.get(bb)?.size ?? 1) > 1 ? 1 : 0;
+    if (ma !== mb) return ma - mb;                                   // 단일상품 먼저
+    const ca = boxCombo.get(ba) ?? "", cb = boxCombo.get(bb) ?? "";
+    if (ca !== cb) return ca < cb ? -1 : 1;                           // SKU(단일) / 품목 조합(복수) 순
+    if (ma === 0) { const qa = Number(a[IDX.qty]) || 0, qb = Number(b[IDX.qty]) || 0; if (qa !== qb) return qa - qb; } // 단일은 수량 순
+    if (ba !== bb) return ba < bb ? -1 : 1;                           // 같은 박스 줄은 붙여서
+    const sa = skuOf(a), sb = skuOf(b);
+    return sa < sb ? -1 : sa > sb ? 1 : 0;
+  };
+  normal.sort(byLabelOrder);
+  guarantee.sort(byLabelOrder);
 
   // 택배량: 합배송 병합 후 박스 단위로 박스종류별 일반/도착보장 개수 집계
   //  (병합된 박스는 합산 중량으로 종류·기본운임 산정 — 실제 발송 박스와 일치)
