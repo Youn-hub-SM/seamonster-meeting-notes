@@ -81,7 +81,10 @@ export default function DetailSendPage() {
   const [nosText, setNosText] = useState("");
   const [names, setNames] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
-  // 적용 현황
+  // 적용 현황 — 적용 상품(상품별 최신 완료 한 줄) | 히스토리(기록 전체)
+  const [view, setView] = useState<"current" | "history">("current");
+  const [current, setCurrent] = useState<Apply[]>([]);
+  const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [applies, setApplies] = useState<Apply[]>([]);
   const [fKind, setFKind] = useState<Kind>("source");
   const [fId, setFId] = useState<string>("");
@@ -123,6 +126,19 @@ export default function DetailSendPage() {
     } finally { setLoadingApplies(false); }
   }, []);
 
+  const loadCurrent = useCallback(async (k: Kind, id: string, productNo: string) => {
+    setLoadingCurrent(true);
+    try {
+      const q = new URLSearchParams({ current: "1" });
+      if (id) q.set(k === "set" ? "set_id" : "source_id", id);
+      if (/^\d+$/.test(productNo.trim())) q.set("product_no", productNo.trim());
+      const r = await fetch(`/api/detail/applies?${q.toString()}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.ok) { setErr(j.error || "적용 상품을 불러오지 못했습니다."); return; }
+      setCurrent(j.current || []);
+    } finally { setLoadingCurrent(false); }
+  }, []);
+
   useEffect(() => {
     fetch("/api/b2b/auth", { cache: "no-store" }).then((r) => r.json())
       .then((j) => setIsAdmin(!!j.ok && (j.name === "현석" || j.name === "관리자"))).catch(() => {});
@@ -141,11 +157,12 @@ export default function DetailSendPage() {
     return () => clearTimeout(t);
   }, [nos]);
 
-  // 적용 현황 필터가 바뀌면 조회(입력 멈춤 400ms)
+  // 적용 현황 필터가 바뀌면 조회(입력 멈춤 400ms) — 적용 상품·히스토리 둘 다
   useEffect(() => {
-    const t = setTimeout(() => { loadApplies(fKind, fId, fNo); }, 400);
+    const t = setTimeout(() => { loadCurrent(fKind, fId, fNo); loadApplies(fKind, fId, fNo); }, 400);
     return () => clearTimeout(t);
-  }, [fKind, fId, fNo, loadApplies]);
+  }, [fKind, fId, fNo, loadApplies, loadCurrent]);
+  const reloadStatus = () => { loadCurrent(fKind, fId, fNo); loadApplies(fKind, fId, fNo); };
 
   async function switchKind(k: Kind) {
     if (k === kind) return;
@@ -317,7 +334,7 @@ export default function DetailSendPage() {
     return c;
   }, [applies]);
   const shown = useMemo(() => (fStatus === "전체" ? applies : applies.filter((a) => a.status === fStatus)), [applies, fStatus]);
-  const shownNos = useMemo(() => Array.from(new Set(shown.map((a) => a.product_no))), [shown]);
+  const shownNos = useMemo(() => Array.from(new Set((view === "current" ? current : shown).map((a) => a.product_no))), [view, current, shown]);
   const isStale = (a: Apply): boolean => {
     if (a.status !== "완료") return false;
     if (a.command === "set" && Array.isArray(a.members)) return a.members.some((m) => (sources.find((s) => s.id === m.source_id)?.version ?? m.version) > m.version);
@@ -593,14 +610,20 @@ export default function DetailSendPage() {
 
       <section className="b2b-card dp-section">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">적용 현황</span>
+          <div className="sm-row sm-gap-4">
+            <span className="b2b-card-title">적용 현황</span>
+            <div className="sm-tabs">
+              <button type="button" className={`sm-tab ${view === "current" ? "is-active" : ""}`} onClick={() => setView("current")}>적용 상품<span className="sm-tab-count">{current.length}</span></button>
+              <button type="button" className={`sm-tab ${view === "history" ? "is-active" : ""}`} onClick={() => setView("history")}>히스토리<span className="sm-tab-count">{applies.length}</span></button>
+            </div>
+          </div>
           <div className="b2b-page-actions">
             <button type="button" className="b2b-btn-secondary" disabled={shownNos.length === 0} onClick={copyNos}>상품번호 복사{shownNos.length ? ` (${shownNos.length})` : ""}</button>
-            <button type="button" className="b2b-btn-secondary" disabled={loadingApplies} onClick={() => loadApplies(fKind, fId, fNo)}>다시 불러오기</button>
+            <button type="button" className="b2b-btn-secondary" disabled={loadingApplies || loadingCurrent} onClick={reloadStatus}>다시 불러오기</button>
           </div>
         </div>
         <div className="sm-tabbar" style={{ marginTop: "var(--sm-space-4)" }}>
-          {(["전체", ...APPLY_STATUSES] as StatusTab[]).map((s) => (
+          {view === "history" && (["전체", ...APPLY_STATUSES] as StatusTab[]).map((s) => (
             <button key={s} type="button" className={`sm-tab ${fStatus === s ? "is-active" : ""}`} onClick={() => setFStatus(s)}>
               {s}<span className="sm-tab-count">{counts[s]}</span>
             </button>
@@ -615,7 +638,55 @@ export default function DetailSendPage() {
           </select>
           <input className="b2b-input sm-tab-search" value={fNo} inputMode="numeric" placeholder="상품번호" aria-label="상품번호" onChange={(e) => setFNo(e.target.value)} />
         </div>
-        {loadingApplies ? (
+        {view === "current" ? (
+          loadingCurrent ? (
+            <div className="b2b-loading">불러오는 중</div>
+          ) : current.length === 0 ? (
+            <div className="b2b-empty">
+              {fId || fNo ? "조건에 맞는 적용 상품이 없습니다." : "적용된 상품이 없습니다."}
+              {(fId || fNo) && (
+                <div className="b2b-empty-action">
+                  <button type="button" className="b2b-btn-secondary" onClick={() => { setFId(""); setFNo(""); }}>조건 지우기</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="b2b-table-wrap is-sticky-head">
+              <table className="b2b-table">
+                <thead>
+                  <tr><th>상품번호</th><th>상품명</th><th>들어간 소스 · 조합</th><th>버전</th><th>자리</th><th>마커 확인</th><th>마지막 적용</th></tr>
+                </thead>
+                <tbody>
+                  {current.map((a) => {
+                    const stale = isStale(a);
+                    const isSet = a.command === "set";
+                    return (
+                      <tr key={a.product_no}>
+                        <td className="num">{a.product_no}</td>
+                        <td>{a.product_name || <span className="sm-faint">-</span>}</td>
+                        <td>
+                          {isSet ? (
+                            <>
+                              <span>조합 · {a.set_name || `#${a.set_id}`}</span>
+                              <span className="sm-faint dp-cell-sub">{(a.members || []).map((m) => srcName(m.source_id)).join(" › ")}</span>
+                            </>
+                          ) : (a.source_id ? srcName(a.source_id) : "-")}
+                        </td>
+                        <td className="num">
+                          {isSet ? (a.members || []).map((m) => `v${m.version}`).join("·") : `v${a.source_version ?? "-"}`}
+                          {stale && <span className="sm-faint"> 구버전</span>}
+                        </td>
+                        <td className="sm-nowrap">{POSITION_KO[a.position] || a.position}</td>
+                        <td>{a.verified === true ? "확인" : a.verified === false ? <span className="sm-faint">미확인</span> : <span className="sm-faint">-</span>}</td>
+                        <td className="sm-nowrap">{a.executed_at ? dateTime(a.executed_at) : <span className="sm-faint">-</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : loadingApplies ? (
           <div className="b2b-loading">불러오는 중</div>
         ) : shown.length === 0 ? (
           <div className="b2b-empty">

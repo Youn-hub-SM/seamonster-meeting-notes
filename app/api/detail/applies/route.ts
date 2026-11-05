@@ -90,6 +90,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, product_nos: Array.from(seen.keys()) });
     }
 
+    if (sp.get("current") === "1") {
+      // 적용 상품 — 상품마다 최신 완료 행 한 줄. source_id 면 그 소스가 든 최신 완료 행, set_id 면 그 조합으로 쏜 최신 완료 행.
+      //  (상품의 '현재 상태'는 가장 최근 완료 행이 대표한다. 소스 재전송 뒤엔 그 행이 최신이 된다)
+      const cSid = Number(sp.get("source_id"));
+      const cSet = Number(sp.get("set_id"));
+      const cPno = Number(sp.get("product_no"));
+      const res = await readApplies(sb, (cols) => {
+        let q = sb.from("detail_applies").select(cols).eq("status", "완료").order("created_at", { ascending: false });
+        if (Number.isInteger(cPno) && cPno > 0) q = q.eq("product_no", cPno);
+        if (Number.isInteger(cSet) && cSet > 0 && cols === SET_COLS) q = q.eq("set_id", cSet);
+        return q.limit(5000);
+      });
+      if ("error" in res) { if (isMissing(res.error)) return MISSING; throw res.error; }
+      const byProduct = new Map<number, ApplyRow>();
+      for (const r of res.rows) {
+        if (Number.isInteger(cSid) && cSid > 0 && !memberIds(r).includes(cSid)) continue;
+        if (!byProduct.has(r.product_no)) byProduct.set(r.product_no, r);
+      }
+      const rows = Array.from(byProduct.values()).sort((a, b) => a.product_no - b.product_no);
+      return NextResponse.json({ ok: true, current: rows, sets: res.sets });
+    }
+
     const sid = Number(sp.get("source_id"));
     const setId = Number(sp.get("set_id"));
     const pno = Number(sp.get("product_no"));
