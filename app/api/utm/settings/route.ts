@@ -5,28 +5,33 @@ import {
   setUrlPresets,
   getSourceMediumMap,
   setSourceMediumMap,
+  getContentSlugs,
+  setContentSlugs,
   type UrlPreset,
   type SourceMediumMap,
+  type ContentSlugs,
 } from "@/app/lib/utm";
+import { CRM_MEDIA, CRM_SOURCE } from "@/app/lib/utm-rules";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/utm/settings — 즐겨찾기 + 소스·매체 맵
+// GET /api/utm/settings — 즐겨찾기 + 소스·매체 맵 + CRM 규칙(매체 4종·슬러그 사전)
 export async function GET() {
   try {
-    const [presets, sourceMediumMap] = await Promise.all([getUrlPresets(), getSourceMediumMap()]);
-    return NextResponse.json({ ok: true, presets, sourceMediumMap });
+    const [presets, sourceMediumMap, contentSlugs] = await Promise.all([getUrlPresets(), getSourceMediumMap(), getContentSlugs()]);
+    return NextResponse.json({ ok: true, presets, sourceMediumMap, contentSlugs, crm: { source: CRM_SOURCE, media: CRM_MEDIA } });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
 }
 
-// PUT /api/utm/settings — { presets?, sourceMediumMap? } 둘 중 보낸 것만 저장
+// PUT /api/utm/settings — { presets?, sourceMediumMap?, contentSlugs? } 보낸 것만 저장
 export async function PUT(req: NextRequest) {
   try {
     const body = (await req.json()) as {
       presets?: UrlPreset[];
       sourceMediumMap?: SourceMediumMap;
+      contentSlugs?: ContentSlugs;
     };
 
     const tasks: Promise<void>[] = [];
@@ -43,6 +48,15 @@ export async function PUT(req: NextRequest) {
         clean[src] = Array.isArray(meds) ? meds.filter((m) => typeof m === "string" && m.trim()) : [];
       }
       tasks.push(setSourceMediumMap(clean));
+    }
+    if (body.contentSlugs && typeof body.contentSlugs === "object") {
+      const clean: ContentSlugs = {};
+      for (const [k, v] of Object.entries(body.contentSlugs)) {
+        const key = String(k ?? "").trim();
+        const val = String(v ?? "").trim().toLowerCase();
+        if (key && val) clean[key] = val;
+      }
+      tasks.push(setContentSlugs(clean));
     }
 
     if (!tasks.length) {

@@ -1,30 +1,16 @@
 import { supabaseAdmin } from "./supabase";
+import { DEFAULT_CONTENT_SLUGS } from "./utm-rules";
 
 // UTM 빌더 설정(즐겨찾기 + 소스·매체 맵) — utm_settings(key-value) 테이블.
 // 히스토리(utm_links)는 행 단위라 별도 라우트에서 직접 다룬다.
 
-export type UrlPreset = { label: string; value: string };
-export type SourceMediumMap = Record<string, string[]>;
+export type { UrlPreset, SourceMediumMap } from "./utm-rules";
+export { DEFAULT_URL_PRESETS, DEFAULT_SOURCE_MEDIUM_MAP } from "./utm-rules";
+import { DEFAULT_URL_PRESETS, DEFAULT_SOURCE_MEDIUM_MAP, type UrlPreset, type SourceMediumMap } from "./utm-rules";
 
 const PRESETS_KEY = "url_presets";
 const MAP_KEY = "source_medium_map";
-
-// 클라이언트(utm-builder.html) 기본값과 동일하게 유지.
-export const DEFAULT_URL_PRESETS: UrlPreset[] = [
-  { label: "씨몬스터 카페24몰", value: "https://seamonster.co.kr" },
-  { label: "네이버 스마트스토어", value: "https://smartstore.naver.com/seamonster" },
-];
-
-export const DEFAULT_SOURCE_MEDIUM_MAP: SourceMediumMap = {
-  naver: ["cpc", "blog", "display", "shopping", "brand_search"],
-  google: ["cpc", "display", "shopping", "discovery", "pmax"],
-  kakao: ["cpc", "display", "bizboard", "kakao_moment"],
-  instagram: ["social", "story", "reels", "collab"],
-  facebook: ["social", "cpc", "display", "cpa"],
-  youtube: ["video", "shorts", "display", "cpc"],
-  tiktok: ["social", "video", "cpc", "spark_ads"],
-  daum: ["cpc", "display", "blog"],
-};
+const SLUGS_KEY = "content_slugs"; // CRM 버튼명 → utm_content 슬러그 사전(2026-11-06). 기본값은 utm-rules.ts
 
 async function readSetting<T>(key: string, fallback: T): Promise<T> {
   const sb = supabaseAdmin();
@@ -60,4 +46,16 @@ export async function getSourceMediumMap(): Promise<SourceMediumMap> {
 
 export async function setSourceMediumMap(map: SourceMediumMap): Promise<void> {
   await writeSetting(MAP_KEY, map);
+}
+
+export type ContentSlugs = Record<string, string>;
+
+export async function getContentSlugs(): Promise<ContentSlugs> {
+  const saved = await readSetting<ContentSlugs | null>(SLUGS_KEY, null);
+  // 저장본이 있어도 기본 사전의 새 항목은 합친다(직원이 지운 키는 되살리지 않도록 저장본 우선)
+  return saved && typeof saved === "object" ? { ...DEFAULT_CONTENT_SLUGS, ...saved } : { ...DEFAULT_CONTENT_SLUGS };
+}
+
+export async function setContentSlugs(dict: ContentSlugs): Promise<void> {
+  await writeSetting(SLUGS_KEY, dict);
 }

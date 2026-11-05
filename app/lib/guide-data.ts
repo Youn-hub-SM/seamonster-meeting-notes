@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-11-04";
+export const GUIDE_UPDATED = "2026-11-06";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1678,18 +1678,24 @@ export const GUIDE: GuideCategory[] = [
           {
             "href": "/utm",
             "label": "UTM 만들기",
-            "what": "광고·SNS 유입 추적용 UTM 링크 생성",
+            "what": "광고·SNS 링크와 CRM 메시지 링크에 UTM 을 붙여 만든다",
             "steps": [
-              "기본 URL(랜딩페이지)을 고르거나 직접 입력한다",
-              "utm_source 를 선택하거나 입력한다 (필수)",
-              "utm_medium 을 선택하거나 입력한다 (필수)",
-              "필요하면 utm_campaign·utm_content·utm_term·비고를 입력한다",
-              "미리보기에서 완성 URL을 확인한다",
-              "'저장 & 복사'를 누른다 (기록에 남고 클립보드에 복사됨)",
-              "저장 없이 쓰려면 'URL 복사'만 누른다"
+              "맨 위에서 [광고·SNS] 또는 [CRM 메시지]를 고른다 (선택은 이 브라우저에 남는다)",
+              "광고·SNS: 기본 주소(즐겨찾기 또는 직접 입력)·utm_source·utm_medium 을 채운다 (필수)",
+              "광고·SNS: 필요하면 utm_campaign·utm_content·utm_term·비고를 적고 '저장하고 복사'를 누른다",
+              "CRM 메시지: 발송 수단 칩(알림톡·공식몰 / 브랜드메시지·공식몰 / 알림톡·네이버 / 브랜드메시지·네이버)을 누른다",
+              "CRM 메시지: 캠페인을 적는다 (영문 소문자 kebab-case, 한글을 치면 영문 제안이 뜬다)",
+              "CRM 메시지: 버튼마다 버튼명과 링크 주소를 적는다 (content 는 사전에서 자동, 고칠 수 있다). 링크 없는 버튼은 비운다",
+              "CRM 메시지: A/B 변형이면 a 또는 b 를 고르고 '링크 만들기'를 누른다",
+              "규칙에 어긋난 칸은 빨간 글로 뜬다. '고친 값 전부 적용'을 누르고 다시 '링크 만들기'",
+              "완성 링크에서 '엑셀 칸으로 복사'를 눌러 CRM 메시지 양식의 링크 URL 칸에 붙인다 (캠페인·매체 칸까지 채워진다)",
+              "'기록에 저장'을 누르면 생성 기록에 남는다"
             ],
             "tips": [
-              "'URL 복사'는 기록에 안 남는다. 팀이 나중에 찾으려면 '저장 & 복사'를 쓴다"
+              "CRM 규칙: utm_source=kakao 고정, medium 은 4종, campaign 은 날짜·버전 없이, content=버튼, term=a/b, https",
+              "인스타그램·네이버·카카오처럼 우리 도메인 밖으로 가는 링크엔 UTM 을 붙이지 않는다 (표에 'UTM 없음')",
+              "'주소만 복사'도 기록에 남는다 (같은 주소는 한 번만). 생성 기록 탭에서 검색·CSV 내려받기·CSV 대량 추가",
+              "즐겨찾기·사전 탭: 랜딩 즐겨찾기, 소스별 추천 매체, 버튼명 → content 사전을 고친다"
             ],
             "keywords": [
               "UTM",
@@ -1697,10 +1703,15 @@ export const GUIDE: GuideCategory[] = [
               "추적링크",
               "링크 만들기",
               "utm_source",
+              "utm_campaign",
+              "utm_content",
               "캠페인 링크",
               "광고 링크",
               "유입 추적",
-              "URL 빌더"
+              "URL 빌더",
+              "CRM 링크",
+              "알림톡 링크",
+              "브랜드메시지 링크"
             ]
           }
         ]

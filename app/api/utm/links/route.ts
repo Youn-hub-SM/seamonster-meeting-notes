@@ -22,8 +22,9 @@ export async function GET() {
 }
 
 // POST /api/utm/links — 히스토리 1건 추가. body 는 camelCase 클라이언트 형태.
-//   { baseUrl, source, medium, campaign, content, term, note, fullUrl, dedupe? }
+//   { baseUrl, source, medium, campaign, content, term, note, fullUrl, dedupe?, purpose?, crmCampaign? }
 //   dedupe=true 이고 가장 최근 항목과 fullUrl 이 같으면 추가하지 않고 그 항목을 반환.
+//   purpose = 'ad'(광고·SNS, 기본) | 'crm'(CRM 메시지) — migration 162. 미적용 DB 면 그 두 열을 빼고 다시 저장.
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as Record<string, unknown>;
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const row = {
+    const row: Record<string, unknown> = {
       base_url: str(b.baseUrl),
       source: str(b.source),
       medium: str(b.medium),
@@ -56,8 +57,14 @@ export async function POST(req: NextRequest) {
       term: str(b.term),
       note: str(b.note),
       full_url: fullUrl,
+      purpose: b.purpose === "crm" ? "crm" : "ad",
+      crm_campaign: str(b.crmCampaign),
     };
-    const { data, error } = await sb.from("utm_links").insert(row).select("*").single();
+    let { data, error } = await sb.from("utm_links").insert(row).select("*").single();
+    if (error && /purpose|crm_campaign/.test(error.message || "")) {
+      delete row.purpose; delete row.crm_campaign; // 162 미적용 폴백
+      ({ data, error } = await sb.from("utm_links").insert(row).select("*").single());
+    }
     if (error) throw error;
 
     // 100건 초과분 정리 (오래된 것부터)

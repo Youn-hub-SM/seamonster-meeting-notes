@@ -295,7 +295,7 @@
 | 바꾸는 것 | 따라오는 곳 | 방법 |
 |---|---|---|
 | 색·간격·타이포 토큰 (`globals.css` `:root`) | React 전 화면 | 자동 (`var()` 참조) |
-| 〃 | `public/` 정적 HTML 2개 (utm-builder · subscription-dashboard) | **`npm run sync-tokens`** — `npm run build` 가 먼저 실행하므로 배포는 항상 동기. dev 중엔 수동 실행 |
+| 〃 | `public/` 정적 HTML 1개 (subscription-dashboard — utm-builder 는 2026-11-06 React 전환으로 삭제) | **`npm run sync-tokens`** — `npm run build` 가 먼저 실행하므로 배포는 항상 동기. dev 중엔 수동 실행 |
 | 〃 | /subscription 의 Chart.js 색 | 파일 `:root` 를 런타임에 읽으므로 sync 만 되면 자동 |
 | 컴포넌트 모양 (`.b2b-*` / `.sm-*`) | 전 화면 | 자동 (클래스) — 단 두 CSS 는 공용 파일(§2-9) |
 | 차트 규격 (`GEOM`·프리미티브) | 통계 화면 전부 | 자동 |

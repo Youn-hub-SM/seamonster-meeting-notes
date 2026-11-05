@@ -70,15 +70,6 @@ const COMMON = {
 };
 const TARGETS = [
   {
-    file: "public/utm-builder.html",
-    map: {
-      ...COMMON,
-      "--accent": "--sm-black",
-      "--radius-pill": "--sm-radius-pill",
-      "--shadow-float": "--sm-shadow-float",
-    },
-  },
-  {
     file: "public/subscription-dashboard.html",
     map: {
       ...COMMON,
