@@ -65,3 +65,5 @@
 .utm-history-bar { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
 .utm-history-bar .b2b-input { flex: 1 1 240px; }
 .utm-bulk { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; margin-top: var(--sm-space-3); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.utm-pager { display: flex; align-items: center; justify-content: center; gap: var(--sm-space-3); margin-top: var(--sm-space-3); font-size: var(--sm-fs-base); }
+.utm-history-bar .sm-tabs { flex: 0 0 auto; }

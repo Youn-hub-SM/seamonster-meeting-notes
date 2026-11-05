@@ -38,6 +38,8 @@ export const CRM_MEDIA: CrmMedium[] = [
   { value: "brandmessage-naver", label: "브랜드메시지 · 네이버", kind: "brandmessage", path: "naver" },
 ];
 export const CRM_MEDIUM_VALUES = CRM_MEDIA.map((m) => m.value);
+// 설정에서 추가한 발송 수단(utm_settings.crm_media_extra) — 화면 칩·검사 허용 목록에 합친다.
+export type CrmMediumExtra = { value: string; label: string };
 
 // 우리 GA 가 잡는 도메인 — 이 밖으로 가는 링크엔 UTM 을 붙이지 않는다(대표 결정 5).
 export const TRACKED_HOST_SUFFIXES = ["seamonster.kr", "seamonster.co.kr"];
@@ -143,13 +145,16 @@ export function checkCommon(p: { baseUrl?: string; source?: string; medium?: str
 export type CrmButton = { label: string; url: string; content: string };
 export type CrmCheckInput = { source: string; medium: string; campaign: string; buttons: CrmButton[]; term: string };
 
-export function checkCrmUtm(i: CrmCheckInput): UtmIssue[] {
+// opts.media = 허용 매체 값 목록(기본 4종 + 설정에서 추가한 발송 수단). 가져오기 검사도 같은 목록을 넘긴다.
+export function checkCrmUtm(i: CrmCheckInput, opts: { media?: string[] } = {}): UtmIssue[] {
   const issues: UtmIssue[] = [];
+  const allowed = opts.media && opts.media.length ? opts.media : CRM_MEDIUM_VALUES;
   const src = String(i.source || "").trim();
   if (src !== CRM_SOURCE) issues.push({ field: "source", msg: `utm_source 는 ${CRM_SOURCE} 고정`, fix: CRM_SOURCE });
   const med = String(i.medium || "").trim();
   if (!med) issues.push({ field: "medium", msg: "발송 수단을 고르세요" });
-  else if (!CRM_MEDIUM_VALUES.includes(med)) issues.push({ field: "medium", msg: `매체는 ${CRM_MEDIUM_VALUES.join(" / ")} 중 하나` });
+  else if (!SLUG_RE.test(med)) issues.push({ field: "medium", msg: "매체 값은 영문 소문자·숫자·하이픈(-)만(예 alimtalk-cafe24)", fix: fixSlug(med) });
+  else if (!allowed.includes(med)) issues.push({ field: "medium", msg: `등록된 발송 수단이 아닙니다 (${allowed.join(" / ")})` });
   const camp = String(i.campaign || "").trim();
   if (!camp) issues.push({ field: "campaign", msg: "캠페인을 입력하세요" });
   else if (/[가-힣]/.test(camp)) issues.push({ field: "campaign", msg: "영문 소문자 kebab-case 로 적습니다", fix: slugify(camp) || undefined });
@@ -176,9 +181,9 @@ export function checkCrmUtm(i: CrmCheckInput): UtmIssue[] {
 }
 
 // 엑셀 가져오기용 — 한 줄의 링크 URL 칸(줄바꿈 여러 개)·캠페인·매체를 그대로 검사.
-export function checkCrmRow(row: { urls: string[]; campaign: string; medium: string }): UtmIssue[] {
+export function checkCrmRow(row: { urls: string[]; campaign: string; medium: string }, opts: { media?: string[] } = {}): UtmIssue[] {
   const buttons: CrmButton[] = row.urls.map((u, i) => { const p = parseUtm(u); return { label: `링크${i + 1}`, url: u, content: p.content || "" }; });
-  const issues = checkCrmUtm({ source: CRM_SOURCE, medium: row.medium, campaign: row.campaign, buttons, term: "" });
+  const issues = checkCrmUtm({ source: CRM_SOURCE, medium: row.medium, campaign: row.campaign, buttons, term: "" }, opts);
   row.urls.forEach((u, idx) => {
     if (!isTrackedUrl(u)) return;
     const p = parseUtm(u);

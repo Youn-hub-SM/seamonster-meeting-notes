@@ -8,8 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import {
   CRM_MEDIA, CRM_SOURCE, DEFAULT_CONTENT_SLUGS, DEFAULT_SOURCE_MEDIUM_MAP, DEFAULT_URL_PRESETS,
-  buildUtmUrl, checkCommon, checkCrmUtm, isTrackedUrl, slugify,
-  type CrmButton, type UtmIssue,
+  SLUG_RE, buildUtmUrl, checkCommon, checkCrmUtm, isTrackedUrl, slugify,
+  type CrmButton, type CrmMediumExtra, type UtmIssue,
 } from "@/app/lib/utm-rules";
 
 type Preset = { label: string; value: string };
@@ -20,6 +20,7 @@ type Campaign = { campaign: string; medium: string; title: string; active: boole
 type Mode = "ad" | "crm";
 
 const MODE_KEY = "utm.mode";
+const PAGE_SIZE = 10;
 const kst = (iso: string) => (iso ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
 const today = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
@@ -36,6 +37,7 @@ export default function UtmPage() {
   const [presets, setPresets] = useState<Preset[]>(DEFAULT_URL_PRESETS);
   const [mediumMap, setMediumMap] = useState<MediumMap>(DEFAULT_SOURCE_MEDIUM_MAP);
   const [slugs, setSlugs] = useState<Slugs>(DEFAULT_CONTENT_SLUGS);
+  const [mediaExtra, setMediaExtra] = useState<CrmMediumExtra[]>([]);
   const [history, setHistory] = useState<Link[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loadErr, setLoadErr] = useState("");
@@ -49,15 +51,15 @@ export default function UtmPage() {
   const load = useCallback(async () => {
     setLoadErr("");
     try {
-      const s = await api<{ presets: Preset[]; sourceMediumMap: MediumMap; contentSlugs: Slugs }>("/api/utm/settings");
-      setPresets(s.presets || []); setMediumMap(s.sourceMediumMap || {}); setSlugs(s.contentSlugs || {});
+      const s = await api<{ presets: Preset[]; sourceMediumMap: MediumMap; contentSlugs: Slugs; crmMediaExtra?: CrmMediumExtra[] }>("/api/utm/settings");
+      setPresets(s.presets || []); setMediumMap(s.sourceMediumMap || {}); setSlugs(s.contentSlugs || {}); setMediaExtra(s.crmMediaExtra || []);
     } catch (e) { setLoadErr(e instanceof Error ? e.message : "설정을 불러오지 못했습니다. 새로고침하세요"); }
     try { setHistory((await api<{ links: Link[] }>("/api/utm/links")).links || []); } catch { toast.error("히스토리를 불러오지 못했습니다. 새로고침하세요"); }
     try { setCampaigns((await api<{ campaigns: Campaign[] }>("/api/utm/campaigns")).campaigns || []); } catch { /* CRM 표가 없어도 화면은 뜬다 */ }
   }, [toast]);
   useEffect(() => { load(); }, [load]);
 
-  const saveSettings = async (patch: { presets?: Preset[]; sourceMediumMap?: MediumMap; contentSlugs?: Slugs }) => {
+  const saveSettings = async (patch: { presets?: Preset[]; sourceMediumMap?: MediumMap; contentSlugs?: Slugs; crmMediaExtra?: CrmMediumExtra[] }) => {
     await api("/api/utm/settings", { method: "PUT", body: JSON.stringify(patch) });
   };
 
@@ -89,7 +91,9 @@ export default function UtmPage() {
       {mode === "ad" ? (
         <AdMode presets={presets} mediumMap={mediumMap} history={history} onSavePresets={async (p) => { setPresets(p); await saveSettings({ presets: p }); }} addLink={addLink} copyText={copyText} />
       ) : (
-        <CrmMode slugs={slugs} campaigns={campaigns} addLink={addLink} copyText={copyText} onLearnSlug={async (k, v) => { const next = { ...slugs, [k]: v }; setSlugs(next); try { await saveSettings({ contentSlugs: next }); } catch { /* 사전 저장 실패는 조용히 */ } }} />
+        <CrmMode slugs={slugs} campaigns={campaigns} mediaExtra={mediaExtra} addLink={addLink} copyText={copyText}
+          onLearnSlug={async (k, v) => { const next = { ...slugs, [k]: v }; setSlugs(next); try { await saveSettings({ contentSlugs: next }); } catch { /* 사전 저장 실패는 조용히 */ } }}
+          onAddMedia={async (m) => { const next = [...mediaExtra.filter((x) => x.value !== m.value), m]; setMediaExtra(next); await saveSettings({ crmMediaExtra: next }); }} />
       )}
 
       <div className="b2b-card" style={{ marginTop: "var(--sm-space-5)" }}>
@@ -100,7 +104,7 @@ export default function UtmPage() {
         {tab === "history" ? (
           <History history={history} setHistory={setHistory} copyText={copyText} />
         ) : (
-          <Settings presets={presets} mediumMap={mediumMap} slugs={slugs} onSave={async (p) => { if (p.presets) setPresets(p.presets); if (p.sourceMediumMap) setMediumMap(p.sourceMediumMap); if (p.contentSlugs) setSlugs(p.contentSlugs); await saveSettings(p); }} />
+          <Settings presets={presets} mediumMap={mediumMap} slugs={slugs} mediaExtra={mediaExtra} onSave={async (p) => { if (p.presets) setPresets(p.presets); if (p.sourceMediumMap) setMediumMap(p.sourceMediumMap); if (p.contentSlugs) setSlugs(p.contentSlugs); if (p.crmMediaExtra) setMediaExtra(p.crmMediaExtra); await saveSettings(p); }} />
         )}
       </div>
     </div>
@@ -277,14 +281,30 @@ type BtnRow = CrmButton & { key: number };
 let seq = 1;
 const newRow = (): BtnRow => ({ key: seq++, label: "", url: "", content: "" });
 
-function CrmMode({ slugs, campaigns, addLink, copyText, onLearnSlug }: {
-  slugs: Slugs; campaigns: Campaign[];
+function CrmMode({ slugs, campaigns, mediaExtra, addLink, copyText, onLearnSlug, onAddMedia }: {
+  slugs: Slugs; campaigns: Campaign[]; mediaExtra: CrmMediumExtra[];
   addLink: (row: Omit<Link, "id" | "created_at">, dedupe: boolean) => Promise<unknown>;
   copyText: (t: string, msg?: string) => Promise<void>;
   onLearnSlug: (k: string, v: string) => Promise<void>;
+  onAddMedia: (m: CrmMediumExtra) => Promise<void>;
 }) {
   const toast = useToast();
   const [medium, setMedium] = useState("");
+  const [custom, setCustom] = useState(false); // '기타' 칩 — 새 발송 수단 입력
+  const [customLabel, setCustomLabel] = useState("");
+  const [customValue, setCustomValue] = useState("");
+  const [customErr, setCustomErr] = useState("");
+  const allMedia = useMemo(() => [...CRM_MEDIA.map((m) => ({ value: m.value, label: m.label })), ...mediaExtra], [mediaExtra]);
+  const mediaValues = useMemo(() => allMedia.map((m) => m.value), [allMedia]);
+  async function addCustomMedia() {
+    const value = customValue.trim().toLowerCase();
+    if (!value) { setCustomErr("매체 값을 입력하세요 (예 sms-cafe24)"); return; }
+    if (!SLUG_RE.test(value)) { setCustomErr("영문 소문자·숫자·하이픈(-)만, 종류-경로 꼴"); return; }
+    if (mediaValues.includes(value)) { setCustomErr("이미 있는 발송 수단입니다"); return; }
+    setCustomErr("");
+    try { await onAddMedia({ value, label: customLabel.trim() || value }); setMedium(value); setCustom(false); setCustomLabel(""); setCustomValue(""); toast.success("발송 수단을 추가했습니다"); }
+    catch { toast.error("발송 수단을 저장하지 못했습니다. 다시 시도하세요"); }
+  }
   const [campaign, setCampaign] = useState("");
   const [term, setTerm] = useState("");
   const [note, setNote] = useState("");
@@ -313,7 +333,7 @@ function CrmMode({ slugs, campaigns, addLink, copyText, onLearnSlug }: {
 
   function build() {
     const i = input();
-    const found = checkCrmUtm(i);
+    const found = checkCrmUtm(i, { media: mediaValues });
     setIssues(found);
     if (found.length) { setResults(null); return; }
     setResults(i.buttons.map((b) => {
@@ -356,8 +376,17 @@ function CrmMode({ slugs, campaigns, addLink, copyText, onLearnSlug }: {
         <div className="b2b-field">
           <span className="b2b-field-label">발송 수단<span className="req">*</span></span>
           <div className="utm-chips" role="group" aria-label="발송 수단">
-            {CRM_MEDIA.map((m) => <button key={m.value} type="button" className={`utm-chip${medium === m.value ? " is-active" : ""}`} onClick={() => setMedium(m.value)}>{m.label}<span className="utm-chip-sub">{m.value}</span></button>)}
+            {allMedia.map((m) => <button key={m.value} type="button" className={`utm-chip${medium === m.value && !custom ? " is-active" : ""}`} onClick={() => { setMedium(m.value); setCustom(false); }}>{m.label}<span className="utm-chip-sub">{m.value}</span></button>)}
+            <button type="button" className={`utm-chip${custom ? " is-active" : ""}`} onClick={() => setCustom((v) => !v)}>기타</button>
           </div>
+          {custom && (
+            <div className="utm-inline" style={{ marginTop: 8 }}>
+              <input className="b2b-input" value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="문자 · 공식몰" aria-label="발송 수단 표시명" />
+              <input className="b2b-input" value={customValue} onChange={(e) => setCustomValue(e.target.value)} placeholder="sms-cafe24" aria-label="utm_medium 값" aria-invalid={customErr ? true : undefined} onKeyDown={(e) => { if (e.key === "Enter") addCustomMedia(); }} />
+              <button className="b2b-btn-secondary" onClick={addCustomMedia}>발송 수단 추가</button>
+            </div>
+          )}
+          {customErr && <div className="b2b-field-error">{customErr}</div>}
           {issueOf("medium") && <div className="b2b-field-error">{issueOf("medium")!.msg}</div>}
         </div>
         <div className="b2b-field">
@@ -470,12 +499,18 @@ function History({ history, setHistory, copyText }: { history: Link[]; setHistor
   const toast = useToast();
   const confirm = useConfirm();
   const [q, setQ] = useState("");
+  const [kind, setKind] = useState<"all" | "ad" | "crm">("all");
+  const [page, setPage] = useState(1);
   const [bulkMsg, setBulkMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? history.filter((h) => [h.campaign, h.source, h.medium, h.note, h.base_url, h.content, h.crm_campaign].some((v) => (v || "").toLowerCase().includes(s))) : history;
-  }, [history, q]);
+    return history.filter((h) => (kind === "all" || (kind === "crm" ? h.purpose === "crm" : h.purpose !== "crm")) && (!s || [h.campaign, h.source, h.medium, h.note, h.base_url, h.content, h.crm_campaign].some((v) => (v || "").toLowerCase().includes(s))));
+  }, [history, q, kind]);
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const cur = Math.min(page, pages);
+  const pageRows = shown.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [q, kind]);
 
   async function del(id: string) {
     if (!(await confirm({ title: "기록 삭제", body: "팀 공용 기록이라 모두에게서 사라집니다.", action: "기록 삭제" }))) return;
@@ -522,6 +557,9 @@ function History({ history, setHistory, copyText }: { history: Link[]; setHistor
   return (
     <div>
       <div className="utm-history-bar">
+        <div className="sm-tabs" role="tablist" aria-label="용도">
+          {([["all", "전체"], ["ad", "광고·SNS"], ["crm", "CRM"]] as const).map(([v, l]) => <button key={v} className={`sm-tab${kind === v ? " is-active" : ""}`} role="tab" onClick={() => setKind(v)}>{l}</button>)}
+        </div>
         <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="캠페인·소스·매체·비고 검색" />
         {q && <button className="b2b-link-btn" onClick={() => setQ("")}>조건 지우기</button>}
         <button className="b2b-btn-secondary" onClick={exportCsv} disabled={!history.length}>CSV 내려받기</button>
@@ -530,13 +568,14 @@ function History({ history, setHistory, copyText }: { history: Link[]; setHistor
       {history.length === 0 ? (
         <div className="b2b-empty">만든 링크가 없습니다.</div>
       ) : shown.length === 0 ? (
-        <div className="b2b-empty">조건에 맞는 기록이 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => setQ("")}>조건 지우기</button></div></div>
+        <div className="b2b-empty">조건에 맞는 기록이 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => { setQ(""); setKind("all"); }}>조건 지우기</button></div></div>
       ) : (
+        <>
         <div className="b2b-table-wrap">
           <table className="b2b-table is-compact">
             <thead><tr><th>일시</th><th>용도</th><th>source</th><th>medium</th><th>campaign</th><th>content</th><th>비고</th><th>주소</th><th /></tr></thead>
             <tbody>
-              {shown.map((h) => (
+              {pageRows.map((h) => (
                 <tr key={h.id}>
                   <td style={{ whiteSpace: "nowrap" }}>{kst(h.created_at)}</td>
                   <td><span className="b2b-status-pill">{h.purpose === "crm" ? "CRM" : "광고"}</span></td>
@@ -549,6 +588,14 @@ function History({ history, setHistory, copyText }: { history: Link[]; setHistor
             </tbody>
           </table>
         </div>
+        {pages > 1 && (
+          <div className="utm-pager">
+            <button className="b2b-btn-secondary" onClick={() => setPage(cur - 1)} disabled={cur <= 1}>이전</button>
+            <span className="num">{cur} / {pages}</span>
+            <button className="b2b-btn-secondary" onClick={() => setPage(cur + 1)} disabled={cur >= pages}>다음</button>
+          </div>
+        )}
+        </>
       )}
       <div className="utm-bulk">
         <button className="b2b-btn-secondary" onClick={downloadTemplate}>양식 내려받기 (CSV)</button>
@@ -582,7 +629,7 @@ function parseCsv(text: string): string[][] {
 }
 
 // ───────────────────────── 즐겨찾기·소스·사전 ─────────────────────────
-function Settings({ presets, mediumMap, slugs, onSave }: { presets: Preset[]; mediumMap: MediumMap; slugs: Slugs; onSave: (p: { presets?: Preset[]; sourceMediumMap?: MediumMap; contentSlugs?: Slugs }) => Promise<void> }) {
+function Settings({ presets, mediumMap, slugs, mediaExtra, onSave }: { presets: Preset[]; mediumMap: MediumMap; slugs: Slugs; mediaExtra: CrmMediumExtra[]; onSave: (p: { presets?: Preset[]; sourceMediumMap?: MediumMap; contentSlugs?: Slugs; crmMediaExtra?: CrmMediumExtra[] }) => Promise<void> }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [map, setMap] = useState<MediumMap>(mediumMap);
@@ -635,6 +682,17 @@ function Settings({ presets, mediumMap, slugs, onSave }: { presets: Preset[]; me
           <button className="b2b-btn-secondary" onClick={() => { const v = newSrc.trim().toLowerCase(); if (!v) return; if (map[v]) { toast.error("이미 있는 소스입니다"); return; } setMap({ ...map, [v]: [] }); setNewSrc(""); }}>소스 추가</button>
         </div>
         <div className="utm-settings-foot"><button className="b2b-btn-primary" onClick={() => save({ sourceMediumMap: map }, "소스·매체를 저장했습니다")}>변경 저장</button></div>
+      </div>
+
+      <div className="b2b-form-section" style={{ marginBottom: "var(--sm-space-4)" }}>
+        <div className="b2b-form-section-title">추가한 발송 수단 (CRM)</div>
+        <div className="b2b-field-hint is-block">기본 4종(알림톡·브랜드메시지 × 공식몰·네이버)은 늘 있고, CRM 모드의 [기타]로 더한 것만 여기 보입니다</div>
+        {mediaExtra.length === 0 ? <div className="b2b-empty">추가한 발송 수단이 없습니다.</div> : mediaExtra.map((m) => (
+          <div className="utm-preset" key={m.value}>
+            <div className="utm-preset-body"><div className="utm-preset-label">{m.label}</div><div className="utm-preset-url">{m.value}</div></div>
+            <button className="b2b-link-btn" onClick={() => save({ crmMediaExtra: mediaExtra.filter((x) => x.value !== m.value) }, "발송 수단을 삭제했습니다")}>삭제</button>
+          </div>
+        ))}
       </div>
 
       <div className="b2b-form-section">

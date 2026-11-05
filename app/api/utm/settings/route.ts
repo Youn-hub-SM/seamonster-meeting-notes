@@ -7,19 +7,21 @@ import {
   setSourceMediumMap,
   getContentSlugs,
   setContentSlugs,
+  getCrmMediaExtra,
+  setCrmMediaExtra,
   type UrlPreset,
   type SourceMediumMap,
   type ContentSlugs,
 } from "@/app/lib/utm";
-import { CRM_MEDIA, CRM_SOURCE } from "@/app/lib/utm-rules";
+import { CRM_MEDIA, CRM_SOURCE, SLUG_RE, type CrmMediumExtra } from "@/app/lib/utm-rules";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/utm/settings — 즐겨찾기 + 소스·매체 맵 + CRM 규칙(매체 4종·슬러그 사전)
 export async function GET() {
   try {
-    const [presets, sourceMediumMap, contentSlugs] = await Promise.all([getUrlPresets(), getSourceMediumMap(), getContentSlugs()]);
-    return NextResponse.json({ ok: true, presets, sourceMediumMap, contentSlugs, crm: { source: CRM_SOURCE, media: CRM_MEDIA } });
+    const [presets, sourceMediumMap, contentSlugs, crmMediaExtra] = await Promise.all([getUrlPresets(), getSourceMediumMap(), getContentSlugs(), getCrmMediaExtra()]);
+    return NextResponse.json({ ok: true, presets, sourceMediumMap, contentSlugs, crmMediaExtra, crm: { source: CRM_SOURCE, media: CRM_MEDIA } });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
@@ -32,6 +34,7 @@ export async function PUT(req: NextRequest) {
       presets?: UrlPreset[];
       sourceMediumMap?: SourceMediumMap;
       contentSlugs?: ContentSlugs;
+      crmMediaExtra?: CrmMediumExtra[];
     };
 
     const tasks: Promise<void>[] = [];
@@ -57,6 +60,17 @@ export async function PUT(req: NextRequest) {
         if (key && val) clean[key] = val;
       }
       tasks.push(setContentSlugs(clean));
+    }
+    if (Array.isArray(body.crmMediaExtra)) {
+      const seen = new Set<string>();
+      const clean: CrmMediumExtra[] = [];
+      for (const m of body.crmMediaExtra) {
+        const value = String(m?.value ?? "").trim().toLowerCase();
+        if (!value || !SLUG_RE.test(value) || seen.has(value)) continue;
+        seen.add(value);
+        clean.push({ value, label: String(m?.label ?? "").trim() || value });
+      }
+      tasks.push(setCrmMediaExtra(clean));
     }
 
     if (!tasks.length) {

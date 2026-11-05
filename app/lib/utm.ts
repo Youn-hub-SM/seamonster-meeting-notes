@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { DEFAULT_CONTENT_SLUGS } from "./utm-rules";
+import { DEFAULT_CONTENT_SLUGS, type CrmMediumExtra } from "./utm-rules";
 
 // UTM 빌더 설정(즐겨찾기 + 소스·매체 맵) — utm_settings(key-value) 테이블.
 // 히스토리(utm_links)는 행 단위라 별도 라우트에서 직접 다룬다.
@@ -10,6 +10,7 @@ import { DEFAULT_URL_PRESETS, DEFAULT_SOURCE_MEDIUM_MAP, type UrlPreset, type So
 
 const PRESETS_KEY = "url_presets";
 const MAP_KEY = "source_medium_map";
+const MEDIA_KEY = "crm_media_extra"; // 직원이 추가한 CRM 발송 수단 [{value,label}]
 const SLUGS_KEY = "content_slugs"; // CRM 버튼명 → utm_content 슬러그 사전(2026-11-06). 기본값은 utm-rules.ts
 
 async function readSetting<T>(key: string, fallback: T): Promise<T> {
@@ -58,4 +59,13 @@ export async function getContentSlugs(): Promise<ContentSlugs> {
 
 export async function setContentSlugs(dict: ContentSlugs): Promise<void> {
   await writeSetting(SLUGS_KEY, dict);
+}
+
+export async function getCrmMediaExtra(): Promise<CrmMediumExtra[]> {
+  const v = await readSetting<CrmMediumExtra[]>(MEDIA_KEY, []);
+  return Array.isArray(v) ? v.filter((m) => m && typeof m.value === "string" && m.value.trim()) : [];
+}
+
+export async function setCrmMediaExtra(list: CrmMediumExtra[]): Promise<void> {
+  await writeSetting(MEDIA_KEY, list);
 }
