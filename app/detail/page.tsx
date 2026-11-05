@@ -375,7 +375,7 @@ export default function DetailSendPage() {
             <div className="dp-rules-title">넣는 자리</div>
             <ul className="dp-rules-list">
               <li>공통 블록은 기존 맨 앞 또는 기존 맨 뒤로만 쏜다.</li>
-              <li>전체 교체는 그 상품의 기존 상세설명을 전부 지운다. 상품 상세를 통째로 새로 쓸 때만 쓴다.</li>
+              <li>전체 교체는 그 상품의 기존 상세설명을 전부 지운다. 상품 상세를 통째로 새로 쓸 때만 쓴다. 아코디언 블록(.smd-info)만은 남겨 맨 앞에 둔다. 소스에 그 블록이 들어 있으면 소스 것으로 바뀐다.</li>
               <li>넣는 자리는 그 상품에 처음 들어갈 때만 쓰인다. 이미 들어간 소스는 원래 자리에서 바뀐다.</li>
             </ul>
           </div>
