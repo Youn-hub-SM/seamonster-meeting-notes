@@ -610,24 +610,16 @@ export default function DetailSendPage() {
 
       <section className="b2b-card dp-section">
         <div className="b2b-card-head">
-          <div className="sm-row sm-gap-4">
-            <span className="b2b-card-title">적용 현황</span>
-            <div className="sm-tabs">
-              <button type="button" className={`sm-tab ${view === "current" ? "is-active" : ""}`} onClick={() => setView("current")}>적용 상품<span className="sm-tab-count">{current.length}</span></button>
-              <button type="button" className={`sm-tab ${view === "history" ? "is-active" : ""}`} onClick={() => setView("history")}>히스토리<span className="sm-tab-count">{applies.length}</span></button>
-            </div>
-          </div>
+          <span className="b2b-card-title">적용 현황</span>
           <div className="b2b-page-actions">
             <button type="button" className="b2b-btn-secondary" disabled={shownNos.length === 0} onClick={copyNos}>상품번호 복사{shownNos.length ? ` (${shownNos.length})` : ""}</button>
             <button type="button" className="b2b-btn-secondary" disabled={loadingApplies || loadingCurrent} onClick={reloadStatus}>다시 불러오기</button>
           </div>
         </div>
         <div className="sm-tabbar" style={{ marginTop: "var(--sm-space-4)" }}>
-          {view === "history" && (["전체", ...APPLY_STATUSES] as StatusTab[]).map((s) => (
-            <button key={s} type="button" className={`sm-tab ${fStatus === s ? "is-active" : ""}`} onClick={() => setFStatus(s)}>
-              {s}<span className="sm-tab-count">{counts[s]}</span>
-            </button>
-          ))}
+          <button type="button" className={`sm-tab ${view === "current" ? "is-active" : ""}`} onClick={() => setView("current")}>적용 상품<span className="sm-tab-count">{current.length}</span></button>
+          <button type="button" className={`sm-tab ${view === "history" ? "is-active" : ""}`} onClick={() => setView("history")}>히스토리<span className="sm-tab-count">{applies.length}</span></button>
+          <span className="dp-tabbar-gap" aria-hidden="true" />
           <select className="b2b-input dp-filter-kind" value={fKind} onChange={(e) => { setFKind(e.target.value as Kind); setFId(""); }} aria-label="구분">
             <option value="source">소스</option>
             <option value="set" disabled={setsOff}>조합</option>
@@ -638,6 +630,15 @@ export default function DetailSendPage() {
           </select>
           <input className="b2b-input sm-tab-search" value={fNo} inputMode="numeric" placeholder="상품번호" aria-label="상품번호" onChange={(e) => setFNo(e.target.value)} />
         </div>
+        {view === "history" && (
+          <div className="sm-tabbar">
+            {(["전체", ...APPLY_STATUSES] as StatusTab[]).map((s) => (
+              <button key={s} type="button" className={`sm-tab ${fStatus === s ? "is-active" : ""}`} onClick={() => setFStatus(s)}>
+                {s}<span className="sm-tab-count">{counts[s]}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {view === "current" ? (
           loadingCurrent ? (
             <div className="b2b-loading">불러오는 중</div>

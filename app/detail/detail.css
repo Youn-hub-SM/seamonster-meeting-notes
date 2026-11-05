@@ -53,6 +53,7 @@
 .dp-send-foot { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-top: var(--sm-space-4); }
 
 /* 적용 현황 */
+.dp-tabbar-gap { width: 1px; height: 24px; background: var(--sm-border); margin: 0 var(--sm-space-2); flex: 0 0 auto; } /* 보기 탭과 필터 사이 구분선 */
 .dp-filter-kind { width: 96px; flex: 0 0 auto; }
 .dp-filter-select { width: 200px; max-width: 100%; }
 .dp-err-cell { max-width: 320px; white-space: normal; color: var(--sm-danger); font-size: var(--sm-fs-xs); }
