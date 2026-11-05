@@ -11,6 +11,8 @@ type Apply = {
   id: number; source_id: number | null; source_version: number | null; product_no: number; product_name: string | null; position: Position;
   status: ApplyStatus; error: string | null; verified: boolean | null; requested_by: string | null; created_at: string; executed_at: string | null;
   command?: string; set_id?: number | null; set_name?: string | null; members?: SetMember[] | null;
+  /** 적용 상품 보기(current=1): 지금 그 상품에 들어 있는 소스 전부 [{source_id, version}] (전체 교체로 덮인 것은 제외) */
+  present?: { source_id: number; version: number }[];
 };
 type StatusTab = "전체" | ApplyStatus;
 type Kind = "source" | "set";
@@ -655,29 +657,41 @@ export default function DetailSendPage() {
             <div className="b2b-table-wrap is-sticky-head">
               <table className="b2b-table">
                 <thead>
-                  <tr><th>상품번호</th><th>상품명</th><th>들어간 소스 · 조합</th><th>버전</th><th>자리</th><th>마커 확인</th><th>마지막 적용</th></tr>
+                  <tr><th>상품번호</th><th>상품명</th><th>지금 들어 있는 소스</th><th>마지막으로 넣은 것</th><th>마커 확인</th><th>마지막 적용</th></tr>
                 </thead>
                 <tbody>
                   {current.map((a) => {
-                    const stale = isStale(a);
+                    const present = a.present || [];
                     const isSet = a.command === "set";
                     return (
                       <tr key={a.product_no}>
                         <td className="num">{a.product_no}</td>
                         <td>{a.product_name || <span className="sm-faint">-</span>}</td>
                         <td>
+                          {present.length === 0 ? <span className="sm-faint">-</span> : present.map((m, i) => {
+                            const cur = sources.find((s) => s.id === m.source_id)?.version ?? m.version;
+                            const hit = fKind === "source" && fId && String(m.source_id) === fId;
+                            return (
+                              <span key={m.source_id} className={hit ? "dp-present-hit" : undefined}>
+                                {i > 0 && <span className="sm-faint"> · </span>}
+                                {srcName(m.source_id)} <span className="sm-faint num">v{m.version}{cur > m.version ? " 구버전" : ""}</span>
+                              </span>
+                            );
+                          })}
+                        </td>
+                        <td>
                           {isSet ? (
                             <>
                               <span>조합 · {a.set_name || `#${a.set_id}`}</span>
-                              <span className="sm-faint dp-cell-sub">{(a.members || []).map((m) => srcName(m.source_id)).join(" › ")}</span>
+                              <span className="sm-faint dp-cell-sub">{POSITION_KO[a.position] || a.position} · {(a.members || []).map((m) => srcName(m.source_id)).join(" › ")}</span>
                             </>
-                          ) : (a.source_id ? srcName(a.source_id) : "-")}
+                          ) : (
+                            <>
+                              <span>{a.source_id ? srcName(a.source_id) : "-"}</span>
+                              <span className="sm-faint dp-cell-sub">{POSITION_KO[a.position] || a.position}</span>
+                            </>
+                          )}
                         </td>
-                        <td className="num">
-                          {isSet ? (a.members || []).map((m) => `v${m.version}`).join("·") : `v${a.source_version ?? "-"}`}
-                          {stale && <span className="sm-faint"> 구버전</span>}
-                        </td>
-                        <td className="sm-nowrap">{POSITION_KO[a.position] || a.position}</td>
                         <td>{a.verified === true ? "확인" : a.verified === false ? <span className="sm-faint">미확인</span> : <span className="sm-faint">-</span>}</td>
                         <td className="sm-nowrap">{a.executed_at ? dateTime(a.executed_at) : <span className="sm-faint">-</span>}</td>
                       </tr>

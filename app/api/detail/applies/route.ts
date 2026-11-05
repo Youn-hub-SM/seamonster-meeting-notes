@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { isAdminReq } from "@/app/lib/admin-req";
-import { POSITIONS, type SetMember } from "@/app/lib/detail-page";
+import { POSITIONS, computePresence, type SetMember } from "@/app/lib/detail-page";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,39 +77,33 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, names: out });
     }
 
+    // ── 적용 상태 = 지금 상품에 들어 있는 소스(computePresence) — ?applied_for=ID 와 ?current=1 공용 ──
+    //  완료 행을 오래된 순으로 따라가며 전체 교체는 그 전 블록을 지우고 맨 앞/맨 뒤는 더한다.
+    //  그래서 예전에 쏜 소스라도 뒤에 전체 교체로 덮였으면 '적용됨'에서 빠진다(히스토리에는 남는다).
     const appliedFor = Number(sp.get("applied_for"));
-    if (Number.isInteger(appliedFor) && appliedFor > 0) {
-      // 그 소스가 들어간 상품: 상품별 최신 완료 행에 소스가 포함돼 있으면 '적용됨'
-      const res = await readApplies(sb, (cols) => sb.from("detail_applies").select(cols).eq("status", "완료").order("created_at", { ascending: false }).limit(5000));
-      if ("error" in res) { if (isMissing(res.error)) return MISSING; throw res.error; }
-      const seen = new Map<number, boolean>(); // product_no → 최신 완료 행이 소스를 포함하는가(첫 행만)
-      for (const r of res.rows) {
-        if (!memberIds(r).includes(appliedFor)) continue;
-        if (!seen.has(r.product_no)) seen.set(r.product_no, true);
-      }
-      return NextResponse.json({ ok: true, product_nos: Array.from(seen.keys()) });
-    }
-
-    if (sp.get("current") === "1") {
-      // 적용 상품 — 상품마다 최신 완료 행 한 줄. source_id 면 그 소스가 든 최신 완료 행, set_id 면 그 조합으로 쏜 최신 완료 행.
-      //  (상품의 '현재 상태'는 가장 최근 완료 행이 대표한다. 소스 재전송 뒤엔 그 행이 최신이 된다)
-      const cSid = Number(sp.get("source_id"));
-      const cSet = Number(sp.get("set_id"));
-      const cPno = Number(sp.get("product_no"));
+    const wantCurrent = sp.get("current") === "1";
+    if ((Number.isInteger(appliedFor) && appliedFor > 0) || wantCurrent) {
+      const cSid = wantCurrent ? Number(sp.get("source_id")) : appliedFor;
+      const cSet = wantCurrent ? Number(sp.get("set_id")) : NaN;
+      const cPno = wantCurrent ? Number(sp.get("product_no")) : NaN;
       const res = await readApplies(sb, (cols) => {
-        let q = sb.from("detail_applies").select(cols).eq("status", "완료").order("created_at", { ascending: false });
+        let q = sb.from("detail_applies").select(cols).eq("status", "완료").order("id", { ascending: true });
         if (Number.isInteger(cPno) && cPno > 0) q = q.eq("product_no", cPno);
-        if (Number.isInteger(cSet) && cSet > 0 && cols === SET_COLS) q = q.eq("set_id", cSet);
         return q.limit(5000);
       });
       if ("error" in res) { if (isMissing(res.error)) return MISSING; throw res.error; }
-      const byProduct = new Map<number, ApplyRow>();
-      for (const r of res.rows) {
-        if (Number.isInteger(cSid) && cSid > 0 && !memberIds(r).includes(cSid)) continue;
-        if (!byProduct.has(r.product_no)) byProduct.set(r.product_no, r);
+      const presence = computePresence(res.rows);
+      const out: (ApplyRow & { present: { source_id: number; version: number }[] })[] = [];
+      for (const [productNo, p] of presence) {
+        if (Number.isInteger(cSid) && cSid > 0 && !p.sources.has(cSid)) continue;
+        // 조합 필터: 그 조합으로 넣은 블록이 아직 하나라도 살아 있는 상품
+        if (Number.isInteger(cSet) && cSet > 0 && !Array.from(p.sources.values()).some((v) => v.via.set_id === cSet)) continue;
+        const via = Number.isInteger(cSid) && cSid > 0 ? p.sources.get(cSid)!.via : p.last;
+        out.push({ ...via, product_no: productNo, present: Array.from(p.sources, ([source_id, v]) => ({ source_id, version: v.version })) });
       }
-      const rows = Array.from(byProduct.values()).sort((a, b) => a.product_no - b.product_no);
-      return NextResponse.json({ ok: true, current: rows, sets: res.sets });
+      out.sort((a, b) => a.product_no - b.product_no);
+      if (!wantCurrent) return NextResponse.json({ ok: true, product_nos: out.map((r) => r.product_no) });
+      return NextResponse.json({ ok: true, current: out, sets: res.sets });
     }
 
     const sid = Number(sp.get("source_id"));

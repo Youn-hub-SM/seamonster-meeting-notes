@@ -61,6 +61,40 @@ export function mergeSet(current: string, members: SetMember[], position: Positi
   return position === "prepend" ? `${blocks}\n${rest}` : `${rest}\n${blocks}`;
 }
 
+/** 적용 기록 한 행(완료된 것) — 지금 상품에 어떤 소스가 들어 있는지 계산하는 데 필요한 칸만 */
+export type PresenceRow = {
+  id: number; product_no: number; position: string; command?: string | null;
+  source_id?: number | null; source_version?: number | null; members?: SetMember[] | null;
+};
+export type Presence<R extends PresenceRow> = {
+  /** 지금 들어 있는 소스 id → 그 소스를 마지막으로 넣은 행과 그때 버전 */
+  sources: Map<number, { via: R; version: number }>;
+  /** 이 상품에 마지막으로 완료된 행 */
+  last: R;
+};
+
+/**
+ * 상품별 '지금 들어 있는 소스' — 완료 행을 오래된 순으로 따라간다.
+ *  전체 교체 행은 그 전 블록을 전부 지우고(소스 하나 또는 조합 구성만 남음), 맨 앞/맨 뒤 행은 더한다.
+ *  같은 소스를 다시 쏘면 버전만 갱신. (화면 밖에서 편집기로 지운 것은 알 수 없다)
+ */
+export function computePresence<R extends PresenceRow>(completedRows: R[]): Map<number, Presence<R>> {
+  const rows = [...completedRows].sort((a, b) => a.id - b.id);
+  const out = new Map<number, Presence<R>>();
+  for (const r of rows) {
+    const ids: { id: number; version: number }[] = r.command === "set" && Array.isArray(r.members)
+      ? r.members.map((m) => ({ id: Number(m.source_id), version: Number(m.version) }))
+      : (r.source_id ? [{ id: r.source_id, version: r.source_version ?? 0 }] : []);
+    if (ids.length === 0) continue;
+    let p = out.get(r.product_no);
+    if (!p) { p = { sources: new Map(), last: r }; out.set(r.product_no, p); }
+    if (r.position === "replace") p.sources.clear();
+    for (const m of ids) p.sources.set(m.id, { via: r, version: m.version });
+    p.last = r;
+  }
+  return out;
+}
+
 /** 쉼표·공백·줄바꿈으로 적은 상품번호를 정수 목록으로(중복 제거·순서 유지) */
 export function parseProductNos(text: string): number[] {
   const out: number[] = [];

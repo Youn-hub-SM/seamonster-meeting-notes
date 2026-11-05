@@ -46,6 +46,7 @@
 .dp-member-add .b2b-input { flex: 1 1 auto; }
 .dp-member-add .b2b-btn-secondary { flex: 0 0 auto; white-space: nowrap; }
 .dp-cell-sub { display: block; font-size: var(--sm-fs-xs); }
+.dp-present-hit { font-weight: 600; } /* 적용 상품 보기에서 지금 고른 소스 */
 
 /* ② 상품 */
 .dp-send-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sm-space-4); align-items: start; padding-top: var(--sm-space-4); }
