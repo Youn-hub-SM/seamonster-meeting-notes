@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 //  미들웨어 예외 경로(실행기의 Bearer 접근용)라 여기서 직접 인증한다.
 //
 //  화면(로그인 쿠키 — factory 역할 거부):
-//    GET ?source_id=&product_no=&limit=   → 적용 기록(최신순, 기본 200건). source_id 는 조합 안에 든 것도 잡는다
+//    GET ?source_id=&set_id=&product_no=&limit= → 적용 기록(최신순, 기본 200건). source_id 는 조합 안에 든 것도 잡는다, set_id 는 그 조합으로 쏜 행
 //    GET ?names=1,2,3                     → 카페24 카탈로그에서 상품명 조회 { "1": "상품명" }
 //    GET ?applied_for=SOURCE_ID           → 그 소스가 들어간 상품번호(완료 기준, 소스·조합 모두) — '전체 다시 쏘기'용
 //    POST { source_id, product_nos }      → 소스 하나 전송 요청. 관리자만.
@@ -91,11 +91,13 @@ export async function GET(req: NextRequest) {
     }
 
     const sid = Number(sp.get("source_id"));
+    const setId = Number(sp.get("set_id"));
     const pno = Number(sp.get("product_no"));
     const limit = Math.min(Math.max(Number(sp.get("limit")) || 200, 1), 1000);
     const res = await readApplies(sb, (cols) => {
       let q = sb.from("detail_applies").select(cols).order("created_at", { ascending: false });
       if (Number.isInteger(pno) && pno > 0) q = q.eq("product_no", pno);
+      if (Number.isInteger(setId) && setId > 0 && cols === SET_COLS) q = q.eq("set_id", setId);
       // 소스 필터는 조합 행까지 잡아야 해서 넉넉히 읽고 아래서 거른다
       return q.limit(Number.isInteger(sid) && sid > 0 ? Math.max(limit * 5, 1000) : limit);
     });

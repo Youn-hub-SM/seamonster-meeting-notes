@@ -11,10 +11,7 @@
 .dp-rules-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 .dp-rules-list li { font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-black); }
 
-/* KPI 3타일 — 다른 화면의 .b2b-dash-grid 와 같은 틀, 여백만 카드 간격에 맞춤 */
-.dp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sm-space-3); margin-bottom: var(--sm-space-5); }
-
-/* ① 소스: 왼쪽 목록 + 오른쪽 편집 */
+/* ① 소스 | 조합 — 왼쪽 목록 + 오른쪽 편집 */
 .dp-src-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--sm-space-4); align-items: start; padding-top: var(--sm-space-4); }
 @media (max-width: 1000px) { .dp-src-grid { grid-template-columns: minmax(0, 1fr); } }
 
@@ -33,12 +30,11 @@
 
 /* 편집 폼 */
 .dp-editor .b2b-field { margin-bottom: var(--sm-space-4); }
-.dp-code { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); line-height: 1.55; min-height: 360px; resize: vertical; white-space: pre; overflow: auto; tab-size: 2; }
-.dp-code.is-readonly { min-height: 160px; background: var(--sm-bg-subtle); }
+.dp-code { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); line-height: 1.55; min-height: 320px; resize: vertical; white-space: pre; overflow: auto; tab-size: 2; }
 .dp-nos { min-height: 88px; resize: vertical; font-family: var(--sm-mono); font-size: var(--sm-fs-base); }
 .dp-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 
-/* ③ 조합 — 구성 소스 순서 목록 */
+/* 조합 — 구성 소스 순서 목록 */
 .dp-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sm-space-1); }
 .dp-member { display: flex; align-items: center; gap: var(--sm-space-3); padding: 8px 12px; background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); }
 .dp-member-order { flex: 0 0 24px; font-size: var(--sm-fs-xs); font-weight: 600; color: var(--sm-text-mid); text-align: center; }
@@ -51,20 +47,13 @@
 .dp-member-add .b2b-btn-secondary { flex: 0 0 auto; white-space: nowrap; }
 .dp-cell-sub { display: block; font-size: var(--sm-fs-xs); }
 
-/* ② 미리보기 */
-.dp-preview-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
-.dp-preview-wrap { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-bg-subtle); padding: var(--sm-space-4); overflow: auto; }
-.dp-preview { display: block; margin: 0 auto; background: var(--sm-white); border: 1px solid var(--sm-border); height: 640px; width: 100%; max-width: 860px; }
-.dp-preview.is-mobile { max-width: 390px; }
-.dp-preview-raw { margin-top: var(--sm-space-3); }
-.dp-preview-raw summary { cursor: pointer; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-
-/* ③ 상품 */
+/* ② 상품 */
 .dp-send-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sm-space-4); align-items: start; padding-top: var(--sm-space-4); }
 @media (max-width: 1000px) { .dp-send-grid { grid-template-columns: minmax(0, 1fr); } }
 .dp-send-foot { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-top: var(--sm-space-4); }
 
 /* 적용 현황 */
-.dp-filter-select { width: 220px; max-width: 100%; }
+.dp-filter-kind { width: 96px; flex: 0 0 auto; }
+.dp-filter-select { width: 200px; max-width: 100%; }
 .dp-err-cell { max-width: 320px; white-space: normal; color: var(--sm-danger); font-size: var(--sm-fs-xs); }
 .dp-section { margin-bottom: var(--sm-space-6); }
