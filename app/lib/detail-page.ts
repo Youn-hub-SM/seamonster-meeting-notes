@@ -43,6 +43,24 @@ export function mergeDescription(current: string, sourceId: number, html: string
   return `${cur.trimEnd()}\n${block}`.trimStart();
 }
 
+/** 상세설명에서 소스 블록들을 전부 걷어낸다(조합 재전송·순서 재정렬용) */
+export function removeBlocks(current: string, sourceIds: number[]): string {
+  let out = current ?? "";
+  for (const id of sourceIds) out = out.replace(blockRegex(id), "");
+  return out.trim();
+}
+
+export type SetMember = { source_id: number; version: number; html: string };
+
+/** 조합(161): 구성 블록을 전부 걷어낸 뒤 조합 순서대로 묶어서 position 에 넣는다 */
+export function mergeSet(current: string, members: SetMember[], position: Position): string {
+  const blocks = members.map((m) => wrapBlock(m.source_id, m.html)).join("\n");
+  if (position === "replace") return blocks;
+  const rest = removeBlocks(current, members.map((m) => m.source_id));
+  if (!rest) return blocks;
+  return position === "prepend" ? `${blocks}\n${rest}` : `${rest}\n${blocks}`;
+}
+
 /** 쉼표·공백·줄바꿈으로 적은 상품번호를 정수 목록으로(중복 제거·순서 유지) */
 export function parseProductNos(text: string): number[] {
   const out: number[] = [];

@@ -38,6 +38,19 @@
 .dp-nos { min-height: 88px; resize: vertical; font-family: var(--sm-mono); font-size: var(--sm-fs-base); }
 .dp-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 
+/* ③ 조합 — 구성 소스 순서 목록 */
+.dp-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sm-space-1); }
+.dp-member { display: flex; align-items: center; gap: var(--sm-space-3); padding: 8px 12px; background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); }
+.dp-member-order { flex: 0 0 24px; font-size: var(--sm-fs-xs); font-weight: 600; color: var(--sm-text-mid); text-align: center; }
+.dp-member-name { flex: 1 1 auto; min-width: 0; font-size: var(--sm-fs-base); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-member-actions { display: flex; gap: var(--sm-space-3); flex: 0 0 auto; }
+.dp-member-actions .b2b-link-btn:disabled { opacity: .4; cursor: not-allowed; text-decoration: none; }
+.dp-members-empty { padding: 12px; font-size: var(--sm-fs-base); color: var(--sm-text-mid); border: 1px dashed var(--sm-border-strong); border-radius: var(--sm-radius); }
+.dp-member-add { display: flex; gap: var(--sm-space-2); margin-top: var(--sm-space-2); }
+.dp-member-add .b2b-input { flex: 1 1 auto; }
+.dp-member-add .b2b-btn-secondary { flex: 0 0 auto; white-space: nowrap; }
+.dp-cell-sub { display: block; font-size: var(--sm-fs-xs); }
+
 /* ② 미리보기 */
 .dp-preview-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
 .dp-preview-wrap { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-bg-subtle); padding: var(--sm-space-4); overflow: auto; }

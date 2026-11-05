@@ -28,13 +28,21 @@ export async function GET(req: NextRequest) {
     const sb = supabaseAdmin();
     const { data, error } = await sb.from("detail_sources").select("id, name, html, position, version, created_by, created_at, updated_by, updated_at").order("updated_at", { ascending: false });
     if (error) { if (isMissing(error)) return MISSING; throw error; }
-    // 소스별 적용 완료 상품 수(최신 완료 기준이 아니라 완료된 상품번호 distinct)
-    const { data: ap, error: aErr } = await sb.from("detail_applies").select("source_id, product_no, status");
-    if (aErr && !isMissing(aErr)) throw aErr;
+    // 소스별 적용 완료 상품 수(완료된 상품번호 distinct) — 조합(161)으로 들어간 것도 구성 소스마다 센다
+    type ApRow = { source_id: number | null; product_no: number; status: string; command?: string; members?: { source_id: number }[] | null };
+    let ap: ApRow[] = [];
+    {
+      const a = await sb.from("detail_applies").select("source_id, product_no, status, command, members").eq("status", "완료");
+      if (a.error && /command|members/i.test(a.error.message || "")) {
+        const b = await sb.from("detail_applies").select("source_id, product_no, status").eq("status", "완료");
+        if (b.error && !isMissing(b.error)) throw b.error;
+        ap = (b.data ?? []) as ApRow[];
+      } else if (a.error) { if (!isMissing(a.error)) throw a.error; } else ap = (a.data ?? []) as ApRow[];
+    }
     const counts: Record<number, Set<number>> = {};
-    for (const r of (ap ?? []) as { source_id: number; product_no: number; status: string }[]) {
-      if (r.status !== "완료") continue;
-      (counts[r.source_id] ||= new Set()).add(r.product_no);
+    for (const r of ap) {
+      const ids = r.command === "set" && Array.isArray(r.members) ? r.members.map((m) => Number(m.source_id)) : (r.source_id ? [r.source_id] : []);
+      for (const id of ids) (counts[id] ||= new Set()).add(r.product_no);
     }
     const sources = (data ?? []).map((s) => ({ ...s, applied_count: counts[s.id]?.size ?? 0 }));
     return NextResponse.json({ ok: true, sources });

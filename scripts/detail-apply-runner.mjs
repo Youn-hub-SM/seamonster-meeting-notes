@@ -46,6 +46,19 @@ function mergeDescription(current, id, html, position) {
   if (position === "prepend") return `${block}\n${cur}`.trimEnd();
   return `${cur.trimEnd()}\n${block}`.trimStart();
 }
+// 조합(161): 구성 블록을 전부 걷어낸 뒤 조합 순서대로 묶어서 position 에 넣는다 (= 순서 재정렬)
+function removeBlocks(current, ids) {
+  let out = current ?? "";
+  for (const id of ids) out = out.replace(blockRegex(id), "");
+  return out.trim();
+}
+function mergeSet(current, members, position) {
+  const blocks = members.map((m) => wrapBlock(m.source_id, m.html)).join("\n");
+  if (position === "replace") return blocks;
+  const rest = removeBlocks(current, members.map((m) => m.source_id));
+  if (!rest) return blocks;
+  return position === "prepend" ? `${blocks}\n${rest}` : `${rest}\n${blocks}`;
+}
 
 // ---- 카페24 토큰(실행당 1회, 파일 회전 저장) ----
 let cafe24 = null;
@@ -97,8 +110,8 @@ async function report(id, payload) {
   if (!res.ok) console.error(`  보고 실패 #${id} (HTTP ${res.status})`);
 }
 
-// 반영 뒤 공개 상품 페이지 원본 HTML(JS 없이)에 마커가 있는지 — 크롤러가 보는 것과 같은 조건
-async function verifyPublic(productNo, sourceId) {
+// 반영 뒤 공개 상품 페이지 원본 HTML(JS 없이)에 마커가 전부 있는지 — 크롤러가 보는 것과 같은 조건
+async function verifyPublic(productNo, sourceIds) {
   try {
     const res = await fetch(`${SHOP_URL}/product/detail.html?product_no=${productNo}`, {
       headers: { "User-Agent": "Mozilla/5.0 (seamonster-detail-verify)", "Cache-Control": "no-cache" },
@@ -106,7 +119,7 @@ async function verifyPublic(productNo, sourceId) {
     });
     if (!res.ok) return false;
     const html = await res.text();
-    return html.includes(markerOpen(sourceId)) && html.includes(markerClose(sourceId));
+    return sourceIds.every((id) => html.includes(markerOpen(id)) && html.includes(markerClose(id)));
   } catch { return false; }
 }
 
@@ -119,19 +132,23 @@ async function main() {
   console.log(`전송 ${applies.length}건 (${new Date().toISOString()})`);
 
   for (const a of applies) {
-    const tag = `#${a.id} 상품 ${a.product_no} 소스 ${a.source_id}`;
+    const isSet = a.command === "set" && Array.isArray(a.members) && a.members.length > 0;
+    const ids = isSet ? a.members.map((m) => Number(m.source_id)) : [a.source_id];
+    const tag = `#${a.id} 상품 ${a.product_no} ${isSet ? `조합 ${a.set_id} [${ids.join(",")}]` : `소스 ${a.source_id}`}`;
     try {
+      if (!isSet && (!a.source_id || typeof a.html !== "string")) throw new Error("소스 내용이 없는 명령입니다");
       const got = await cafe24Api("GET", `/products/${a.product_no}?shop_no=1&fields=product_no,product_name,description,mobile_description`);
       const prod = got.product;
       if (!prod) throw new Error("상품을 찾을 수 없습니다");
       const curDesc = String(prod.description ?? "");
       const curMobile = String(prod.mobile_description ?? "");
-      const request = { description: mergeDescription(curDesc, a.source_id, a.html, a.position) };
+      const apply = (cur) => (isSet ? mergeSet(cur, a.members, a.position) : mergeDescription(cur, a.source_id, a.html, a.position));
+      const request = { description: apply(curDesc) };
       // 모바일 상세설명을 따로 쓰는 상품이면 거기에도 같은 규칙으로(PC 만 바뀌고 모바일은 그대로인 사고 방지)
-      if (curMobile.trim()) request.mobile_description = mergeDescription(curMobile, a.source_id, a.html, a.position);
+      if (curMobile.trim()) request.mobile_description = apply(curMobile);
       await cafe24Api("PUT", `/products/${a.product_no}`, { shop_no: 1, request });
       await sleep(1500); // 캐시·반영 대기
-      const verified = await verifyPublic(a.product_no, a.source_id);
+      const verified = await verifyPublic(a.product_no, ids);
       await report(a.id, { ok: true, verified, backup_html: curDesc });
       console.log(`  ${tag} 완료${verified ? "" : " (공개 페이지 마커 미확인)"}`);
     } catch (e) {
