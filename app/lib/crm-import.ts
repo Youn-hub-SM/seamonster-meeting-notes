@@ -101,9 +101,16 @@ export function planCrmImport(
     if (!c("msg")) report.errors.push("본문이 비어 있습니다");
     // 트리거
     const trigLabel = c("trigger");
-    const trig = CRM_TRIGGERS.find((t) => t.label === trigLabel || t.key === trigLabel);
+    const norm = (v: string) => v.replace(/\s+/g, "");
+    let trig = CRM_TRIGGERS.find((t) => norm(t.label) === norm(trigLabel) || t.key === trigLabel);
     if (!trigLabel) report.errors.push("트리거가 비어 있습니다");
     else if (!trig) report.errors.push(`트리거 '${trigLabel}' 은 선택지에 없습니다 (${CRM_TRIGGERS.map((t) => t.label).join("/")})`);
+    // 상시로 적었는데 조건 메모 첫 줄이 사건 이름이면 그 트리거로(네이버 솔라피 줄: 결제완료·구매확정·배송중·배송완료)
+    if (trig?.key === "always") {
+      const first = norm(c("note").split(/\r?\n/)[0] ?? "");
+      const byNote = CRM_TRIGGERS.find((t) => t.key !== "always" && first.startsWith(norm(t.label))) ?? (first.startsWith("배송중") ? CRM_TRIGGERS.find((t) => t.key === "shipped") : undefined);
+      if (byNote) { trig = byNote; report.fixes.push(`조건 메모 '${c("note").split(/\r?\n/)[0]}' 로 트리거를 '${byNote.label}' 로 바꿈`); }
+    }
     // D+n
     let offset: number | null = null;
     let offsetNote = c("note");

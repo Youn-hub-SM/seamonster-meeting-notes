@@ -94,6 +94,8 @@ export const CRM_TRIGGERS: { key: string; label: string; estimable: boolean }[] 
   { key: "reorder", label: "재구매", estimable: true },
   { key: "shipped", label: "출고", estimable: true },
   { key: "delivered", label: "배송 완료", estimable: true },
+  { key: "paid", label: "결제 완료", estimable: false },      // 2026-11-06 대표: 네이버 결제완료 알림(주문 완료 안내 등)
+  { key: "confirmed", label: "구매 확정", estimable: false }, // 2026-11-06 대표: 네이버 구매확정 알림(설문·사업자 상담 등)
   { key: "cart", label: "장바구니 이탈", estimable: false },
   { key: "subscription", label: "정기배송 회차", estimable: true },
   { key: "inactive", label: "마지막 구매 후 경과", estimable: true },
