@@ -55,10 +55,9 @@ export type CrmMessageInput = Omit<CrmMessage, "id" | "created_at" | "updated_at
 export const CRM_CUSTOMERS: { key: string; label: string }[] = [
   { key: "naver", label: "네이버" },
   { key: "mall", label: "공식몰" },
-  { key: "kakao", label: "카카오" },   // 톡스토어 구매 고객(2026-11-06 대표: 네이버·카카오 구매 고객 분류)
   { key: "etc", label: "기타" },
 ];
-/** 발송 수단별로 보낼 수 있는 고객군 — 솔라피는 네이버 주문 고객에게만(2026-11-06 대표). 비면 제한 없음 */
+/** 발송 수단별로 보낼 수 있는 고객군 — 솔라피는 네이버 주문 고객에게만, 카카오 메시지(데이터라이즈·블룸ai)는 보통 공식몰(2026-11-06 대표). 비면 제한 없음 */
 export const CRM_CHANNEL_CUSTOMERS: Record<string, string[]> = { solapi: ["naver"] };
 export const CRM_CUSTOMER_LABEL: Record<string, string> = Object.fromEntries(CRM_CUSTOMERS.map((c) => [c.key, c.label]));
 

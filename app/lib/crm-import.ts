@@ -30,7 +30,7 @@ const COL = {
 
 // 양식 선택지 라벨 → 저장 키. 선택지 표(b2b_settings crm_options)에 있으면 그 키, 없으면 아래 기본, 그래도 없으면 라벨 그대로(한글 키 허용)
 const CHANNEL_KEYS: Record<string, string> = { "솔라피": "solapi", "카카오": "kakao", "카페24": "cafe24", "블룸ai": "bloomai", "블룸 ai": "bloomai", "데이터라이즈": "datarize", "알리고 문자": "aligo", "네이버 톡톡": "navertalk", "톡스토어": "talkstore", "이메일": "email", "기타": "etc" };
-const CUSTOMER_KEYS: Record<string, string> = { "네이버": "naver", "공식몰": "mall", "카카오": "kakao", "톡스토어": "kakao", "기타": "etc" };
+const CUSTOMER_KEYS: Record<string, string> = { "네이버": "naver", "공식몰": "mall", "기타": "etc" };
 const MSG_TYPE_KEYS: Record<string, string> = { "알림톡": "alimtalk", "친구톡": "friendtalk", "브랜드메시지": "brandmessage", "문자": "sms", "톡톡": "talktalk", "이메일": "email", "기타": "etc" };
 
 const cellText = (v: ExcelJS.CellValue): string => {
