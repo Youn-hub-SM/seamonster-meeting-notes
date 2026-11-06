@@ -2,7 +2,7 @@
 //  2026-11-06. 규칙: 한 줄 = 메시지 하나, 같은 메시지명은 덮어쓴다(뒤 줄 우선), 빨간 칸(메시지명·발송 수단·트리거·본문)이 비면 그 줄은 건너뛴다.
 //  UTM 은 app/lib/utm-rules.ts 의 checkCrmRow 로 줄마다 검사 — 어긋나면 경고(등록은 됨), http·빈 캠페인/매체 칸은 자동 보정.
 import ExcelJS from "exceljs";
-import { CRM_TRIGGERS, EMPTY_CRM_MESSAGE, normalizeCrmMessage, statusKey, type CrmMessage, type CrmMessageInput, type CrmOption, type CrmOptions } from "./crm";
+import { CRM_CHANNEL_CUSTOMERS, CRM_TRIGGERS, EMPTY_CRM_MESSAGE, normalizeCrmMessage, statusKey, type CrmMessage, type CrmMessageInput, type CrmOption, type CrmOptions } from "./crm";
 import { CRM_MEDIUM_VALUES, checkCrmRow, isTrackedUrl, parseUtm, type CrmMediumExtra } from "./utm-rules";
 
 export type ImportRowReport = {
@@ -30,7 +30,7 @@ const COL = {
 
 // 양식 선택지 라벨 → 저장 키. 선택지 표(b2b_settings crm_options)에 있으면 그 키, 없으면 아래 기본, 그래도 없으면 라벨 그대로(한글 키 허용)
 const CHANNEL_KEYS: Record<string, string> = { "솔라피": "solapi", "카카오": "kakao", "카페24": "cafe24", "블룸ai": "bloomai", "블룸 ai": "bloomai", "데이터라이즈": "datarize", "알리고 문자": "aligo", "네이버 톡톡": "navertalk", "톡스토어": "talkstore", "이메일": "email", "기타": "etc" };
-const CUSTOMER_KEYS: Record<string, string> = { "네이버": "naver", "공식몰": "mall", "기타": "etc" };
+const CUSTOMER_KEYS: Record<string, string> = { "네이버": "naver", "공식몰": "mall", "카카오": "kakao", "톡스토어": "kakao", "기타": "etc" };
 const MSG_TYPE_KEYS: Record<string, string> = { "알림톡": "alimtalk", "친구톡": "friendtalk", "브랜드메시지": "brandmessage", "문자": "sms", "톡톡": "talktalk", "이메일": "email", "기타": "etc" };
 
 const cellText = (v: ExcelJS.CellValue): string => {
@@ -127,6 +127,10 @@ export function planCrmImport(
     if (cu?.isNew) noteNew(newOptions.customers, cu.option);
     const mt = c("msgType") ? pickKey(c("msgType"), ctx.options.msgTypes, MSG_TYPE_KEYS) : null;
     if (mt?.isNew) noteNew(newOptions.msgTypes, mt.option);
+    // 발송 수단이 받는 고객군 제한(솔라피 = 네이버 주문 고객만)
+    const allowedCust = CRM_CHANNEL_CUSTOMERS[ch.key];
+    if (allowedCust && cu && !allowedCust.includes(cu.key)) report.warnings.push(`${c("channel")} 는 ${allowedCust.map((k) => ctx.options.customers.find((o) => o.key === k)?.label ?? k).join("·")} 고객에게만 보내는데 고객군이 ${c("customer")}`);
+    if (allowedCust && !cu) report.warnings.push(`${c("channel")} 는 고객군이 필요합니다(${allowedCust.join("·")})`);
     // 링크·UTM
     let urls = c("urls").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     let campaign = c("campaign").split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0] ?? "";
