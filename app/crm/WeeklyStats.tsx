@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { TrendChart } from "@/app/components/charts";
 import { qty, qtyText, wonText } from "@/app/lib/format";
 
@@ -19,7 +20,13 @@ const pct = (a: number | null, b: number) => (a == null || !b ? "-" : `${((a / b
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const shiftDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
 
-export default function WeeklyStats() {
+// 발송 수단 → 판매 채널(고객군). 세그먼트가 고객군이면 그 채널 것만 보인다. 없는 키는 '전체'에서만.
+const SOURCE_CHANNEL: Record<string, string> = { solapi: "naver", naver_talk: "naver", datarize_brand: "mall", datarize_alimtalk: "mall", blumn: "mall", sms: "mall" };
+const MEDIUM_CHANNEL = (medium: string): string => (medium.endsWith("-naver") ? "naver" : medium.endsWith("-cafe24") ? "mall" : "");
+const CUSTOMER_LABEL_KEY: Record<string, string> = { "네이버": "naver", "공식몰": "mall", "기타": "etc" };
+
+export default function WeeklyStats({ channel = "" }: { channel?: string }) {
+  const confirm = useConfirm();
   const [week, setWeek] = useState<string>(kstToday());
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,15 +73,26 @@ export default function WeeklyStats() {
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm("이 줄을 지웁니다. 되돌릴 수 없습니다.")) return;
+    if (!(await confirm({ title: "발송 기록 삭제", body: "이 줄을 지웁니다. 되돌릴 수 없습니다.", action: "기록 삭제" }))) return;
     const j = await fetch(`/api/crm/stats?id=${id}`, { method: "DELETE" }).then((r) => r.json());
     if (!j.ok) { setMsg(j.error || "삭제 실패"); return; }
     await load(week);
   };
 
-  const totalSent = useMemo(() => (data?.sources || []).reduce((s, x) => s + x.sent, 0), [data]);
-  const gaTotal = useMemo(() => (data?.ga || []).reduce((s, g) => ({ sessions: s.sessions + g.sessions, purchases: s.purchases + g.purchases, revenue: s.revenue + g.revenue }), { sessions: 0, purchases: 0, revenue: 0 }), [data]);
-  const trendData = useMemo(() => (data?.trend || []).map((t) => { const sum = Object.values(t.bySource).reduce((a, b) => a + b, 0); const tip = Object.entries(t.bySource).map(([k, v]) => `${data?.sourceDefs.find((s) => s.key === k)?.label || k} ${qty(v)}`).join(" · "); return { label: fmtDate(t.week), value: sum, tip: tip || "발송 없음" }; }), [data]);
+  // 판매 채널 세그먼트 적용 — 수단·GA 매체·추적 메시지·추이·기록 전부
+  const v = useMemo(() => {
+    if (!data) return null;
+    const srcOk = (k: string) => !channel || SOURCE_CHANNEL[k] === channel;
+    const sources = data.sources.filter((s) => srcOk(s.source));
+    const ga = data.ga ? data.ga.filter((g) => !channel || MEDIUM_CHANNEL(g.medium) === channel) : data.ga;
+    const tracked = (data.tracked || []).filter((t) => !channel || (CUSTOMER_LABEL_KEY[t.customer] || t.customer) === channel || (!t.customer && MEDIUM_CHANNEL(t.medium) === channel));
+    const rows = data.rows.filter((r) => srcOk(r.source));
+    const trend = data.trend.map((t) => ({ week: t.week, bySource: Object.fromEntries(Object.entries(t.bySource).filter(([k]) => srcOk(k))) }));
+    return { ...data, sources, ga, tracked, rows, trend };
+  }, [data, channel]);
+  const totalSent = useMemo(() => (v?.sources || []).reduce((s, x) => s + x.sent, 0), [v]);
+  const gaTotal = useMemo(() => (v?.ga || []).reduce((s, g) => ({ sessions: s.sessions + g.sessions, purchases: s.purchases + g.purchases, revenue: s.revenue + g.revenue }), { sessions: 0, purchases: 0, revenue: 0 }), [v]);
+  const trendData = useMemo(() => (v?.trend || []).map((t) => { const sum = Object.values(t.bySource).reduce((a, b) => a + b, 0); const tip = Object.entries(t.bySource).map(([k, n]) => `${v?.sourceDefs.find((s) => s.key === k)?.label || k} ${qty(n)}`).join(" · "); return { label: fmtDate(t.week), value: sum, tip: tip || "발송 없음" }; }), [v]);
   const defs = data?.sourceDefs || [];
 
   return (
@@ -117,10 +135,10 @@ export default function WeeklyStats() {
 
       <section className="b2b-card" style={{ marginBottom: 14 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">추적 메시지 클릭률 (utm 단 메시지)</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>클릭률 = GA 세션 ÷ 발송 수</span></div>
-        {loading ? <p className="sm-faint">불러오는 중...</p> : data?.trackedNote ? <div className="b2b-error">{data.trackedNote}</div> : !data?.tracked?.length ? <p className="sm-faint" style={{ fontSize: 13 }}>메시지맵에 UTM 캠페인이 적힌 메시지가 없습니다. 표(편집) 탭에서 UTM 캠페인을 넣으면 여기 나타납니다.</p> : (
+        {loading ? <p className="sm-faint">불러오는 중...</p> : v?.trackedNote ? <div className="b2b-error">{v?.trackedNote}</div> : !v?.tracked?.length ? <p className="sm-faint" style={{ fontSize: 13 }}>UTM 캠페인이 적힌 메시지가 없습니다. 드로어에서 UTM 캠페인을 넣으면 여기 나타납니다.</p> : (
           <div className="b2b-table-wrap"><table className="b2b-table">
             <thead><tr><th>메시지</th><th>트리거</th><th>매체</th><th className="num">발송</th><th className="num">클릭(세션)</th><th className="num">클릭률</th><th className="num">구매</th><th className="num">매출</th></tr></thead>
-            <tbody>{data.tracked.map((t) => {
+            <tbody>{v!.tracked.map((t) => {
               const tone = t.ctr == null || t.targetCtr == null ? undefined : t.ctr >= t.targetCtr ? "var(--sm-success)" : "var(--sm-danger)";
               return (
                 <tr key={t.id}>
@@ -143,11 +161,11 @@ export default function WeeklyStats() {
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
         <section className="b2b-card">
           <div className="b2b-card-head"><span className="b2b-card-title">수단별 발송</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>합계 {qtyText(totalSent, "건")}</span></div>
-          {loading ? <p className="sm-faint">불러오는 중...</p> : !data?.sources.length ? <p className="sm-faint" style={{ fontSize: 13 }}>이 주의 발송 기록이 없습니다. 솔라피는 [솔라피 가져오기], 데이터라이즈·블룸은 CSV 업로드(준비 중), 나머지는 [직접 입력].</p> : (
+          {loading ? <p className="sm-faint">불러오는 중...</p> : !v?.sources.length ? <p className="sm-faint" style={{ fontSize: 13 }}>이 주의 발송 기록이 없습니다. 솔라피는 [솔라피 가져오기], 데이터라이즈·블룸은 CSV 업로드(준비 중), 나머지는 [직접 입력].</p> : (
             <div className="b2b-table-wrap"><table className="b2b-table">
               <thead><tr><th>발송 수단</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th>수집</th></tr></thead>
               <tbody>
-                {data.sources.map((s) => {
+                {v!.sources.map((s) => {
                   const def = defs.find((d) => d.key === s.source);
                   const isOpen = !!open[s.source];
                   return [
@@ -175,11 +193,11 @@ export default function WeeklyStats() {
         </section>
 
         <section className="b2b-card">
-          <div className="b2b-card-head"><span className="b2b-card-title">랜딩 성과 (GA · utm source=kakao)</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>{data?.ga ? `세션 ${qty(gaTotal.sessions)} · 구매 ${qty(gaTotal.purchases)} · ${wonText(gaTotal.revenue)}` : ""}</span></div>
-          {loading ? <p className="sm-faint">불러오는 중...</p> : data?.ga === null ? <p className="sm-faint" style={{ fontSize: 13 }}>{data?.gaNote || "GA4 가 연결되어 있지 않습니다."}</p> : !data?.ga?.length ? <p className="sm-faint" style={{ fontSize: 13 }}>이 주에 kakao 로 들어온 세션이 없습니다. 메시지 링크의 utm_source 가 kakao 인지 확인하세요.</p> : (
+          <div className="b2b-card-head"><span className="b2b-card-title">랜딩 성과 (GA · utm source=kakao)</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>{v?.ga ? `세션 ${qty(gaTotal.sessions)} · 구매 ${qty(gaTotal.purchases)} · ${wonText(gaTotal.revenue)}` : ""}</span></div>
+          {loading ? <p className="sm-faint">불러오는 중...</p> : v?.ga === null ? <p className="sm-faint" style={{ fontSize: 13 }}>{data?.gaNote || "GA4 가 연결되어 있지 않습니다."}</p> : !v?.ga?.length ? <p className="sm-faint" style={{ fontSize: 13 }}>이 주에 kakao 로 들어온 세션이 없습니다. 메시지 링크의 utm_source 가 kakao 인지 확인하세요.</p> : (
             <div className="b2b-table-wrap"><table className="b2b-table">
               <thead><tr><th>매체(utm_medium)</th><th className="num">세션</th><th className="num">구매</th><th className="num">구매전환율</th><th className="num">매출</th></tr></thead>
-              <tbody>{data.ga.map((g) => (
+              <tbody>{v!.ga.map((g) => (
                 <tr key={g.medium}><td>{g.medium}</td><td className="num">{qty(g.sessions)}</td><td className="num">{qty(g.purchases)}</td><td className="num">{pct(g.purchases, g.sessions)}</td><td className="num">{wonText(g.revenue)}</td></tr>
               ))}</tbody>
             </table></div>
@@ -193,12 +211,12 @@ export default function WeeklyStats() {
         <TrendChart data={trendData} />
       </section>
 
-      {!!data?.rows.length && (
+      {!!v?.rows.length && (
         <section className="b2b-card" style={{ marginTop: 14 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">이 주의 기록</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>{qtyText(data.rows.length, "줄")}</span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title">이 주의 기록</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>{qtyText(v!.rows.length, "줄")}</span></div>
           <div className="b2b-table-wrap"><table className="b2b-table">
             <thead><tr><th>날짜</th><th>수단</th><th>템플릿·캠페인</th><th className="num">발송</th><th className="num">클릭</th><th>메모</th><th>출처</th><th /></tr></thead>
-            <tbody>{data.rows.map((r) => (
+            <tbody>{v!.rows.map((r) => (
               <tr key={r.id}>
                 <td style={{ whiteSpace: "nowrap" }}>{r.date}{r.grain === "week" ? " 주" : ""}</td>
                 <td>{defs.find((d) => d.key === r.source)?.label || r.source}</td>

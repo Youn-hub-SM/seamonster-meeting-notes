@@ -1,955 +1,207 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useConfirm } from "@/app/components/Feedback";
+// CRM 메시지맵 — 판매 채널(고객군) 세그먼트 + 목록·여정·성과 + 드로어. 2026-11-06 개편(docs/crm-map-redesign-plan.md, 대표 결정 1~6 전부 (가)).
+//  데이터·API 는 그대로(/api/crm/messages·options·ga-stats·stats). 메시지 편집은 드로어 한 곳.
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import {
-  CrmMessage, CrmMessageInput, CrmPerf, EMPTY_CRM_MESSAGE,
-  CRM_CHANNEL_LABEL, CRM_CUSTOMER_LABEL, CRM_MSG_TYPE_LABEL,
-  CRM_STATUSES, CRM_STATUS_LABEL, statusKey, crmTags, crmOnDate,
+  CrmMessage, CrmMessageInput, EMPTY_CRM_MESSAGE,
+  CRM_CHANNEL_LABEL, CRM_CUSTOMER_LABEL, CRM_MSG_TYPE_LABEL, statusKey, isTracked,
   DEFAULT_CRM_OPTIONS, type CrmOption, type CrmOptions,
 } from "@/app/lib/crm";
-import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/charts";
 import { matchKoQuery } from "@/app/lib/hangul";
-import { qty, qtyText, wonText } from "@/app/lib/format";
-import WeeklyStats from "./WeeklyStats";
+import { qty } from "@/app/lib/format";
 import ImportModal from "./ImportModal";
-import { CRM_TRIGGERS } from "@/app/lib/crm";
+import OptionsModal from "./OptionsModal";
+import ListView from "./ListView";
+import JourneyView from "./JourneyView";
+import PerfView from "./PerfView";
+import Drawer from "./Drawer";
+import type { Channel, GaStat, GaState, Labels, Stage } from "./types";
 
-const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-// 기간 표시: "7/1~7/15" · 시작만 "7/1~" · 종료만 "~7/15"
-const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
-const periodLabel = (m: Pick<CrmMessage, "start_date" | "end_date">) =>
-  m.start_date || m.end_date ? `${m.start_date ? md(m.start_date) : ""}~${m.end_date ? md(m.end_date) : ""}` : "";
-
-// 색은 전부 b2b.css 의 .crm-* 클래스(채널 팔레트·시맨틱 토큰) — 인라인 hex 금지.
-//  색 배지는 내장 채널(+구 키)만 — 사용자가 추가한 선택지는 중립 칩. 라벨은 선택지 → 내장 맵 → 원문 순 폴백.
-const CH_CHIP_KEYS = new Set(["kakao", "solapi", "cafe24", "bloomai", "manual", "custom", "onsite", "leaflet"]);
-const chipCls = (k: string) => `crm-chip ${CH_CHIP_KEYS.has(k) ? `crm-ch-${k}` : ""}`;
-const stSelCls = (st: string) => `b2b-status-select crm-stsel-${statusKey(st)}`;
-const chSelCls = (k: string) => `b2b-status-select ${CH_CHIP_KEYS.has(k) ? `crm-chsel-${k}` : ""}`;
+const VIEW_KEY = "crm.view";
+const CH_KEY = "crm.channel";
+type View = "list" | "journey" | "perf";
 const optLabel = (list: CrmOption[], fallback: Record<string, string>) => {
   const m = Object.fromEntries(list.map((o) => [o.key, o.label]));
   return (k: string) => m[k] || fallback[k] || k;
 };
-type Labels = { ch: (k: string) => string; cust: (k: string) => string; type: (k: string) => string };
-
-// 성과 한 줄 요약 — 값이 있는 지표만.
-const wonCompact = (n: number) => (n >= 10000 ? `${(n / 10000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만원` : `${n.toLocaleString("ko-KR")}원`);
-function perfLine(p?: CrmPerf): string {
-  if (!p) return "";
-  const parts: string[] = [];
-  if (p.sent) parts.push(`발송 ${qty(p.sent)}`);
-  if (p.opened) parts.push(`열람 ${qty(p.opened)}`);
-  if (p.clicked) parts.push(`클릭 ${qty(p.clicked)}`);
-  if (p.converted) parts.push(`전환 ${qty(p.converted)}`);
-  if (p.revenue) parts.push(wonCompact(p.revenue));
-  return parts.join(" · ");
-}
-
-// GA 성과(utm_campaign 세션 귀속, 최근 90일) 한 줄 — 카드에 자동 표시.
-type GaStat = { sessions: number; users: number; purchases: number; revenue: number };
-type GaState = { configured: boolean; stats: Record<string, GaStat> };
-function gaLine(g?: GaStat): string {
-  if (!g) return "";
-  const parts = [`세션 ${qty(g.sessions)}`];
-  if (g.purchases) parts.push(`구매 ${qty(g.purchases)}`);
-  if (g.revenue) parts.push(wonCompact(g.revenue));
-  return parts.join(" · ");
-}
-
-type Stage = { stage: string; sub: string; stage_num: number; msgs: CrmMessage[] };
 
 export default function CrmPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [messages, setMessages] = useState<CrmMessage[]>([]);
-  const [datesSupported, setDatesSupported] = useState(true);   // migration 074 미적용이면 false → 날짜 기능 숨김
-  const [fieldsSupported, setFieldsSupported] = useState(true); // migration 077 미적용이면 false → 고객·유형 숨김
-  const [triggersSupported, setTriggersSupported] = useState(true); // migration 149·150 미적용이면 false → 트리거·D+n·목표 클릭률 숨김
-  const [draftMsg, setDraftMsg] = useState("");
-  const [solapiTpls, setSolapiTpls] = useState<{ id: string; name: string }[]>([]); // 솔라피 템플릿(ID→이름) — 표(편집) 선택지
-  useEffect(() => { fetch("/api/crm/stats/solapi", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setSolapiTpls(j.templates || []); }).catch(() => {}); }, []);
+  const [datesSupported, setDatesSupported] = useState(true);
+  const [fieldsSupported, setFieldsSupported] = useState(true);
+  const [triggersSupported, setTriggersSupported] = useState(true);
+  const [solapiTpls, setSolapiTpls] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const confirmModal = useConfirm();
-  const [tab, setTab] = useState<"weekly" | "flow" | "table" | "stats">("weekly"); // 2026-10-26 주간 성과가 기본(대시보드 개편)
+  const [view, setView] = useState<View>("list");
+  const [channel, setChannel] = useState<Channel>("");
   const [search, setSearch] = useState("");
-  const [chFilter, setChFilter] = useState("");
-  const [asof, setAsof] = useState(""); // 기준일(YYYY-MM-DD) — 비면 전체, 고르면 그날 진행 중만(흐름)
-  const [msgOpen, setMsgOpen] = useState(false); // 흐름: 모든 카드의 메시지 초안 펼침 — 톤앤매너 일괄 검수용
-  const [stageSel, setStageSel] = useState(""); // 표 필터: 스테이지
-  const [stSel, setStSel] = useState("");       // 표 필터: 상태
-
   const [edit, setEdit] = useState<CrmMessageInput | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const [savingId, setSavingId] = useState<string | null>(null);
   const [ga, setGa] = useState<GaState | null>(null);
-
-  // 선택지(발송채널·고객·유형) — 설정 저장분, 없으면 기본값. '선택지 관리'에서 편집.
   const [opts, setOpts] = useState<CrmOptions>(DEFAULT_CRM_OPTIONS);
   const [showOpts, setShowOpts] = useState(false);
-  const [showImport, setShowImport] = useState(false); // 엑셀 가져오기(2026-11-06)
+  const [showImport, setShowImport] = useState(false);
+
   useEffect(() => {
-    (async () => {
-      try { const j = await (await fetch("/api/crm/options", { cache: "no-store" })).json(); if (j.ok && j.options) setOpts(j.options); }
-      catch { /* 기본값 유지 */ }
-    })();
+    try {
+      const v = localStorage.getItem(VIEW_KEY); if (v === "list" || v === "journey" || v === "perf") setView(v);
+      const c = localStorage.getItem(CH_KEY); if (c != null) setChannel(c);
+    } catch { /* 저장 안 됨 */ }
+    fetch("/api/crm/stats/solapi", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setSolapiTpls(j.templates || []); }).catch(() => {});
+    (async () => { try { const j = await (await fetch("/api/crm/options", { cache: "no-store" })).json(); if (j.ok && j.options) setOpts(j.options); } catch { /* 기본값 */ } })();
   }, []);
+  const pickView = (v: View) => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* 무시 */ } };
+  const pickChannel = (c: Channel) => { setChannel(c); try { localStorage.setItem(CH_KEY, c); } catch { /* 무시 */ } };
+
   const labels = useMemo<Labels>(() => ({
     ch: optLabel(opts.channels, CRM_CHANNEL_LABEL),
     cust: optLabel(opts.customers, CRM_CUSTOMER_LABEL),
     type: optLabel(opts.msgTypes, CRM_MSG_TYPE_LABEL),
   }), [opts]);
-  const messagesRef = useRef<CrmMessage[]>([]);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
-
-  // GA 성과 — utm_campaign 이 달린 메시지가 있을 때만 조회. 실패해도 화면은 수동 perf 로 동작.
-  const campaigns = useMemo(
-    () => [...new Set(messages.map((m) => (m.links?.utm_campaign || "").trim()).filter(Boolean))],
-    [messages],
-  );
-  const campaignsKey = campaigns.join(","); // 문자열 키 — 내용이 같으면 재조회하지 않음(인라인 저장마다 배열 참조가 바뀌므로)
-  useEffect(() => {
-    if (!campaignsKey) { setGa(null); return; }
-    let alive = true;
-    (async () => {
-      try {
-        const j = await (await fetch(`/api/crm/ga-stats?campaigns=${encodeURIComponent(campaignsKey)}`, { cache: "no-store" })).json();
-        if (alive && j.ok) setGa({ configured: !!j.configured, stats: j.stats || {} });
-      } catch { /* GA는 부가 정보 — 실패는 조용히 */ }
-    })();
-    return () => { alive = false; };
-  }, [campaignsKey]);
-  const gaOf = useCallback((m: CrmMessage): GaStat | undefined => {
-    const c = (m.links?.utm_campaign || "").trim();
-    return c ? ga?.stats?.[c] : undefined;
-  }, [ga]);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/crm/messages", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "메시지를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
-      // 폴백 응답엔 선택 컬럼이 없음 → ""로 채워 화면 로직을 단일화
-      setMessages(((j.messages || []) as CrmMessage[]).map((m) => ({
-        ...m, start_date: m.start_date || "", end_date: m.end_date || "", customer: m.customer || "", msg_type: m.msg_type || "",
-      })));
-      setDatesSupported(j.datesSupported !== false);
-      setFieldsSupported(j.fieldsSupported !== false);
-      setTriggersSupported(j.triggersSupported !== false);
+      setMessages(((j.messages || []) as CrmMessage[]).map((m) => ({ ...m, start_date: m.start_date || "", end_date: m.end_date || "", customer: m.customer || "", msg_type: m.msg_type || "" })));
+      setDatesSupported(j.datesSupported !== false); setFieldsSupported(j.fieldsSupported !== false); setTriggersSupported(j.triggersSupported !== false);
     } catch (e) { setError(e instanceof Error ? e.message : "메시지를 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // ── 인라인 편집 ── 인라인으로 고치는 필드는 전부 문자열(스테이지·제목·시점·태그·채널·상태).
-  //  타이핑 중엔 로컬만 갱신(setStr), 저장은 blur/select-change 때 해당 행 전체를 PUT.
-  const setStr = (id: string, key: keyof CrmMessage, value: string) =>
-    setMessages((prev) => prev.map((m) => (m.id === id ? ({ ...m, [key]: value } as CrmMessage) : m)));
-  // links 중첩값(UTM 캠페인 등) 인라인 편집 — 저장은 saveRow(전체 행 PUT) 가 links 를 통째로 보낸다.
-  const setLink = (id: string, key: string, value: string) =>
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, links: { ...m.links, [key]: value } } : m)));
+  // GA 성과(90일) — utm_campaign 이 달린 메시지가 있을 때만 1회
+  const allCampaigns = useMemo(() => [...new Set(messages.map((m) => (m.links?.utm_campaign || "").trim()).filter(Boolean))], [messages]);
+  const allKey = allCampaigns.join(",");
+  useEffect(() => {
+    if (!allKey) { setGa(null); return; }
+    let alive = true;
+    (async () => {
+      try { const j = await (await fetch(`/api/crm/ga-stats?campaigns=${encodeURIComponent(allKey)}`, { cache: "no-store" })).json(); if (alive && j.ok) setGa({ configured: !!j.configured, stats: j.stats || {} }); }
+      catch { /* 부가 정보 */ }
+    })();
+    return () => { alive = false; };
+  }, [allKey]);
+  const gaOf = useCallback((m: CrmMessage): GaStat | undefined => { const c = (m.links?.utm_campaign || "").trim(); return c ? ga?.stats?.[c] : undefined; }, [ga]);
 
-  // override = select 처럼 로컬 반영(비동기) 전에 저장할 때 새 값을 주입.
-  const saveRow = useCallback(async (id: string, override?: Partial<CrmMessage>) => {
-    const base = messagesRef.current.find((m) => m.id === id);
-    if (!base) return;
-    const row = override ? { ...base, ...override } : base;
-    setSavingId(id); setError("");
-    try {
-      const r = await fetch("/api/crm/messages", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
-      const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "메시지를 저장하지 못했습니다. 셀 값을 다시 입력하세요");
-      setMessages((prev) => prev.map((m) => (m.id === id ? (j.message as CrmMessage) : m))); // 서버 정규화 결과로 교체
-    } catch (e) { setError(e instanceof Error ? e.message : "메시지를 저장하지 못했습니다. 셀 값을 다시 입력하세요"); load(); } // 실패 시 서버 상태로 재동기
-    setSavingId(null);
-  }, [load]);
-
+  // 세그먼트(판매 채널 = 고객군) + 검색
+  const byChannel = useMemo(() => messages.filter((m) => !channel || m.customer === channel), [messages, channel]);
   const filtered = useMemo(() => {
     const q = search.trim();
-    return messages.filter((m) => {
-      if (chFilter && m.channel !== chFilter) return false;
-      if (!q) return true;
-      return matchKoQuery([m.title, m.stage, m.sub, m.timing, m.detail, m.tags].filter(Boolean).join(" "), q);
-    });
-  }, [messages, search, chFilter]);
-
-  // 기준일 필터(흐름 전용) — 그날 진행 중이 아닌 것(기간 밖·중단)을 뺀다. 표·통계엔 미적용.
-  const dateFiltered = useMemo(
-    () => (asof ? filtered.filter((m) => crmOnDate(m, asof)) : filtered),
-    [filtered, asof],
-  );
-
-  // 표 전용 필터 — 스테이지·고객·상태(공통 채널·검색 위에 얹힘)
-  const [custSel, setCustSel] = useState("");
-  const tableFiltered = useMemo(
-    () => filtered.filter((m) =>
-      (!stageSel || (m.stage || "(미분류)") === stageSel) &&
-      (!custSel || m.customer === custSel) &&
-      (!stSel || statusKey(m.status) === stSel)),
-    [filtered, stageSel, custSel, stSel],
-  );
-
+    return q ? byChannel.filter((m) => matchKoQuery([m.title, m.stage, m.sub, m.timing, m.offset_note, m.tags, m.links?.utm_campaign || ""].filter(Boolean).join(" "), q)) : byChannel;
+  }, [byChannel, search]);
   const stages: Stage[] = useMemo(() => {
     const map = new Map<string, Stage>();
-    for (const m of dateFiltered) {
+    for (const m of filtered) {
       const key = m.stage || "(미분류)";
       if (!map.has(key)) map.set(key, { stage: key, sub: m.sub, stage_num: m.stage_num, msgs: [] });
-      const s = map.get(key)!;
-      if (!s.sub && m.sub) s.sub = m.sub;
-      s.msgs.push(m);
+      const s = map.get(key)!; if (!s.sub && m.sub) s.sub = m.sub; s.msgs.push(m);
     }
     return [...map.values()].sort((a, b) => a.stage_num - b.stage_num || a.stage.localeCompare(b.stage, "ko"));
-  }, [dateFiltered]);
-
-  const summary = useMemo(() => {
-    const total = messages.length;
-    const active = messages.filter((m) => statusKey(m.status) === "active").length;
-    const byCh: Record<string, number> = {};
-    for (const m of messages) byCh[m.channel || "(미지정)"] = (byCh[m.channel || "(미지정)"] || 0) + 1;
-    const stageCount = new Set(messages.map((m) => m.stage || "(미분류)")).size;
-    return { total, active, inactive: total - active, byCh, stageCount };
-  }, [messages]);
-
-  // 스테이지 자동완성 목록 — 인라인 편집 시 오타로 새 스테이지가 생기지 않게 기존값 제안.
-  const stageNames = useMemo(
-    () => [...new Set(messages.map((m) => m.stage).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko")),
-    [messages],
-  );
+  }, [filtered]);
+  const campaigns = useMemo(() => [...new Set(byChannel.map((m) => (m.links?.utm_campaign || "").trim()).filter(Boolean))], [byChannel]);
+  const kpi = useMemo(() => {
+    const active = byChannel.filter((m) => statusKey(m.status) === "active").length;
+    const tracked = byChannel.filter(isTracked).length;
+    const sessions = byChannel.reduce((n, m) => n + (gaOf(m)?.sessions ?? 0), 0);
+    return { total: byChannel.length, active, tracked, sessions };
+  }, [byChannel, gaOf]);
+  const channelCounts = useMemo(() => { const c: Record<string, number> = {}; for (const m of messages) c[m.customer || ""] = (c[m.customer || ""] || 0) + 1; return c; }, [messages]);
+  const stageNames = useMemo(() => [...new Set(messages.map((m) => m.stage).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko")), [messages]);
 
   function openNew(seed?: Partial<CrmMessageInput>) {
     const maxStageNum = messages.reduce((mx, m) => Math.max(mx, m.stage_num), 0);
-    setEdit({ ...EMPTY_CRM_MESSAGE, stage_num: maxStageNum, ...seed });
+    setEdit({ ...EMPTY_CRM_MESSAGE, stage_num: maxStageNum, customer: channel, ...seed });
   }
-  function openEdit(m: CrmMessage) {
-    setEdit({ ...m, links: { ...m.links }, perf: { ...m.perf } });
-  }
+  const openEdit = (m: CrmMessage) => setEdit({ ...m, links: { ...m.links }, perf: { ...m.perf } });
 
   async function save() {
     if (!edit) return;
-    setSaving(true); setError("");
+    if (!edit.title.trim()) { toast.error("메시지명을 입력하세요"); return; }
+    setSaving(true);
     try {
-      const method = edit.id ? "PUT" : "POST";
-      const r = await fetch("/api/crm/messages", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit) });
+      const r = await fetch("/api/crm/messages", { method: edit.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit) });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "메시지를 저장하지 못했습니다. 입력값을 확인하세요");
-      setEdit(null); load();
-    } catch (e) { setError(e instanceof Error ? e.message : "메시지를 저장하지 못했습니다. 입력값을 확인하세요"); }
+      setEdit(null); toast.success(edit.id ? "메시지를 저장했습니다" : "메시지를 등록했습니다"); load();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "메시지를 저장하지 못했습니다. 입력값을 확인하세요"); }
     setSaving(false);
   }
   async function remove(id?: string) {
     if (!id) { setEdit(null); return; }
-    if (!(await confirmModal({ title: "메시지 삭제", body: "이 메시지가 CRM 맵에서 지워집니다. 되돌릴 수 없습니다.", action: "메시지 삭제" }))) return;
+    if (!(await confirm({ title: "메시지 삭제", body: "이 메시지가 CRM 맵에서 지워집니다. 되돌릴 수 없습니다.", action: "메시지 삭제" }))) return;
     setSaving(true);
-    try {
-      await fetch("/api/crm/messages?id=" + encodeURIComponent(id), { method: "DELETE" });
-      setEdit(null); load();
-    } catch { /* 무시 */ }
+    try { await fetch("/api/crm/messages?id=" + encodeURIComponent(id), { method: "DELETE" }); setEdit(null); toast.success("메시지를 삭제했습니다"); load(); }
+    catch { toast.error("메시지를 삭제하지 못했습니다. 다시 시도하세요"); }
     setSaving(false);
   }
 
-  // ── 1회성 가져오기(빈 상태 전용) — 원본 맵 시드 30개 또는 시트 CSV 붙여넣기 ──
-  const [importing, setImporting] = useState(false);
-  const [csvOpen, setCsvOpen] = useState(false);
-  const [csvText, setCsvText] = useState("");
-  async function runImport(mode: "seed" | "csv") {
-    if (mode === "seed" && !(await confirmModal({ title: "원본 CRM 맵 가져오기", body: "8단계, 30개 메시지가 등록됩니다.", action: "원본 맵 데이터 가져오기", danger: false }))) return;
-    setImporting(true); setError("");
-    try {
-      const r = await fetch("/api/crm/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mode === "csv" ? { mode, csv: csvText } : { mode }) });
-      const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || (mode === "csv" ? "CSV를 가져오지 못했습니다. 내용을 확인하세요" : "원본 맵을 가져오지 못했습니다. [다시 불러오기] 뒤 다시 누르세요"));
-      setCsvOpen(false); setCsvText("");
-      await load();
-    } catch (e) { setError(e instanceof Error ? e.message : (mode === "csv" ? "CSV를 가져오지 못했습니다. 내용을 확인하세요" : "원본 맵을 가져오지 못했습니다. [다시 불러오기] 뒤 다시 누르세요")); }
-    setImporting(false);
-  }
+  const gaForEdit = edit?.id ? gaOf(messages.find((m) => m.id === edit.id) as CrmMessage) : undefined;
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div>
-          <h1 className="b2b-page-title">CRM 메시지맵</h1>
-        </div>
+        <div><h1 className="b2b-page-title">CRM 메시지맵</h1></div>
         <div className="b2b-page-actions sm-row sm-gap-2">
-          <button className="b2b-btn-primary" onClick={() => openNew()}>+ 메시지 추가</button>
-          <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리하기</button>
+          <button className="b2b-btn-primary" onClick={() => openNew()}>메시지 추가</button>
           <button className="b2b-btn-secondary" onClick={() => setShowImport(true)}>엑셀로 가져오기</button>
-          <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "다시 불러오기"}</button>
           {messages.length > 0 && <a className="b2b-btn-secondary crm-xlsx-btn" href="/api/crm/export">엑셀 내려받기</a>}
+          <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리하기</button>
+          <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "다시 불러오기"}</button>
         </div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
 
-      {/* 요약 스트립 */}
-      <div className="crm-summary">
-        <Stat label="메시지" value={summary.total} />
-        <Stat label="스테이지" value={summary.stageCount} />
-        <Stat label="활성" value={summary.active} tone="success" />
-        {summary.inactive > 0 && <Stat label="비활성" value={summary.inactive} />}
-        <div className="crm-summary-spacer" />
-        {Object.entries(summary.byCh).map(([k, n]) => (
-          <span key={k} className={chipCls(k)}>{labels.ch(k)} {qty(n)}</span>
-        ))}
+      <div className="crm-kpis">
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">메시지</div><div className="b2b-stat-card-value">{qty(kpi.total)}</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">활성</div><div className="b2b-stat-card-value">{qty(kpi.active)}</div>{kpi.total - kpi.active > 0 && <div className="b2b-stat-card-hint">비활성 {qty(kpi.total - kpi.active)}</div>}</div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">추적(UTM)</div><div className="b2b-stat-card-value">{qty(kpi.tracked)}</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">GA 세션 90일</div><div className="b2b-stat-card-value">{ga ? qty(kpi.sessions) : "-"}</div>{ga && ga.configured === false && <div className="b2b-stat-card-hint">GA 연동 없음</div>}</div>
       </div>
 
-      {/* 탭 + 필터 */}
-      <div className="crm-toolbar">
-        <div className="sm-tabs">
-          <button className={`sm-tab ${tab === "weekly" ? "is-active" : ""}`} onClick={() => setTab("weekly")}>주간 성과</button>
-          <button className={`sm-tab ${tab === "flow" ? "is-active" : ""}`} onClick={() => setTab("flow")}>흐름</button>
-          <button className={`sm-tab ${tab === "table" ? "is-active" : ""}`} onClick={() => setTab("table")}>표(편집)</button>
-          <button className={`sm-tab ${tab === "stats" ? "is-active" : ""}`} onClick={() => setTab("stats")}>통계</button>
+      <div className="crm-bar">
+        <div className="sm-tabs" role="tablist" aria-label="판매 채널">
+          <button className={`sm-tab${channel === "" ? " is-active" : ""}`} role="tab" onClick={() => pickChannel("")}>전체<span className="sm-tab-count">{qty(messages.length)}</span></button>
+          {opts.customers.map((c) => (
+            <button key={c.key} className={`sm-tab${channel === c.key ? " is-active" : ""}`} role="tab" onClick={() => pickChannel(c.key)}>{c.label}<span className="sm-tab-count">{qty(channelCounts[c.key] || 0)}</span></button>
+          ))}
         </div>
-        <div className="crm-summary-spacer" />
-        {/* 흐름: 메시지 초안 전체 펼침 — 모든 메시지가 같은 톤앤매너인지 한눈에 검수 */}
-        {tab === "flow" && (
-          <button className={`b2b-btn-secondary crm-date-btn${msgOpen ? " crm-msgopen-on" : ""}`} onClick={() => setMsgOpen((v) => !v)}>
-            {msgOpen ? "메시지 닫기" : "메시지 열기"}
-          </button>
-        )}
-        {/* 기준일 — 그날 진행 중인 메시지만(흐름). 기간은 각 메시지 '상세'에서 설정 */}
-        {datesSupported && tab === "flow" && (
-          <div className="sm-row crm-datebar">
-            <span className="crm-datebar-label">기준일</span>
-            <input type="date" className="b2b-input crm-date-input" value={asof} onChange={(e) => setAsof(e.target.value)} aria-label="기준일" />
-            {asof !== kstToday() && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof(kstToday())}>오늘로 이동</button>}
-            {asof && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof("")}>전체 보기</button>}
-          </div>
-        )}
-        {/* 표: 스테이지·고객·상태 필터 — 원하는 메시지만 좁혀서 편집 */}
-        {tab === "table" && (
-          <>
-            <select className="b2b-select crm-ch-filter" value={stageSel} onChange={(e) => setStageSel(e.target.value)} aria-label="스테이지 필터">
-              <option value="">전체 스테이지</option>
-              {stageNames.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {fieldsSupported && (
-              <select className="b2b-select crm-ch-filter" value={custSel} onChange={(e) => setCustSel(e.target.value)} aria-label="고객 필터">
-                <option value="">전체 고객</option>
-                {opts.customers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select>
-            )}
-            <select className="b2b-select crm-ch-filter" value={stSel} onChange={(e) => setStSel(e.target.value)} aria-label="상태 필터">
-              <option value="">전체 상태</option>
-              {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </select>
-          </>
-        )}
-        {tab !== "stats" && (
-          <>
-            <select className="b2b-select crm-ch-filter" value={chFilter} onChange={(e) => setChFilter(e.target.value)} aria-label="발송채널 필터">
-              <option value="">전체 발송채널</option>
-              {opts.channels.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
-            <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" aria-label="메시지 검색" />
-          </>
-        )}
+        <span className="crm-bar-gap" />
+        <div className="sm-tabs" role="tablist" aria-label="보기">
+          <button className={`sm-tab${view === "list" ? " is-active" : ""}`} role="tab" onClick={() => pickView("list")}>목록</button>
+          <button className={`sm-tab${view === "journey" ? " is-active" : ""}`} role="tab" onClick={() => pickView("journey")}>여정</button>
+          <button className={`sm-tab${view === "perf" ? " is-active" : ""}`} role="tab" onClick={() => pickView("perf")}>성과</button>
+        </div>
+        <span className="crm-bar-spacer" />
+        {view !== "perf" && <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" aria-label="메시지·단계·캠페인 검색" />}
       </div>
 
-      {/* 기준일 안내 — 몇 개가 걸러졌는지 명시(조용히 사라지면 '데이터가 없어졌다'로 오해) */}
-      {asof && tab === "flow" && (
-        <p className="sm-faint crm-asof-hint">
-          {asof} 기준 진행 중 {qtyText(dateFiltered.length)} 표시 · 기간 밖/비활성 {qtyText(filtered.length - dateFiltered.length)} 숨김
-        </p>
-      )}
-
-      {/* utm_campaign 은 달았는데 GA env 가 없을 때만 안내(설정되면 카드에 자동 표시) */}
-      {campaigns.length > 0 && ga && !ga.configured && (
-        <p className="sm-faint crm-ga-hint">GA 연동 준비 중</p>
-      )}
-
-      {loading ? <div className="b2b-loading">불러오는 중...</div> :
-        messages.length === 0 ? (
-          <div className="b2b-empty">
-            <p className="crm-empty-lead">등록된 메시지가 없습니다.</p>
-            <div className="sm-row-wrap crm-empty-actions">
-              <button className="b2b-btn-primary" onClick={() => runImport("seed")} disabled={importing}>
-                {importing ? "가져오는 중..." : "원본 맵 데이터 가져오기 (8단계, 30개)"}
-              </button>
-              <button className="b2b-btn-secondary" onClick={() => openNew()}>+ 빈 상태에서 직접 추가</button>
-              <button className="b2b-link-btn" onClick={() => setCsvOpen((v) => !v)}>시트 CSV 붙여넣기</button>
-            </div>
-            {csvOpen && (
-              <div className="crm-csv-box">
-                <textarea className="b2b-textarea" rows={6} value={csvText} onChange={(e) => setCsvText(e.target.value)} placeholder="스테이지,부제,메시지명,상태,채널,발송시점,..." spellCheck={false} />
-                <button className="b2b-btn-primary" onClick={() => runImport("csv")} disabled={importing || !csvText.trim()}>
-                  {importing ? "가져오는 중..." : "CSV 가져오기"}
-                </button>
-              </div>
-            )}
-          </div>
-        ) : tab === "weekly" ? (
-          <WeeklyStats />
-        ) : tab === "flow" ? (
-          <FlowView stages={stages} gaOf={gaOf} msgOpen={msgOpen} labels={labels} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
-        ) : tab === "table" ? (
-          <>
-            {(stageSel || custSel || stSel) && (
-              <p className="sm-faint crm-asof-hint">필터 결과 {qtyText(tableFiltered.length)} / 전체 {qtyText(filtered.length)}</p>
-            )}
-            {triggersSupported && (
-              <div className="sm-row-wrap" style={{ gap: 8, alignItems: "center", margin: "0 0 10px" }}>
-                <button className="b2b-btn-secondary" onClick={async () => { setDraftMsg(""); try { const j = await fetch("/api/crm/messages/draft-triggers", { method: "POST" }).then((r) => r.json()); if (!j.ok) throw new Error(j.error || "실패"); setDraftMsg(`트리거 초안 ${qtyText(j.filled, "건")} 채움${j.unmatched?.length ? ` · 못 맞춘 제목: ${j.unmatched.join(", ")}` : ""}`); load(); } catch (e) { setDraftMsg(e instanceof Error ? e.message : "실패"); } }}>트리거 초안 채우기</button>
-                {draftMsg && <span className="sm-faint" style={{ fontSize: 12 }}>{draftMsg}</span>}
-              </div>
-            )}
-            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} solapiTpls={solapiTpls} opts={opts} labels={labels} savingId={savingId} onField={setStr} onLink={setLink} onSave={saveRow} onEdit={openEdit} />
-          </>
+      {loading ? <div className="b2b-loading">불러오는 중...</div>
+        : messages.length === 0 ? (
+          <div className="b2b-empty">등록된 메시지가 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => setShowImport(true)}>엑셀로 가져오기</button></div></div>
+        ) : view === "perf" ? (
+          <PerfView channel={channel} campaigns={campaigns} gaConfigured={ga?.configured} />
+        ) : filtered.length === 0 ? (
+          <div className="b2b-empty">조건에 맞는 메시지가 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => { setSearch(""); pickChannel(""); }}>조건 지우기</button></div></div>
+        ) : view === "journey" ? (
+          <JourneyView msgs={filtered} onOpen={openEdit} />
         ) : (
-          <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} chLabel={labels.ch} />
+          <ListView stages={stages} labels={labels} gaOf={gaOf} onOpen={openEdit} onAdd={(s) => openNew({ stage: s.stage, sub: s.sub, stage_num: s.stage_num })} />
         )}
 
       {edit && (
-        <EditModal
-          data={edit} onChange={setEdit} onClose={() => setEdit(null)} onSave={save}
-          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} solapiTpls={solapiTpls}
-          opts={opts} labels={labels}
-        />
+        <Drawer data={edit} onChange={setEdit} onClose={() => setEdit(null)} onSave={save} onDelete={() => remove(edit.id)} saving={saving}
+          datesSupported={datesSupported} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} solapiTpls={solapiTpls} opts={opts} labels={labels} ga={gaForEdit} stageNames={stageNames} />
       )}
       {showImport && <ImportModal onClose={() => setShowImport(false)} onDone={() => { load(); }} />}
-      {showOpts && (
-        <OptionsModal current={opts} onClose={() => setShowOpts(false)} onSaved={(o) => { setOpts(o); setShowOpts(false); }} />
-      )}
-    </div>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: number; tone?: "success" | "danger" }) {
-  return (
-    <div className={`crm-stat${tone ? ` is-${tone}` : ""}`}>
-      <div className="crm-stat-label">{label}</div>
-      <div className="crm-stat-value">{qty(value)}</div>
-    </div>
-  );
-}
-
-// ── 흐름 뷰 — 여정 리본(정거장 레일) + 단계 안 발송시점 타임라인. 공백은 점선 카드(흐름의 구멍) ──
-function FlowView({ stages, gaOf, msgOpen, labels, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; msgOpen: boolean; labels: Labels; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
-  return (
-    <div className="crm-flow-wrap">
-      <div className="crm-flow">
-        {stages.map((s, i) => {
-          const inactiveN = s.msgs.filter((m) => statusKey(m.status) === "inactive").length;
-          return (
-            <div key={s.stage} className="crm-fstage">
-              <div className="crm-fhead">
-                <div className="crm-fno">STAGE {s.stage_num || i + 1}</div>
-                <div className="crm-fname">{s.stage}</div>
-                {s.sub && <div className="crm-fsub">{s.sub}</div>}
-                <div className="crm-fmeta">
-                  {qtyText(s.msgs.length)}
-                  {inactiveN > 0 && <> · <span className="crm-finact">비활성 {qty(inactiveN)}{inactiveN === s.msgs.length ? " — 전부" : ""}</span></>}
-                </div>
-              </div>
-              <div className="crm-ftl">
-                {s.msgs.map((m) => {
-                  const perf = perfLine(m.perf);
-                  const gl = gaLine(gaOf(m));
-                  const tags = crmTags(m.tags);
-                  const st = statusKey(m.status);
-                  return (
-                    <div key={m.id} className={`crm-fmsg is-${st}`}>
-                      {m.timing && <div className="crm-ftime">{m.timing}</div>}
-                      {/* div+onClick(버튼 아님) — 카드 안에 바로가기 <a> 가 있어 중첩 인터랙티브를 피한다 */}
-                      <div className={`crm-fcard${st === "inactive" ? " is-inactive" : ""}`} onClick={() => onCard(m)}>
-                        <span className="crm-ft">{m.title || "(제목 없음)"}</span>
-                        <span className="sm-row-wrap crm-fchips">
-                          <span className={chipCls(m.channel)}>{m.channel ? labels.ch(m.channel) : "미지정"}</span>
-                          {m.msg_type && <span className="crm-chip">{labels.type(m.msg_type)}</span>}
-                          {m.customer && <span className="crm-chip">{labels.cust(m.customer)}</span>}
-                          {periodLabel(m) && <span className="crm-chip crm-chip-period">{periodLabel(m)}</span>}
-                          {st === "inactive" && <span className="crm-chip crm-chip-inactive">비활성</span>}
-                          {tags.map((t) => <span key={t} className="crm-tag">{t}</span>)}
-                        </span>
-                        {/* 메시지 열기 — 초안 전문을 펼쳐 톤앤매너를 나란히 검수. 없는 것도 표시해 초안 누락이 보이게 */}
-                        {msgOpen && (
-                          m.msg
-                            ? <span className="crm-fdraft">{m.msg}</span>
-                            : <span className="crm-fdraft is-empty">(초안 없음)</span>
-                        )}
-                        {perf && <span className="crm-fperf">{perf}</span>}
-                        {gl && <span className="crm-ga" title="GA utm_campaign 세션 귀속, 최근 90일">GA {gl}</span>}
-                        {m.links?.url && (
-                          <span className="sm-row-wrap crm-flinks">
-                            <a className="crm-link" href={m.links.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>링크 ↗</a>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                <button type="button" className="crm-add" onClick={() => onAdd(s)}>+ 이 단계에 추가</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·내용·링크·성과)는 '상세' 버튼→모달 ──
-function TableView({ msgs, stageNames, fieldsSupported, triggersSupported, solapiTpls, opts, labels, savingId, onField, onLink, onSave, onEdit }: {
-  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; triggersSupported: boolean; solapiTpls: { id: string; name: string }[]; opts: CrmOptions; labels: Labels; savingId: string | null;
-  onField: (id: string, key: keyof CrmMessage, value: string) => void;
-  onLink: (id: string, key: string, value: string) => void;
-  onSave: (id: string, override?: Partial<CrmMessage>) => void;
-  onEdit: (m: CrmMessage) => void;
-}) {
-  const sel = (m: CrmMessage, field: keyof CrmMessage) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onField(m.id, field, e.target.value); onSave(m.id, { [field]: e.target.value });
-  };
-  // 현재 값이 선택지에 없으면(삭제됐거나 개편 전 값) "(구)" 로 표시하는 옵션을 앞에 붙인다 — 값 소실 없이 계속 편집 가능
-  const legacyOpt = (list: CrmOption[], value: string, label: (k: string) => string) =>
-    value && !list.some((o) => o.key === value) ? <option value={value}>{label(value)} (구)</option> : null;
-  return (
-    <>
-      <datalist id="crm-stage-names">{stageNames.map((s) => <option key={s} value={s} />)}</datalist>
-      <div className="b2b-table-wrap">
-        <table className="b2b-table">
-          <thead><tr>
-            <th className="crm-col-stage">스테이지</th><th className="crm-col-title">메시지명</th>
-            {fieldsSupported && <th className="crm-col-select">고객</th>}
-            <th className="crm-col-select">발송채널</th>
-            {fieldsSupported && <th className="crm-col-select">유형</th>}
-            <th className="crm-col-timing">발송시점</th>
-            {triggersSupported && <th className="crm-col-select">트리거</th>}
-            {triggersSupported && <th style={{ width: 64 }}>D+n</th>}
-            <th className="crm-col-select">상태</th>
-            <th className="crm-col-utm">UTM 캠페인</th>
-            {triggersSupported && <th className="crm-col-select">UTM 매체</th>}
-            {triggersSupported && <th style={{ width: 72 }}>목표 클릭률</th>}
-            {triggersSupported && <th style={{ width: 120 }}>솔라피 템플릿</th>}
-            <th className="crm-col-tags">태그</th><th className="crm-col-actions"></th>
-          </tr></thead>
-          <tbody>
-            {msgs.map((m) => (
-              <tr key={m.id}>
-                <td><CellText value={m.stage} placeholder="예: 유입/인지" list="crm-stage-names" onLocal={(v) => onField(m.id, "stage", v)} onCommit={() => onSave(m.id)} /></td>
-                <td><CellText value={m.title} placeholder="예: 체험단 안내" onLocal={(v) => onField(m.id, "title", v)} onCommit={() => onSave(m.id)} /></td>
-                {fieldsSupported && (
-                  <td>
-                    <select className="b2b-status-select" value={m.customer} aria-label="고객" onChange={sel(m, "customer")}>
-                      <option value="">미지정</option>
-                      {legacyOpt(opts.customers, m.customer, labels.cust)}
-                      {opts.customers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                    </select>
-                  </td>
-                )}
-                <td>
-                  <select className={chSelCls(m.channel)} value={m.channel} aria-label="발송채널" onChange={sel(m, "channel")}>
-                    {legacyOpt(opts.channels, m.channel, labels.ch)}
-                    {opts.channels.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                  </select>
-                </td>
-                {fieldsSupported && (
-                  <td>
-                    <select className="b2b-status-select" value={m.msg_type} aria-label="유형" onChange={sel(m, "msg_type")}>
-                      <option value="">미지정</option>
-                      {legacyOpt(opts.msgTypes, m.msg_type, labels.type)}
-                      {opts.msgTypes.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                    </select>
-                  </td>
-                )}
-                <td><CellText value={m.timing} placeholder="예: 결제 후 1시간" onLocal={(v) => onField(m.id, "timing", v)} onCommit={() => onSave(m.id)} /></td>
-                {triggersSupported && (
-                  <td>
-                    <select className="b2b-status-select" value={m.trigger || ""} aria-label="트리거" onChange={sel(m, "trigger")}>
-                      <option value="">없음</option>
-                      {CRM_TRIGGERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                    </select>
-                  </td>
-                )}
-                {triggersSupported && <td><CellText value={m.offset_days == null ? "" : String(m.offset_days)} placeholder="D+n" onLocal={(v) => onField(m.id, "offset_days", v)} onCommit={() => onSave(m.id)} /></td>}
-                <td>
-                  <select className={stSelCls(m.status)} value={statusKey(m.status)} aria-label="상태" onChange={sel(m, "status")}>
-                    {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                  </select>
-                </td>
-                <td><CellText value={m.links?.utm_campaign || ""} placeholder="예: crm_60d_winback" onLocal={(v) => onLink(m.id, "utm_campaign", v)} onCommit={() => onSave(m.id)} /></td>
-                {triggersSupported && <td><CellText value={m.utm_medium || ""} placeholder="예: alimtalk-naver" onLocal={(v) => onField(m.id, "utm_medium", v)} onCommit={() => onSave(m.id)} /></td>}
-                {triggersSupported && <td><CellText value={m.target_ctr == null ? "" : String(m.target_ctr)} placeholder="%" onLocal={(v) => onField(m.id, "target_ctr", v)} onCommit={() => onSave(m.id)} /></td>}
-                {triggersSupported && (
-                  <td>
-                    {solapiTpls.length ? (
-                      <select className="b2b-status-select" value={m.solapi_template_id || ""} aria-label="솔라피 템플릿" onChange={sel(m, "solapi_template_id")}>
-                        <option value="">없음</option>
-                        {m.solapi_template_id && !solapiTpls.some((t) => t.id === m.solapi_template_id) && <option value={m.solapi_template_id}>{m.solapi_template_id}</option>}
-                        {solapiTpls.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                    ) : <CellText value={m.solapi_template_id || ""} placeholder="템플릿 ID" onLocal={(v) => onField(m.id, "solapi_template_id", v)} onCommit={() => onSave(m.id)} />}
-                  </td>
-                )}
-                <td><CellText value={m.tags} placeholder="예: 신규, 자동화" onLocal={(v) => onField(m.id, "tags", v)} onCommit={() => onSave(m.id)} /></td>
-                <td className="actions">
-                  {savingId === m.id
-                    ? <span className="crm-saving">저장 중...</span>
-                    : <button className="b2b-btn-secondary crm-detail-btn" onClick={() => onEdit(m)}>상세 보기</button>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="sm-faint crm-table-hint">셀을 수정하면 바로 저장됩니다.</p>
-    </>
-  );
-}
-
-// 표 셀의 인라인 텍스트 — 타이핑 중엔 로컬 갱신(onLocal), 값이 바뀐 채 포커스를 잃으면 저장(onCommit).
-//  최상위 필드든 links 중첩값(UTM)이든 커밋 방식만 주입하면 재사용된다.
-function CellText({ value, placeholder, list, onLocal, onCommit }: {
-  value: string; placeholder?: string; list?: string;
-  onLocal: (value: string) => void; onCommit: () => void;
-}) {
-  const focusVal = useRef("");
-  return (
-    <input className="crm-cell" value={value || ""} placeholder={placeholder} list={list} spellCheck={false}
-      onChange={(e) => onLocal(e.target.value)}
-      onFocus={(e) => { focusVal.current = e.target.value; }}
-      onBlur={(e) => { if (e.target.value !== focusVal.current) onCommit(); }}
-      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-  );
-}
-
-// ── 통계 뷰 ── 맵 구조(채널·단계별 공백) + GA 추이(일자별 세션·매출, 캠페인 순위).
-//  GA 축은 utm_campaign 이 달린 메시지들만 — 수동 perf 는 스냅샷이라 추이를 만들 수 없다.
-type GaDaily = { date: string; campaign: string; sessions: number; purchases: number; revenue: number };
-const STATS_RANGES = [{ d: 7, label: "7일" }, { d: 30, label: "30일" }, { d: 90, label: "90일" }];
-
-function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: CrmMessage[]; campaigns: string[]; gaConfigured?: boolean; chLabel: (k: string) => string }) {
-  const [days, setDays] = useState(30);
-  const [daily, setDaily] = useState<GaDaily[] | null>(null);
-  const [gaErr, setGaErr] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const campaignsKey = campaigns.join(",");
-  useEffect(() => {
-    if (!campaignsKey || gaConfigured === false) { setDaily(null); return; }
-    let alive = true;
-    setLoading(true); setGaErr("");
-    (async () => {
-      try {
-        const j = await (await fetch(`/api/crm/ga-stats?campaigns=${encodeURIComponent(campaignsKey)}&days=${days}&daily=1`, { cache: "no-store" })).json();
-        if (!alive) return;
-        if (!j.ok) throw new Error(j.error || "GA 성과를 불러오지 못했습니다. GA 연동 설정을 확인하세요");
-        setDaily(j.configured ? (j.daily || []) : null);
-      } catch (e) { if (alive) { setDaily(null); setGaErr(e instanceof Error ? e.message : "GA 성과를 불러오지 못했습니다. GA 연동 설정을 확인하세요"); } }
-      if (alive) setLoading(false);
-    })();
-    return () => { alive = false; };
-  }, [campaignsKey, days, gaConfigured]);
-
-  // 맵 구조 — GA 없이도 항상
-  const byChannel = useMemo<[string, number][]>(() => {
-    const m = new Map<string, number>();
-    for (const msg of messages) { const l = msg.channel ? chLabel(msg.channel) : "미지정"; m.set(l, (m.get(l) || 0) + 1); }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  }, [messages, chLabel]);
-  const inactiveByStage = useMemo<[string, number][]>(() => {
-    const m = new Map<string, number>();
-    for (const msg of messages) if (statusKey(msg.status) === "inactive") { const s = msg.stage || "(미분류)"; m.set(s, (m.get(s) || 0) + 1); }
-    return [...m.entries()];
-  }, [messages]);
-
-  // GA 집계 — 일자별 합산 추이(60일 초과는 7일 묶음) + 캠페인 순위
-  const ga = useMemo(() => {
-    if (!daily) return null;
-    const byDate = new Map<string, { sessions: number; purchases: number; revenue: number }>();
-    const byCampaign = new Map<string, { sessions: number; purchases: number; revenue: number }>();
-    for (const r of daily) {
-      const d = byDate.get(r.date) || { sessions: 0, purchases: 0, revenue: 0 };
-      d.sessions += r.sessions; d.purchases += r.purchases; d.revenue += r.revenue; byDate.set(r.date, d);
-      const c = byCampaign.get(r.campaign) || { sessions: 0, purchases: 0, revenue: 0 };
-      c.sessions += r.sessions; c.purchases += r.purchases; c.revenue += r.revenue; byCampaign.set(r.campaign, c);
-    }
-    const dates = [...byDate.keys()].sort();
-    type Pt = { label: string; sessions: number; revenue: number };
-    let pts: Pt[];
-    if (days <= 60) {
-      pts = dates.map((d) => ({ label: md(d), sessions: byDate.get(d)!.sessions, revenue: byDate.get(d)!.revenue }));
-    } else {
-      // 7일 묶음(첫 날짜 기준) — 90일을 일 단위로 그리면 축 라벨이 뭉개진다
-      const chunks = new Map<number, Pt>();
-      const t0 = dates.length ? Date.parse(dates[0]) : 0;
-      for (const d of dates) {
-        const i = Math.floor((Date.parse(d) - t0) / (7 * 86_400e3));
-        const p = chunks.get(i) || { label: `${md(new Date(t0 + i * 7 * 86_400e3).toISOString().slice(0, 10))}~`, sessions: 0, revenue: 0 };
-        p.sessions += byDate.get(d)!.sessions; p.revenue += byDate.get(d)!.revenue;
-        chunks.set(i, p);
-      }
-      pts = [...chunks.keys()].sort((a, b) => a - b).map((k) => chunks.get(k)!);
-    }
-    const totals = [...byDate.values()].reduce((t, v) => ({ sessions: t.sessions + v.sessions, purchases: t.purchases + v.purchases, revenue: t.revenue + v.revenue }), { sessions: 0, purchases: 0, revenue: 0 });
-    const rank: [string, number][] = [...byCampaign.entries()].map(([c, v]) => [c, v.revenue]);
-    const rankSub = (label: string) => { const v = byCampaign.get(label); return v ? `세션 ${qty(v.sessions)} · 구매 ${qty(v.purchases)}` : null; };
-    return { pts, totals, rank, rankSub };
-  }, [daily, days]);
-
-  return (
-    <div className="sm-col crm-stats">
-      {/* GA 추이 */}
-      <div className="sm-row-wrap crm-stats-head">
-        <h2 className="crm-stats-title">캠페인 성과 추이 <span className="sm-faint crm-stats-note">GA utm_campaign 세션 귀속, 어제까지</span></h2>
-        <div className="crm-summary-spacer" />
-        <div className="sm-tabs">
-          {STATS_RANGES.map((r) => (
-            <button key={r.d} className={`sm-tab ${days === r.d ? "is-active" : ""}`} onClick={() => setDays(r.d)}>{r.label}</button>
-          ))}
-        </div>
-      </div>
-
-      {gaConfigured === false ? (
-        <p className="sm-faint crm-asof-hint">GA 연동 준비 중</p>
-      ) : !campaignsKey ? (
-        <p className="sm-faint crm-asof-hint">utm_campaign 이 달린 메시지가 없습니다. 메시지 링크에 utm_campaign 을 넣으세요</p>
-      ) : gaErr ? (
-        <div className="b2b-error">{gaErr}</div>
-      ) : loading && !ga ? (
-        <div className="b2b-loading">GA 불러오는 중...</div>
-      ) : ga && (
-        <>
-          <div className="sm-row-wrap crm-stats-kpi">
-            <div className="crm-stat"><div className="crm-stat-label">세션</div><div className="crm-stat-value">{qty(ga.totals.sessions)}</div></div>
-            <div className="crm-stat"><div className="crm-stat-label">구매</div><div className="crm-stat-value">{qty(ga.totals.purchases)}</div></div>
-            <div className="crm-stat"><div className="crm-stat-label">매출</div><div className="crm-stat-value">{moneyCompact(ga.totals.revenue)}</div></div>
-          </div>
-          <div className="crm-stats-grid">
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">일자별 세션</span></div>
-              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.sessions, tip: `${p.label} · 세션 ${qty(p.sessions)}` }))} />
-            </section>
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">일자별 매출</span></div>
-              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.revenue, tip: `${p.label} · ${wonText(p.revenue)}` }))} fmtAxis={moneyCompact} />
-            </section>
-            <BarList title="캠페인별 매출" caption={`최근 ${days}일, 막대 = 매출`} data={ga.rank} fmt={moneyCompact} sub={ga.rankSub} sorted minPct={2} empty="기간 내 매출 없음" />
-          </div>
-        </>
-      )}
-
-      {/* 맵 구조 */}
-      <h2 className="crm-stats-title crm-stats-title-2">메시지 구성</h2>
-      <div className="crm-stats-grid">
-        <PieCard title="발송채널별 메시지" data={byChannel} />
-        <BarList title="단계별 비활성" data={inactiveByStage} sorted minPct={4} empty="비활성 없음" />
-      </div>
-    </div>
-  );
-}
-
-// ── 선택지 관리 모달 — 발송채널·고객·유형을 추가/삭제. 상태(활성/비활성)는 로직이 걸려 있어 고정 ──
-const OPT_SECTIONS: { key: keyof CrmOptions; title: string }[] = [
-  { key: "channels", title: "발송채널" },
-  { key: "customers", title: "고객" },
-  { key: "msgTypes", title: "유형" },
-];
-
-function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onClose: () => void; onSaved: (o: CrmOptions) => void }) {
-  const [draft, setDraft] = useState<CrmOptions>(() => ({
-    channels: current.channels.map((o) => ({ ...o })),
-    customers: current.customers.map((o) => ({ ...o })),
-    msgTypes: current.msgTypes.map((o) => ({ ...o })),
-  }));
-  const [adding, setAdding] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const add = (sec: keyof CrmOptions) => {
-    const label = (adding[sec] || "").trim();
-    if (!label) return;
-    if (draft[sec].some((o) => o.key === label || o.label === label)) { setError(`"${label}" 은 이미 있습니다.`); return; }
-    setError("");
-    setDraft((d) => ({ ...d, [sec]: [...d[sec], { key: label, label }] })); // 새 선택지 key = 라벨 그대로(한글 허용)
-    setAdding((a) => ({ ...a, [sec]: "" }));
-  };
-  const removeOpt = (sec: keyof CrmOptions, key: string) =>
-    setDraft((d) => ({ ...d, [sec]: d[sec].filter((o) => o.key !== key) }));
-
-  async function saveOpts() {
-    setSaving(true); setError("");
-    try {
-      const r = await fetch("/api/crm/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ options: draft }) });
-      const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "선택지를 저장하지 못했습니다. 이름을 확인하세요");
-      onSaved(j.options as CrmOptions); // 서버 정제 결과(중복 제거 등)로 반영
-    } catch (e) { setError(e instanceof Error ? e.message : "선택지를 저장하지 못했습니다. 이름을 확인하세요"); }
-    setSaving(false);
-  }
-
-  return (
-    <div className="b2b-modal-backdrop">
-      <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head">
-          <h2 className="b2b-modal-title">선택지 관리</h2>
-          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
-        </div>
-        <div className="b2b-modal-body">
-          {error && <div className="b2b-error">{error}</div>}
-          {OPT_SECTIONS.map(({ key, title }) => (
-            <div key={key} className="crm-opt-section">
-              <div className="b2b-field-label crm-opt-title">{title}</div>
-              <div className="sm-row-wrap crm-opt-list">
-                {draft[key].map((o) => (
-                  <span key={o.key} className="crm-chip crm-opt-item">
-                    {o.label}
-                    <button type="button" className="crm-opt-x" aria-label={`${o.label} 삭제`} onClick={() => removeOpt(key, o.key)}>✕</button>
-                  </span>
-                ))}
-                {draft[key].length === 0 && <span className="sm-faint crm-opt-empty">비어 있음 — 저장하면 기본값으로 돌아갑니다</span>}
-              </div>
-              <div className="sm-row crm-opt-add">
-                <input className="b2b-input" value={adding[key] || ""} aria-label={`새 ${title} 이름`} maxLength={20}
-                  onChange={(e) => setAdding((a) => ({ ...a, [key]: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === "Enter") add(key); }} />
-                <button type="button" className="b2b-btn-secondary" onClick={() => add(key)}>{title} 추가</button>
-              </div>
-            </div>
-          ))}
-          <p className="sm-faint crm-field-hint">선택지를 지워도 기존 메시지 값은 남고 "(구)" 로 표시됩니다.</p>
-        </div>
-        <div className="b2b-modal-foot">
-          <div />
-          <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose}>그만두기</button>
-            <button className="b2b-btn-primary" onClick={saveOpts} disabled={saving}>{saving ? "저장 중..." : "선택지 저장"}</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── 편집 모달 ──
-function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported, triggersSupported, solapiTpls, opts, labels }: {
-  data: CrmMessageInput; onChange: (d: CrmMessageInput) => void; onClose: () => void;
-  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean; fieldsSupported: boolean; triggersSupported: boolean; solapiTpls: { id: string; name: string }[];
-  opts: CrmOptions; labels: Labels;
-}) {
-  const set = <K extends keyof CrmMessageInput>(k: K, v: CrmMessageInput[K]) => onChange({ ...data, [k]: v });
-  const setLink = (k: string, v: string) => onChange({ ...data, links: { ...data.links, [k]: v } });
-  const legacyOpt = (list: CrmOption[], value: string, label: (k: string) => string) =>
-    value && !list.some((o) => o.key === value) ? <option value={value}>{label(value)} (구)</option> : null;
-
-  return (
-    <div className="b2b-modal-backdrop">
-      <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head">
-          <h2 className="b2b-modal-title">{data.id ? "메시지 수정" : "새 메시지"}</h2>
-          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
-        </div>
-        <div className="b2b-modal-body">
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">스테이지</span>
-              <input className="b2b-input" value={data.stage} onChange={(e) => set("stage", e.target.value)} placeholder="예: 유입/인지" /></label>
-            <label className="b2b-field crm-field-num"><span className="b2b-field-label">순서(번호)</span>
-              <input type="number" className="b2b-input" value={data.stage_num} onChange={(e) => set("stage_num", Number(e.target.value) || 0)} /></label>
-          </div>
-          <label className="b2b-field"><span className="b2b-field-label">스테이지 부제(선택)</span>
-            <input className="b2b-input" value={data.sub} onChange={(e) => set("sub", e.target.value)} placeholder="예: 첫 접점" /></label>
-          <label className="b2b-field"><span className="b2b-field-label">메시지명</span>
-            <input className="b2b-input" value={data.title} onChange={(e) => set("title", e.target.value)} placeholder="예: 체험단 안내 링크" /></label>
-          <div className="b2b-field-row">
-            {fieldsSupported && (
-              <label className="b2b-field"><span className="b2b-field-label">고객</span>
-                <select className="b2b-select" value={data.customer} onChange={(e) => set("customer", e.target.value)}>
-                  <option value="">미지정</option>
-                  {legacyOpt(opts.customers, data.customer, labels.cust)}
-                  {opts.customers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                </select></label>
-            )}
-            <label className="b2b-field"><span className="b2b-field-label">발송채널</span>
-              <select className="b2b-select" value={data.channel} onChange={(e) => set("channel", e.target.value)}>
-                {legacyOpt(opts.channels, data.channel, labels.ch)}
-                {opts.channels.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select></label>
-            {fieldsSupported && (
-              <label className="b2b-field"><span className="b2b-field-label">유형</span>
-                <select className="b2b-select" value={data.msg_type} onChange={(e) => set("msg_type", e.target.value)}>
-                  <option value="">미지정</option>
-                  {legacyOpt(opts.msgTypes, data.msg_type, labels.type)}
-                  {opts.msgTypes.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                </select></label>
-            )}
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">상태</span>
-              <select className="b2b-select" value={statusKey(data.status)} onChange={(e) => set("status", e.target.value)}>
-                {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-              </select></label>
-            <label className="b2b-field"><span className="b2b-field-label">발송 시점</span>
-              <input className="b2b-input" value={data.timing} onChange={(e) => set("timing", e.target.value)} placeholder="예: 선정 시 / 상시" /></label>
-          </div>
-          {triggersSupported && (
-            <>
-              <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">트리거</span>
-                  <select className="b2b-select" value={data.trigger || ""} onChange={(e) => set("trigger", e.target.value)}>
-                    <option value="">없음</option>
-                    {CRM_TRIGGERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  </select></label>
-                <label className="b2b-field"><span className="b2b-field-label">D+n (며칠째, 전이면 음수)</span>
-                  <input className="b2b-input" type="number" value={data.offset_days == null ? "" : String(data.offset_days)} onChange={(e) => set("offset_days", e.target.value === "" ? null : Number(e.target.value))} placeholder="0" /></label>
-              </div>
-              <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">발송 조건 메모</span>
-                  <input className="b2b-input" value={data.offset_note || ""} onChange={(e) => set("offset_note", e.target.value)} placeholder="예: 2회 구매 시점" /></label>
-                <label className="b2b-field"><span className="b2b-field-label">목표 클릭률(%)</span>
-                  <input className="b2b-input" type="number" step="0.1" min={0} value={data.target_ctr == null ? "" : String(data.target_ctr)} onChange={(e) => set("target_ctr", e.target.value === "" ? null : Number(e.target.value))} /></label>
-              </div>
-              <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">UTM 매체</span>
-                  <input className="b2b-input" value={data.utm_medium || ""} onChange={(e) => set("utm_medium", e.target.value)} placeholder="예: alimtalk-naver" spellCheck={false} /></label>
-                <label className="b2b-field"><span className="b2b-field-label">솔라피 템플릿</span>
-                  {solapiTpls.length ? (
-                    <select className="b2b-select" value={data.solapi_template_id || ""} onChange={(e) => set("solapi_template_id", e.target.value)}>
-                      <option value="">없음</option>
-                      {data.solapi_template_id && !solapiTpls.some((t) => t.id === data.solapi_template_id) && <option value={data.solapi_template_id}>{data.solapi_template_id}</option>}
-                      {solapiTpls.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  ) : <input className="b2b-input" value={data.solapi_template_id || ""} onChange={(e) => set("solapi_template_id", e.target.value)} placeholder="템플릿 ID" spellCheck={false} />}</label>
-              </div>
-            </>
-          )}
-          {datesSupported && (
-            <div className="b2b-field-row">
-              <label className="b2b-field"><span className="b2b-field-label">진행 시작일 (선택)</span>
-                <input type="date" className="b2b-input" value={data.start_date || ""} onChange={(e) => set("start_date", e.target.value)} /></label>
-              <label className="b2b-field"><span className="b2b-field-label">진행 종료일 (선택)</span>
-                <input type="date" className="b2b-input" value={data.end_date || ""} onChange={(e) => set("end_date", e.target.value)} /></label>
-            </div>
-          )}
-          <label className="b2b-field"><span className="b2b-field-label">상세 설명</span>
-            <span className="b2b-field-hint">어떤 메시지인지, 자동화 여부</span>
-            <textarea className="b2b-textarea" value={data.detail} onChange={(e) => set("detail", e.target.value)} rows={2} /></label>
-          <label className="b2b-field"><span className="b2b-field-label">메시지 내용</span>
-            <span className="b2b-field-hint">발송되는 메시지 전문 — 흐름 탭 [메시지 열기]에서 나란히 검수</span>
-            <textarea className="b2b-textarea" value={data.msg} onChange={(e) => set("msg", e.target.value)} rows={3} /></label>
-          <label className="b2b-field"><span className="b2b-field-label">태그(콤마 구분)</span>
-            <input className="b2b-input" value={data.tags} onChange={(e) => set("tags", e.target.value)} placeholder="예: 신규, 자동화" /></label>
-
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">링크 (선택)</span>
-              <span className="b2b-field-hint">메시지 버튼/랜딩 URL 1개</span>
-              <input className="b2b-input" value={data.links.url || ""} onChange={(e) => setLink("url", e.target.value)} placeholder="https://" spellCheck={false} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인</span>
-              <input className="b2b-input" value={data.links.utm_campaign || ""} onChange={(e) => setLink("utm_campaign", e.target.value)}
-                placeholder="예: crm_60d_winback" spellCheck={false} /></label>
-          </div>
-          <span className="sm-faint crm-field-hint">UTM 캠페인은 UTM 만들기의 캠페인명과 똑같이 입력</span>
-          <label className="sm-row sm-gap-2 crm-active-check">
-            <input type="checkbox" checked={data.active} onChange={(e) => set("active", e.target.checked)} /> 목록에 표시
-          </label>
-        </div>
-        <div className="b2b-modal-foot">
-          <div>{data.id && <button className="b2b-btn-danger" onClick={onDelete} disabled={saving}>삭제</button>}</div>
-          <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose}>그만두기</button>
-            <button className="b2b-btn-primary" onClick={onSave} disabled={saving}>{saving ? "저장 중..." : "메시지 저장"}</button>
-          </div>
-        </div>
-      </div>
+      {showOpts && <OptionsModal current={opts} onClose={() => setShowOpts(false)} onSaved={(o) => { setOpts(o); setShowOpts(false); }} />}
     </div>
   );
 }
