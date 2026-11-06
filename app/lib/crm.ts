@@ -5,6 +5,10 @@ export type CrmLinks = {
   url?: string;
   /** GA 연동 키 — 이 메시지 링크의 utm_campaign 값(URL 아님). */
   utm_campaign?: string;
+  /** 버튼별 링크 전부(UTM 붙은 완성 주소, 버튼 순서). url 은 이 중 첫 추적 링크. 엑셀 가져오기(2026-11-06)가 채운다 */
+  urls?: string[];
+  /** A/B 변형 utm_term(a·b). 없으면 "" */
+  utm_term?: string;
   // 구 데이터 호환(읽기 전용) — normalize 가 url 로 이관 후 버린다.
   solapi?: string; cafe24?: string; meta?: string; sheets?: string; channel?: string; blog?: string; onsite?: string;
 };
@@ -138,6 +142,10 @@ export function normalizeCrmMessage(input: CrmMessageInput): CrmMessageInput {
   if (url) links.url = url;
   const utm = clean(raw.utm_campaign);
   if (utm) links.utm_campaign = utm;
+  const urls = Array.isArray(raw.urls) ? raw.urls.map(clean).filter(Boolean) : [];
+  if (urls.length) links.urls = urls;
+  const term = clean(raw.utm_term);
+  if (term) links.utm_term = term;
   const perfIn = input.perf || {};
   const perf: CrmPerf = {};
   (["sent", "reached", "opened", "clicked", "converted", "revenue"] as (keyof CrmPerf)[]).forEach((k) => {

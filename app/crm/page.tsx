@@ -12,6 +12,7 @@ import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/cha
 import { matchKoQuery } from "@/app/lib/hangul";
 import { qty, qtyText, wonText } from "@/app/lib/format";
 import WeeklyStats from "./WeeklyStats";
+import ImportModal from "./ImportModal";
 import { CRM_TRIGGERS } from "@/app/lib/crm";
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -86,6 +87,7 @@ export default function CrmPage() {
   // 선택지(발송채널·고객·유형) — 설정 저장분, 없으면 기본값. '선택지 관리'에서 편집.
   const [opts, setOpts] = useState<CrmOptions>(DEFAULT_CRM_OPTIONS);
   const [showOpts, setShowOpts] = useState(false);
+  const [showImport, setShowImport] = useState(false); // 엑셀 가져오기(2026-11-06)
   useEffect(() => {
     (async () => {
       try { const j = await (await fetch("/api/crm/options", { cache: "no-store" })).json(); if (j.ok && j.options) setOpts(j.options); }
@@ -271,6 +273,7 @@ export default function CrmPage() {
         <div className="b2b-page-actions sm-row sm-gap-2">
           <button className="b2b-btn-primary" onClick={() => openNew()}>+ 메시지 추가</button>
           <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리하기</button>
+          <button className="b2b-btn-secondary" onClick={() => setShowImport(true)}>엑셀로 가져오기</button>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "다시 불러오기"}</button>
           {messages.length > 0 && <a className="b2b-btn-secondary crm-xlsx-btn" href="/api/crm/export">엑셀 내려받기</a>}
         </div>
@@ -404,6 +407,7 @@ export default function CrmPage() {
           opts={opts} labels={labels}
         />
       )}
+      {showImport && <ImportModal onClose={() => setShowImport(false)} onDone={() => { load(); }} />}
       {showOpts && (
         <OptionsModal current={opts} onClose={() => setShowOpts(false)} onSaved={(o) => { setOpts(o); setShowOpts(false); }} />
       )}

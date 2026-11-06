@@ -3,7 +3,7 @@
 --   utm_links.crm_campaign : CRM 모드에서 만든 링크의 utm_campaign(메시지 묶음 표시용. campaign 열과 같지만 용도 필터에 쓴다)
 --   슬러그 사전은 utm_settings(key='content_slugs') 에 들어가므로 구조 변경 없음.
 -- 적용: Supabase SQL Editor 에 붙여넣고 Run. 멱등. 미적용이어도 코드는 두 열 없이 저장하는 폴백으로 동작한다.
--- ※ CRM 메시지 엑셀 가져오기(본문·버튼별 링크·utm_term)의 열 추가는 그 기획이 확정되면 이 파일에 이어 붙인다 — 적용 전까지 한 묶음.
+-- ※ CRM 메시지 엑셀 가져오기(2026-11-06)는 기존 열(msg 본문)과 links jsonb(urls·utm_term)만 써서 구조 변경이 없다 — 이 파일은 UTM 기록 열뿐.
 
 alter table utm_links add column if not exists purpose text not null default 'ad';
 alter table utm_links add column if not exists crm_campaign text not null default '';
