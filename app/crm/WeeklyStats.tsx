@@ -129,14 +129,14 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
-              <thead><tr><th>메시지</th><th>수단</th><th>트리거</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th className="num">구매</th><th className="num">매출</th></tr></thead>
+              <thead><tr><th className="crm-title-cell">메시지</th><th>수단</th><th>트리거</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th className="num">구매</th><th className="num">매출</th></tr></thead>
               <tbody>{v.tracked.map((t) => {
                 const tone = t.ctr == null || t.targetCtr == null ? undefined : t.ctr >= t.targetCtr ? "var(--sm-success)" : "var(--sm-danger)";
                 return (
                   <tr key={t.id}>
-                    <td><div>{t.title}</div><span className="crm-sub">{[t.stage, t.customer, t.campaign].filter(Boolean).join(" · ")}</span></td>
+                    <td className="crm-title-cell"><div>{t.title}</div><span className="crm-sub">{[t.stage, t.customer, t.campaign].filter(Boolean).join(" · ")}</span></td>
                     <td className="crm-cell-nowrap">{t.medium || "-"}</td>
-                    <td className="crm-cell-nowrap">{t.triggerText || "-"}</td>
+                    <td>{(() => { const [head, ...rest] = (t.triggerText || "").split(" · "); return <><span className="crm-cell-nowrap">{head || "-"}</span>{rest.length > 0 && <span className="crm-sub crm-trig-note" title={rest.join(" · ")}>{rest.join(" · ")}</span>}</>; })()}</td>
                     <td className="num" title={t.sentNote}>{t.sent == null ? "-" : qty(t.sent)}{t.sentBasis === "estimate" && <span className="crm-sub">추정</span>}</td>
                     <td className="num">{t.sessions == null ? "-" : qty(t.sessions)}</td>
                     <td className="num" style={{ color: tone, fontWeight: tone ? 600 : undefined }}>{t.ctr == null ? "-" : `${t.ctr}%`}{t.targetCtr != null && <span className="crm-sub">목표 {t.targetCtr}%</span>}</td>
