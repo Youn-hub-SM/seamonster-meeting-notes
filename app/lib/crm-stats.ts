@@ -105,7 +105,7 @@ export async function weeklyStats(weekStart: string): Promise<{ week: string; un
 // GA — 소스가 kakao(utm 규칙) 또는 datarize(데이터라이즈 자동 UTM, 2026-11-09) 인 세션·구매·매출을 매체별로. 설정 없으면 null.
 export async function gaByMedium(since: string, until: string): Promise<GaMediumRow[] | null> {
   if (!isGaConfigured()) return null;
-  const r = await runGaReport({ since, until, dimensions: ["source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 200, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" } });
+  const r = await runGaReport({ since, until, dimensions: ["source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 200, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" }, scope: "all" });
   return r.rows.map((row) => ({ medium: String(row["소스/매체"] || "").replace(/^kakao\s*\/\s*/, "").replace(/^datarize\s*\/\s*/, "datarize-"), sessions: Number(row["세션"]) || 0, purchases: Number(row["구매"]) || 0, revenue: Math.round(Number(row["구매액(원)"]) || 0) })).filter((x) => x.medium).sort((a, b) => b.sessions - a.sessions);
 }
 
@@ -134,7 +134,7 @@ async function buildTracked(sb: ReturnType<typeof supabaseAdmin>, msgs: CrmMessa
   let gaOk = false;
   if (isGaConfigured()) {
     try {
-      const r = await runGaReport({ since: weekStart, until, dimensions: ["campaign", "source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 500, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" } });
+      const r = await runGaReport({ since: weekStart, until, dimensions: ["campaign", "source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 500, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" }, scope: "all" });
       for (const row of r.rows) {
         const c = String(row["캠페인"] || "").trim().toLowerCase(); const cur = ga.get(c) || { sessions: 0, purchases: 0, revenue: 0 };
         cur.sessions += Number(row["세션"]) || 0; cur.purchases += Number(row["구매"]) || 0; cur.revenue += Number(row["구매액(원)"]) || 0; ga.set(c, cur);
@@ -203,7 +203,7 @@ export async function trackedHistory(endWeek: string, weeks = 12, opts: { onlyId
     try {
       const yesterday = shiftDays(kstToday(), -1);
       const until = shiftDays(endWeek, 6) < yesterday ? shiftDays(endWeek, 6) : yesterday;
-      const r = await runGaReport({ since: first, until, dimensions: ["date", "campaign"], metrics: ["sessions", "purchases", "revenue"], limit: 5000, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" } });
+      const r = await runGaReport({ since: first, until, dimensions: ["date", "campaign"], metrics: ["sessions", "purchases", "revenue"], limit: 5000, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" }, scope: "all" });
       for (const row of r.rows) {
         const i = idx(weekStartOf(String(row["날짜"] || ""))); if (i < 0) continue;
         const c = String(row["캠페인"] || "").trim().toLowerCase(); const n = Number(row["세션"]) || 0;
@@ -266,7 +266,7 @@ export async function messageStats(id: string, endWeek: string, weeks = 12): Pro
     const until = shiftDays(endWeek, 6) < yesterday ? shiftDays(endWeek, 6) : yesterday;
     const keys = [row.campaign, ...row.aliases].map((s) => s.trim()).filter(Boolean);
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const r = await runGaReport({ since: first, until, dimensions: ["date", "term"], metrics: ["sessions", "purchases", "revenue"], limit: 2000, filter: { dimension: "campaign", match: "regex_full", value: `(${keys.map(esc).join("|")})` } });
+    const r = await runGaReport({ since: first, until, dimensions: ["date", "term"], metrics: ["sessions", "purchases", "revenue"], limit: 2000, filter: { dimension: "campaign", match: "regex_full", value: `(${keys.map(esc).join("|")})` }, scope: "all" });
     const byDate = new Map<string, { date: string; sessions: number; purchases: number; revenue: number }>();
     const byTerm = new Map<string, { term: string; sessions: number; purchases: number; revenue: number }>();
     for (const x of r.rows) {

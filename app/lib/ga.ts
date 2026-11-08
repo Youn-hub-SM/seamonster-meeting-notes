@@ -2,6 +2,8 @@
 //  인증: 구글 서비스 계정(JWT 서명 → OAuth2 토큰). 외부 SDK 없이 node:crypto RS256 서명.
 //  전제: 서비스 계정 이메일을 GA4 속성에 '뷰어'로 추가해야 데이터가 나온다(403 아님, 빈 결과).
 //  자격 = env: GA4_PROPERTY_ID · GA_SA_EMAIL · GA_SA_PRIVATE_KEY(개행은 \n 이스케이프 허용)
+//  2026-11-09 GA4_EXTRA_PROPERTY_IDS(쉼표) — 블로그(blog.seamonster.kr, 측정 ID G-63ZT6HXYY1) 처럼 다른 GA4 속성으로 가는 랜딩의 클릭을 CRM 집계에 합친다.
+//    같은 서비스 계정을 그 속성에도 뷰어로 넣어야 한다. 캠페인 성과(getCampaign*)와 scope:"all" 로 부른 runGaReport 만 합치고, 비서·리포트의 일반 조회는 본 속성만.
 
 import { createSign } from "node:crypto";
 
@@ -12,6 +14,10 @@ export function isGaConfigured(): boolean {
   return !!(process.env.GA4_PROPERTY_ID && process.env.GA_SA_EMAIL && process.env.GA_SA_PRIVATE_KEY);
 }
 
+/** 추가 속성 ID 목록(없으면 []) */
+export function extraPropertyIds(): string[] {
+  return [...new Set((process.env.GA4_EXTRA_PROPERTY_IDS || "").split(",").map((s) => s.trim().replace(/^properties\//, "")).filter((s) => /^\d+$/.test(s)))];
+}
 function creds() {
   const propertyId = (process.env.GA4_PROPERTY_ID || "").trim().replace(/^properties\//, "");
   const email = (process.env.GA_SA_EMAIL || "").trim();
@@ -53,7 +59,9 @@ export async function getCampaignStats(campaigns: string[], sinceDays = 90): Pro
   if (list.length === 0) return {};
   const { propertyId } = creds();
   const token = await accessToken();
-  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+  const out: Record<string, GaCampaignStat> = {};
+  for (const pid of [propertyId, ...extraPropertyIds()]) {
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${pid}:runReport`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -70,11 +78,13 @@ export async function getCampaignStats(campaigns: string[], sinceDays = 90): Pro
     error?: { message?: string };
   };
   if (!res.ok) throw new Error(`GA API ${res.status}: ${j.error?.message || "조회 실패"}`);
-  const out: Record<string, GaCampaignStat> = {};
   for (const r of j.rows || []) {
     const name = r.dimensionValues?.[0]?.value || "";
     const m = (i: number) => Number(r.metricValues?.[i]?.value) || 0;
-    if (name) out[name] = { sessions: m(0), users: m(1), purchases: m(2), revenue: Math.round(m(3)) };
+    if (!name) continue;
+    const cur = out[name] || { sessions: 0, users: 0, purchases: 0, revenue: 0 };
+    out[name] = { sessions: cur.sessions + m(0), users: cur.users + m(1), purchases: cur.purchases + m(2), revenue: cur.revenue + Math.round(m(3)) }; // 속성이 둘이면 사용자 수는 겹칠 수 있다
+  }
   }
   return out;
 }
@@ -87,7 +97,9 @@ export async function getCampaignDaily(campaigns: string[], sinceDays = 30): Pro
   if (list.length === 0) return [];
   const { propertyId } = creds();
   const token = await accessToken();
-  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+  const acc = new Map<string, GaDailyRow>(); // 날짜|캠페인 → 합산(속성 여러 개)
+  for (const pid of [propertyId, ...extraPropertyIds()]) {
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${pid}:runReport`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -105,16 +117,18 @@ export async function getCampaignDaily(campaigns: string[], sinceDays = 30): Pro
     error?: { message?: string };
   };
   if (!res.ok) throw new Error(`GA API ${res.status}: ${j.error?.message || "조회 실패"}`);
-  const out: GaDailyRow[] = [];
   for (const r of j.rows || []) {
     const raw = r.dimensionValues?.[0]?.value || ""; // YYYYMMDD
     const campaign = r.dimensionValues?.[1]?.value || "";
     const m = (i: number) => Number(r.metricValues?.[i]?.value) || 0;
     if (raw.length === 8 && campaign) {
-      out.push({ date: `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`, campaign, sessions: m(0), purchases: m(1), revenue: Math.round(m(2)) });
+      const date = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+      const cur = acc.get(`${date}|${campaign}`) || { date, campaign, sessions: 0, purchases: 0, revenue: 0 };
+      cur.sessions += m(0); cur.purchases += m(1); cur.revenue += Math.round(m(2)); acc.set(`${date}|${campaign}`, cur);
     }
   }
-  return out;
+  }
+  return [...acc.values()].sort((a, b) => a.date.localeCompare(b.date) || a.campaign.localeCompare(b.campaign));
 }
 
 // ── 범용 리포트(2026-10-22 AI 비서·종합 리포트 ga_report 도구) ── 차원·측정항목은 허용 목록의 키만 받는다(API 이름 노출·오타 방지).
@@ -167,7 +181,8 @@ const RATE_METRICS = new Set<GaMetricKey>(["bounce_rate", "engagement_rate"]); /
 //  filter = 차원 하나로 행을 거른다(예: page_path exact '/buy'). 필터 차원은 dimensions 에 없어도 된다.
 //  extraDimension = 사용자 정의 측정기준 API 이름(customEvent:sm_label 등, 속성 메타데이터에 있는 것만) — 열 이름은 ':' 뒤 부분
 const CUSTOM_DIM_RE = /^custom(Event|User|Item):[A-Za-z0-9_]{1,40}$/;
-export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number; filter?: GaFilter | null; extraDimension?: string | null }): Promise<GaReportResult> {
+//  scope: "all" = 추가 속성(GA4_EXTRA_PROPERTY_IDS)도 돌려 같은 차원 값끼리 측정항목을 더한다(CRM 캠페인 집계용). 기본 "main" = 본 속성만.
+export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number; filter?: GaFilter | null; extraDimension?: string | null; scope?: "main" | "all" }): Promise<GaReportResult> {
   const dims = [...new Set(p.dimensions)].filter((d) => d in GA_DIMENSIONS);
   const extra = p.extraDimension && CUSTOM_DIM_RE.test(p.extraDimension) ? p.extraDimension : null;
   const extraLabel = extra ? extra.split(":")[1] : "";
@@ -181,7 +196,11 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
   const f = p.filter && p.filter.dimension in GA_DIMENSIONS && String(p.filter.value || "").trim() ? p.filter : null;
   const { propertyId } = creds();
   const token = await accessToken();
-  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+  const pids = p.scope === "all" ? [propertyId, ...extraPropertyIds()] : [propertyId];
+  type RawRow = { dimensionValues?: { value?: string }[]; metricValues?: { value?: string }[] };
+  const merged = new Map<string, RawRow>();
+  for (const pid of pids) {
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${pid}:runReport`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -200,10 +219,21 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
     rowCount?: number; error?: { message?: string };
   };
   if (!res.ok) throw new Error(`GA API ${res.status}: ${j.error?.message || "조회 실패"}`);
+  for (const r of j.rows || []) {
+    const key = (r.dimensionValues || []).map((d) => d.value ?? "").join("\u0001");
+    const cur = merged.get(key);
+    if (!cur) { merged.set(key, { dimensionValues: r.dimensionValues, metricValues: (r.metricValues || []).map((m) => ({ value: m.value })) }); continue; }
+    cur.metricValues = (cur.metricValues || []).map((m, i) => ({ value: String((Number(m.value) || 0) + (Number(r.metricValues?.[i]?.value) || 0)) })); // 비율형(bounce_rate 등)은 합산이 어긋나지만 CRM 은 건수·금액만 쓴다
+  }
+  }
   const si = mets.indexOf("sessions"), pi = mets.indexOf("purchases");
   const withRate = si >= 0 && pi >= 0;
   const columns = [...dims.map((d) => GA_DIMENSIONS[d].label), ...(extra ? [extraLabel] : []), ...mets.map((m) => GA_METRICS[m].label), ...(withRate ? ["구매 전환율(%)"] : [])];
-  const all = j.rows || [];
+  const all = [...merged.values()];
+  if (pids.length > 1) { // 속성을 합쳤으면 순서를 다시 맞춘다(날짜 오름차순 또는 첫 측정항목 내림차순)
+    const di = dims.indexOf("date");
+    all.sort((a, b) => (di >= 0 ? String(a.dimensionValues?.[di]?.value || "").localeCompare(String(b.dimensionValues?.[di]?.value || "")) : (Number(b.metricValues?.[0]?.value) || 0) - (Number(a.metricValues?.[0]?.value) || 0)));
+  }
   const rows = all.slice(0, limit).map((r) => {
     const row: Record<string, unknown> = {};
     dims.forEach((d, i) => {
