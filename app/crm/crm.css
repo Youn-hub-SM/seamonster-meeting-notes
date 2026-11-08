@@ -74,11 +74,19 @@
 .crm-band-chips { display: flex; flex-wrap: wrap; gap: var(--sm-space-2); }
 .crm-journey-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-top: var(--sm-space-2); }
 
-/* 성과 */
-.crm-perf-sec { margin-top: var(--sm-space-5); }
-.crm-perf-head { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
-.crm-perf-title { font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); letter-spacing: var(--sm-ls-heading); margin: 0; }
-.crm-perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--sm-space-3); }
+/* 성과(2026-11-08 개편) — 상단 한 줄 + KPI + 메시지별 표, 나머지는 접기 */
+.crm-perf-bar { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-4); }
+.crm-perf-bar .sm-tabs { align-items: center; }
+.crm-perf-week { font-size: var(--sm-fs-base); font-weight: 600; padding: 0 var(--sm-space-2); white-space: nowrap; }
+.crm-more { background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); padding: 0 var(--sm-space-4); margin-top: var(--sm-space-3); }
+.crm-more > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--sm-space-2); padding: 12px 0; font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black); }
+.crm-more > summary::-webkit-details-marker { display: none; }
+.crm-more > summary::before { content: "▸"; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.crm-more[open] > summary { border-bottom: 1px solid var(--sm-border); margin-bottom: var(--sm-space-3); }
+.crm-more[open] > summary::before { content: "▾"; }
+.crm-more > :last-child { margin-bottom: var(--sm-space-4); }
+.crm-sub-row { padding-left: 28px !important; color: var(--sm-text-mid); }
+.crm-ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crm-summary-spacer { flex: 1; }
 
 /* 모달(선택지·가져오기) */

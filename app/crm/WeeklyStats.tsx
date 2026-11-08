@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useConfirm } from "@/app/components/Feedback";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import { TrendChart } from "@/app/components/charts";
 import { qty, qtyText, wonText } from "@/app/lib/format";
 
-// CRM 주간 성과(2026-10-26, docs/crm-dashboard-plan.md) — 수단별 발송·클릭(crm_send_stats) + GA 매체별 세션·구매·매출 + 12주 추이 + 직접 입력.
-//  솔라피는 [가져오기] 버튼(API), 데이터라이즈·블룸은 CSV 업로드(2단계), 네이버 톡톡·톡스토어·문자는 직접 입력.
+// CRM 성과(2026-11-08 개편, 대표: "성과 파트가 어수선해") — 보이는 것은 KPI 4개 + 메시지별 성과 표 하나.
+//  수단별 발송·GA 매체별·12주 추이·이 주의 기록은 '자세히'로 접는다. 캠페인 추이(7/30/90 차트)는 메시지별 표와 중복이라 삭제.
+//  데이터는 전과 같다: /api/crm/stats?week= (crm_send_stats + GA 매체별 + 추적 메시지), 솔라피 가져오기 POST, 직접 입력 POST(모달).
+//  판매 채널 세그먼트(channel)가 수단·GA 매체·추적 메시지·추이·기록 전부에 적용된다.
 
 type SourceDef = { key: string; label: string; how: "csv" | "api" | "manual" };
 type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; label: string; sent: number; clicked: number | null; days: number }[] };
@@ -27,65 +29,66 @@ const CUSTOMER_LABEL_KEY: Record<string, string> = { "네이버": "naver", "공�
 
 export default function WeeklyStats({ channel = "" }: { channel?: string }) {
   const confirm = useConfirm();
+  const toast = useToast();
   const [week, setWeek] = useState<string>(kstToday());
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState("");
-  const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [add, setAdd] = useState({ source: "naver_talk", grain: "day", date: kstToday(), template: "", sent: "", clicked: "", note: "" });
+  const [addErr, setAddErr] = useState("");
 
   const load = useCallback(async (w: string) => {
     setLoading(true); setErr("");
     try {
       const j = (await fetch(`/api/crm/stats?week=${w}`, { cache: "no-store" }).then((r) => r.json())) as Resp;
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "성과를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setData(j); setWeek(j.week);
-    } catch (e) { setErr(e instanceof Error ? e.message : "조회 실패"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "성과를 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(week); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
-
   const go = (n: number) => load(shiftDays(week, 7 * n));
 
   const syncSolapi = async () => {
-    setBusy("solapi"); setMsg("");
+    setBusy("solapi");
     try {
       const j = await fetch("/api/crm/stats/solapi", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ since: shiftDays(week, -7), until: data?.until && data.until < kstToday() ? data.until : kstToday() }) }).then((r) => r.json());
-      if (!j.ok) throw new Error(j.error || "가져오기 실패");
-      setMsg(`솔라피 ${j.since}~${j.until}: 메시지 ${qtyText(j.messages, "건")} → ${qtyText(j.rows, "줄")} 저장 · 템플릿 이름 ${qtyText(j.templates || 0, "개")}`);
+      if (!j.ok) throw new Error(j.error || "솔라피에서 가져오지 못했습니다. 잠시 뒤 다시 누르세요");
+      toast.success(`솔라피 ${j.since}~${j.until}: 메시지 ${qtyText(j.messages, "건")} → ${qtyText(j.rows, "줄")} 저장`);
       await load(week);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "가져오기 실패"); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : "솔라피에서 가져오지 못했습니다. 잠시 뒤 다시 누르세요"); }
     finally { setBusy(""); }
   };
-
   const submitAdd = async () => {
-    setBusy("add"); setMsg("");
+    if (!add.date || !add.sent) { setAddErr("날짜와 발송 건수를 입력하세요"); return; }
+    setBusy("add"); setAddErr("");
     try {
       const j = await fetch("/api/crm/stats", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(add) }).then((r) => r.json());
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "발송 기록을 저장하지 못했습니다. 입력값을 확인하세요");
       setAdd((a) => ({ ...a, template: "", sent: "", clicked: "", note: "" })); setShowAdd(false);
+      toast.success("발송 기록을 저장했습니다");
       await load(add.date);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setAddErr(e instanceof Error ? e.message : "발송 기록을 저장하지 못했습니다. 입력값을 확인하세요"); }
     finally { setBusy(""); }
   };
-
   const remove = async (id: string) => {
     if (!(await confirm({ title: "발송 기록 삭제", body: "이 줄을 지웁니다. 되돌릴 수 없습니다.", action: "기록 삭제" }))) return;
     const j = await fetch(`/api/crm/stats?id=${id}`, { method: "DELETE" }).then((r) => r.json());
-    if (!j.ok) { setMsg(j.error || "삭제 실패"); return; }
+    if (!j.ok) { toast.error(j.error || "발송 기록을 삭제하지 못했습니다. 다시 시도하세요"); return; }
+    toast.success("발송 기록을 삭제했습니다");
     await load(week);
   };
 
-  // 판매 채널 세그먼트 적용 — 수단·GA 매체·추적 메시지·추이·기록 전부
+  // 판매 채널 세그먼트 적용
   const v = useMemo(() => {
     if (!data) return null;
     const srcOk = (k: string) => !channel || SOURCE_CHANNEL[k] === channel;
     const sources = data.sources.filter((s) => srcOk(s.source));
     const ga = data.ga ? data.ga.filter((g) => !channel || MEDIUM_CHANNEL(g.medium) === channel) : data.ga;
-    const tracked = (data.tracked || []).filter((t) => !channel || (CUSTOMER_LABEL_KEY[t.customer] || t.customer) === channel || (!t.customer && MEDIUM_CHANNEL(t.medium) === channel));
+    const tracked = (data.tracked || []).filter((t) => !channel || (CUSTOMER_LABEL_KEY[t.customer] || t.customer) === channel || (!t.customer && MEDIUM_CHANNEL(t.medium) === channel))
+      .slice().sort((a, b) => (b.sent ?? -1) - (a.sent ?? -1) || (b.sessions ?? -1) - (a.sessions ?? -1));
     const rows = data.rows.filter((r) => srcOk(r.source));
     const trend = data.trend.map((t) => ({ week: t.week, bySource: Object.fromEntries(Object.entries(t.bySource).filter(([k]) => srcOk(k))) }));
     return { ...data, sources, ga, tracked, rows, trend };
@@ -94,142 +97,142 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
   const gaTotal = useMemo(() => (v?.ga || []).reduce((s, g) => ({ sessions: s.sessions + g.sessions, purchases: s.purchases + g.purchases, revenue: s.revenue + g.revenue }), { sessions: 0, purchases: 0, revenue: 0 }), [v]);
   const trendData = useMemo(() => (v?.trend || []).map((t) => { const sum = Object.values(t.bySource).reduce((a, b) => a + b, 0); const tip = Object.entries(t.bySource).map(([k, n]) => `${v?.sourceDefs.find((s) => s.key === k)?.label || k} ${qty(n)}`).join(" · "); return { label: fmtDate(t.week), value: sum, tip: tip || "발송 없음" }; }), [v]);
   const defs = data?.sourceDefs || [];
+  const weekLabel = data ? `${fmtDate(data.week)} ~ ${fmtDate(data.until)}` : week;
+  const hasGa = !!v?.ga;
 
   return (
     <div>
-      <div className="sm-row-wrap" style={{ gap: 8, alignItems: "center", marginBottom: 12 }}>
-        <button className="b2b-btn-secondary" onClick={() => go(-1)} disabled={loading}>이전 주</button>
-        <strong style={{ fontSize: 15 }}>{data ? `${fmtDate(data.week)} ~ ${fmtDate(data.until)}` : week} 주</strong>
-        <button className="b2b-btn-secondary" onClick={() => go(1)} disabled={loading || week >= kstToday()}>다음 주</button>
-        <span className="crm-summary-spacer" />
-        {data?.solapi ? <button className="b2b-btn-secondary" onClick={syncSolapi} disabled={!!busy}>{busy === "solapi" ? "가져오는 중..." : "솔라피 가져오기"}</button>
-          : <span className="sm-faint" style={{ fontSize: 12 }}>솔라피 API 키 없음(Vercel 환경 변수 SOLAPI_API_KEY·SOLAPI_API_SECRET)</span>}
-        <button className="b2b-btn-secondary" onClick={() => setShowAdd((v) => !v)}>{showAdd ? "입력 닫기" : "직접 입력"}</button>
+      <div className="crm-perf-bar">
+        <div className="sm-tabs">
+          <button className="sm-tab" onClick={() => go(-1)} disabled={loading} aria-label="이전 주">이전 주</button>
+          <span className="crm-perf-week num">{weekLabel}</span>
+          <button className="sm-tab" onClick={() => go(1)} disabled={loading || week >= kstToday()} aria-label="다음 주">다음 주</button>
+        </div>
+        <span className="crm-bar-spacer" />
+        {data?.solapi && <button className="b2b-btn-secondary" onClick={syncSolapi} disabled={!!busy}>{busy === "solapi" ? "가져오는 중..." : "솔라피 가져오기"}</button>}
+        <button className="b2b-btn-secondary" onClick={() => setShowAdd(true)}>발송 기록 입력</button>
       </div>
       {err && <div className="b2b-error">{err}</div>}
-      {msg && <div className="sm-success" style={{ marginBottom: 10 }}>{msg}</div>}
+      {data && !data.solapi && <div className="b2b-field-hint is-block">솔라피 API 키가 없어 자동 수집이 꺼져 있습니다(Vercel 환경 변수 SOLAPI_API_KEY·SOLAPI_API_SECRET)</div>}
 
-      {showAdd && (
-        <section className="b2b-card" style={{ marginBottom: 14 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">발송 기록 직접 입력</span></div>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">발송 수단</span>
-              <select className="b2b-input" value={add.source} onChange={(e) => setAdd({ ...add, source: e.target.value })}>{defs.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></label>
-            <label className="b2b-field"><span className="b2b-field-label">단위</span>
-              <select className="b2b-input" value={add.grain} onChange={(e) => setAdd({ ...add, grain: e.target.value })}><option value="day">일별(그 날)</option><option value="week">주별(주 시작일)</option></select></label>
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">날짜</span><input className="b2b-input" type="date" value={add.date} onChange={(e) => setAdd({ ...add, date: e.target.value })} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">템플릿·캠페인 이름</span><input className="b2b-input" value={add.template} onChange={(e) => setAdd({ ...add, template: e.target.value })} placeholder="예: 추석 프로모션 톡톡" /></label>
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">발송 건수</span><input className="b2b-input" type="number" min={0} value={add.sent} onChange={(e) => setAdd({ ...add, sent: e.target.value })} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">클릭 수</span><input className="b2b-input" type="number" min={0} value={add.clicked} onChange={(e) => setAdd({ ...add, clicked: e.target.value })} placeholder="모르면 비움" /></label>
-          </div>
-          <label className="b2b-field"><span className="b2b-field-label">메모</span><input className="b2b-input" value={add.note} onChange={(e) => setAdd({ ...add, note: e.target.value })} placeholder="대상·쿠폰 등" /></label>
-          <div className="sm-row" style={{ gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
-            <button className="b2b-btn-primary" onClick={submitAdd} disabled={busy === "add" || !add.date || !add.sent}>{busy === "add" ? "저장 중..." : "저장"}</button>
-          </div>
-        </section>
-      )}
+      <div className="crm-kpis">
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">발송</div><div className="b2b-stat-card-value">{loading ? "-" : qty(totalSent)}</div><div className="b2b-stat-card-hint">이 주 · 수단별 기록 합</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">클릭(GA 세션)</div><div className="b2b-stat-card-value">{loading || !hasGa ? "-" : qty(gaTotal.sessions)}</div><div className="b2b-stat-card-hint">{hasGa ? "utm_source=kakao" : "GA 연동 없음"}</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">클릭률</div><div className="b2b-stat-card-value">{loading || !hasGa ? "-" : pct(gaTotal.sessions, totalSent)}</div><div className="b2b-stat-card-hint">세션 ÷ 발송</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">구매 · 매출</div><div className="b2b-stat-card-value">{loading || !hasGa ? "-" : qty(gaTotal.purchases)}</div><div className="b2b-stat-card-hint">{hasGa ? wonText(gaTotal.revenue) : ""}</div></div>
+      </div>
 
-      <section className="b2b-card" style={{ marginBottom: 14 }}>
-        <div className="b2b-card-head"><span className="b2b-card-title">추적 메시지 클릭률 (utm 단 메시지)</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>클릭률 = GA 세션 ÷ 발송 수</span></div>
-        {loading ? <p className="sm-faint">불러오는 중...</p> : v?.trackedNote ? <div className="b2b-error">{v?.trackedNote}</div> : !v?.tracked?.length ? <p className="sm-faint" style={{ fontSize: 13 }}>UTM 캠페인이 적힌 메시지가 없습니다. 드로어에서 UTM 캠페인을 넣으면 여기 나타납니다.</p> : (
-          <div className="b2b-table-wrap"><table className="b2b-table">
-            <thead><tr><th>메시지</th><th>트리거</th><th>매체</th><th className="num">발송</th><th className="num">클릭(세션)</th><th className="num">클릭률</th><th className="num">구매</th><th className="num">매출</th></tr></thead>
-            <tbody>{v!.tracked.map((t) => {
-              const tone = t.ctr == null || t.targetCtr == null ? undefined : t.ctr >= t.targetCtr ? "var(--sm-success)" : "var(--sm-danger)";
-              return (
-                <tr key={t.id}>
-                  <td><div>{t.title}</div><div className="sm-faint" style={{ fontSize: 12 }}>{[t.stage, t.customer, t.campaign].filter(Boolean).join(" · ")}</div></td>
-                  <td style={{ whiteSpace: "nowrap" }}>{t.triggerText || "-"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{t.medium || "-"}</td>
-                  <td className="num" title={t.sentNote}>{t.sent == null ? "-" : qty(t.sent)}{t.sentBasis === "estimate" && <span className="sm-faint" style={{ fontSize: 11 }}> 추정</span>}</td>
-                  <td className="num">{t.sessions == null ? "-" : qty(t.sessions)}</td>
-                  <td className="num" style={{ color: tone, fontWeight: tone ? 700 : undefined }}>{t.ctr == null ? "-" : `${t.ctr}%`}{t.targetCtr != null && <span className="sm-faint" style={{ fontSize: 11 }}> /{t.targetCtr}%</span>}</td>
-                  <td className="num">{t.purchases == null ? "-" : qty(t.purchases)}</td>
-                  <td className="num">{t.revenue == null ? "-" : wonText(t.revenue)}</td>
-                </tr>
-              );
+      <section className="b2b-card">
+        <div className="b2b-card-head"><span className="b2b-card-title">메시지별 성과</span><span className="b2b-field-hint">클릭률 = GA 세션 ÷ 발송 · 목표 미달은 붉게</span></div>
+        {loading ? <div className="b2b-loading">불러오는 중...</div> : v?.trackedNote ? <div className="b2b-error">{v.trackedNote}</div> : !v?.tracked?.length ? (
+          <div className="b2b-empty">UTM 캠페인이 달린 메시지가 없습니다.</div>
+        ) : (
+          <div className="b2b-table-wrap is-sticky-head">
+            <table className="b2b-table is-compact">
+              <thead><tr><th>메시지</th><th>수단</th><th>트리거</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th className="num">구매</th><th className="num">매출</th></tr></thead>
+              <tbody>{v.tracked.map((t) => {
+                const tone = t.ctr == null || t.targetCtr == null ? undefined : t.ctr >= t.targetCtr ? "var(--sm-success)" : "var(--sm-danger)";
+                return (
+                  <tr key={t.id}>
+                    <td><div>{t.title}</div><span className="crm-sub">{[t.stage, t.customer, t.campaign].filter(Boolean).join(" · ")}</span></td>
+                    <td className="crm-cell-nowrap">{t.medium || "-"}</td>
+                    <td className="crm-cell-nowrap">{t.triggerText || "-"}</td>
+                    <td className="num" title={t.sentNote}>{t.sent == null ? "-" : qty(t.sent)}{t.sentBasis === "estimate" && <span className="crm-sub">추정</span>}</td>
+                    <td className="num">{t.sessions == null ? "-" : qty(t.sessions)}</td>
+                    <td className="num" style={{ color: tone, fontWeight: tone ? 600 : undefined }}>{t.ctr == null ? "-" : `${t.ctr}%`}{t.targetCtr != null && <span className="crm-sub">목표 {t.targetCtr}%</span>}</td>
+                    <td className="num">{t.purchases == null ? "-" : qty(t.purchases)}</td>
+                    <td className="num">{t.revenue == null ? "-" : wonText(t.revenue)}</td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <details className="crm-more">
+        <summary>수단별 발송 <span className="crm-group-count">{loading ? "" : qtyText(totalSent, "건")}</span></summary>
+        {loading ? <div className="b2b-loading">불러오는 중...</div> : !v?.sources.length ? <div className="b2b-empty">이 주의 발송 기록이 없습니다.</div> : (
+          <div className="b2b-table-wrap"><table className="b2b-table is-compact">
+            <thead><tr><th>발송 수단</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th>수집</th></tr></thead>
+            <tbody>{v.sources.map((s) => {
+              const def = defs.find((d) => d.key === s.source);
+              return [
+                <tr key={s.source}><td>{s.label}</td><td className="num">{qty(s.sent)}</td><td className="num">{s.clicked == null ? "-" : qty(s.clicked)}</td><td className="num">{pct(s.clicked, s.sent)}</td><td className="sm-faint">{def?.how === "api" ? "API" : def?.how === "csv" ? "CSV" : "직접"}</td></tr>,
+                ...s.templates.map((t) => (
+                  <tr key={`${s.source}:${t.template}`}><td className="crm-sub-row" title={t.template}>{t.label || t.template || "(이름 없음)"} <span className="sm-faint">· {t.days}일</span></td><td className="num">{qty(t.sent)}</td><td className="num">{t.clicked == null ? "-" : qty(t.clicked)}</td><td className="num">{pct(t.clicked, t.sent)}</td><td /></tr>
+                )),
+              ];
             })}</tbody>
           </table></div>
         )}
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>발송 수는 솔라피 템플릿 ID 가 있으면 실제, 직접 입력이 있으면 그 값, 둘 다 없으면 트리거·D+n 으로 매출 원장에서 센 대상자 수(추정 — 실제 발송보다 많음). 클릭은 GA 세션으로 통일합니다.</p>
-      </section>
+      </details>
 
-      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
-        <section className="b2b-card">
-          <div className="b2b-card-head"><span className="b2b-card-title">수단별 발송</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>합계 {qtyText(totalSent, "건")}</span></div>
-          {loading ? <p className="sm-faint">불러오는 중...</p> : !v?.sources.length ? <p className="sm-faint" style={{ fontSize: 13 }}>이 주의 발송 기록이 없습니다. 솔라피는 [솔라피 가져오기], 데이터라이즈·블룸은 CSV 업로드(준비 중), 나머지는 [직접 입력].</p> : (
-            <div className="b2b-table-wrap"><table className="b2b-table">
-              <thead><tr><th>발송 수단</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th>수집</th></tr></thead>
-              <tbody>
-                {v!.sources.map((s) => {
-                  const def = defs.find((d) => d.key === s.source);
-                  const isOpen = !!open[s.source];
-                  return [
-                    <tr key={s.source} className="is-clickable" onClick={() => setOpen((o) => ({ ...o, [s.source]: !o[s.source] }))} style={{ cursor: "pointer" }}>
-                      <td>{isOpen ? "▾" : "▸"} {s.label}</td>
-                      <td className="num">{qty(s.sent)}</td>
-                      <td className="num">{s.clicked == null ? "-" : qty(s.clicked)}</td>
-                      <td className="num">{pct(s.clicked, s.sent)}</td>
-                      <td className="sm-faint" style={{ fontSize: 12 }}>{def?.how === "api" ? "API" : def?.how === "csv" ? "CSV" : "직접"}</td>
-                    </tr>,
-                    ...(isOpen ? s.templates.map((t) => (
-                      <tr key={`${s.source}:${t.template}`} style={{ background: "var(--sm-bg-subtle)" }}>
-                        <td style={{ paddingLeft: 28, fontSize: 13 }} title={t.template}>{t.label || t.template || "(이름 없음)"} <span className="sm-faint">· {t.days}일</span></td>
-                        <td className="num" style={{ fontSize: 13 }}>{qty(t.sent)}</td>
-                        <td className="num" style={{ fontSize: 13 }}>{t.clicked == null ? "-" : qty(t.clicked)}</td>
-                        <td className="num" style={{ fontSize: 13 }}>{pct(t.clicked, t.sent)}</td>
-                        <td />
-                      </tr>
-                    )) : []),
-                  ];
-                })}
-              </tbody>
-            </table></div>
-          )}
-        </section>
+      <details className="crm-more">
+        <summary>랜딩 성과 · GA 매체별 <span className="crm-group-count">{hasGa && !loading ? `세션 ${qty(gaTotal.sessions)}` : ""}</span></summary>
+        {loading ? <div className="b2b-loading">불러오는 중...</div> : v?.ga === null ? <div className="b2b-empty">{v?.gaNote || "GA4 가 연결되어 있지 않습니다."}</div> : !v?.ga?.length ? <div className="b2b-empty">이 주에 kakao 로 들어온 세션이 없습니다.</div> : (
+          <div className="b2b-table-wrap"><table className="b2b-table is-compact">
+            <thead><tr><th>매체(utm_medium)</th><th className="num">세션</th><th className="num">구매</th><th className="num">구매전환율</th><th className="num">매출</th></tr></thead>
+            <tbody>{v.ga.map((g) => (<tr key={g.medium}><td>{g.medium}</td><td className="num">{qty(g.sessions)}</td><td className="num">{qty(g.purchases)}</td><td className="num">{pct(g.purchases, g.sessions)}</td><td className="num">{wonText(g.revenue)}</td></tr>))}</tbody>
+          </table></div>
+        )}
+        <p className="b2b-field-hint is-below">GA 는 어제까지 확정값 · 매체 이름은 utm 규칙(메시지종류-경로)</p>
+      </details>
 
-        <section className="b2b-card">
-          <div className="b2b-card-head"><span className="b2b-card-title">랜딩 성과 (GA · utm source=kakao)</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>{v?.ga ? `세션 ${qty(gaTotal.sessions)} · 구매 ${qty(gaTotal.purchases)} · ${wonText(gaTotal.revenue)}` : ""}</span></div>
-          {loading ? <p className="sm-faint">불러오는 중...</p> : v?.ga === null ? <p className="sm-faint" style={{ fontSize: 13 }}>{data?.gaNote || "GA4 가 연결되어 있지 않습니다."}</p> : !v?.ga?.length ? <p className="sm-faint" style={{ fontSize: 13 }}>이 주에 kakao 로 들어온 세션이 없습니다. 메시지 링크의 utm_source 가 kakao 인지 확인하세요.</p> : (
-            <div className="b2b-table-wrap"><table className="b2b-table">
-              <thead><tr><th>매체(utm_medium)</th><th className="num">세션</th><th className="num">구매</th><th className="num">구매전환율</th><th className="num">매출</th></tr></thead>
-              <tbody>{v!.ga.map((g) => (
-                <tr key={g.medium}><td>{g.medium}</td><td className="num">{qty(g.sessions)}</td><td className="num">{qty(g.purchases)}</td><td className="num">{pct(g.purchases, g.sessions)}</td><td className="num">{wonText(g.revenue)}</td></tr>
-              ))}</tbody>
-            </table></div>
-          )}
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>GA 는 어제까지 확정값이고 하루쯤 늦게 잡힙니다. 매체 이름은 utm 규칙(메시지종류-경로)대로 나옵니다.</p>
-        </section>
-      </div>
-
-      <section className="b2b-card" style={{ marginTop: 14 }}>
-        <div className="b2b-card-head"><span className="b2b-card-title">최근 12주 발송 추이</span></div>
+      <details className="crm-more">
+        <summary>최근 12주 발송 추이</summary>
         <TrendChart data={trendData} />
-      </section>
+      </details>
 
-      {!!v?.rows.length && (
-        <section className="b2b-card" style={{ marginTop: 14 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">이 주의 기록</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>{qtyText(v!.rows.length, "줄")}</span></div>
-          <div className="b2b-table-wrap"><table className="b2b-table">
+      <details className="crm-more">
+        <summary>이 주의 기록 <span className="crm-group-count">{v?.rows.length ? qtyText(v.rows.length, "줄") : ""}</span></summary>
+        {!v?.rows.length ? <div className="b2b-empty">기록이 없습니다.</div> : (
+          <div className="b2b-table-wrap"><table className="b2b-table is-compact">
             <thead><tr><th>날짜</th><th>수단</th><th>템플릿·캠페인</th><th className="num">발송</th><th className="num">클릭</th><th>메모</th><th>출처</th><th /></tr></thead>
-            <tbody>{v!.rows.map((r) => (
+            <tbody>{v.rows.map((r) => (
               <tr key={r.id}>
-                <td style={{ whiteSpace: "nowrap" }}>{r.date}{r.grain === "week" ? " 주" : ""}</td>
+                <td className="crm-cell-nowrap">{r.date}{r.grain === "week" ? " 주" : ""}</td>
                 <td>{defs.find((d) => d.key === r.source)?.label || r.source}</td>
-                <td style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.template}>{r.batch === "solapi-sync" && r.note ? r.note.split(" · ")[0] : (r.template || "-")}</td>
+                <td className="crm-ellipsis" title={r.template}>{r.batch === "solapi-sync" && r.note ? r.note.split(" · ")[0] : (r.template || "-")}</td>
                 <td className="num">{qty(r.sent)}</td>
                 <td className="num">{r.clicked == null ? "-" : qty(r.clicked)}</td>
-                <td className="sm-faint" style={{ fontSize: 12 }}>{r.note || ""}</td>
-                <td className="sm-faint" style={{ fontSize: 12 }}>{r.batch === "solapi-sync" ? "솔라피 API" : r.batch === "manual" ? "직접 입력" : r.batch || "-"}</td>
-                <td><button className="b2b-link-btn" onClick={() => remove(r.id)} style={{ color: "var(--sm-danger)", fontSize: 12 }}>삭제</button></td>
+                <td className="sm-faint">{r.note || ""}</td>
+                <td className="sm-faint">{r.batch === "solapi-sync" ? "솔라피 API" : r.batch === "manual" ? "직접 입력" : r.batch || "-"}</td>
+                <td><button className="b2b-link-btn" onClick={() => remove(r.id)}>삭제</button></td>
               </tr>
             ))}</tbody>
           </table></div>
-        </section>
+        )}
+      </details>
+
+      {showAdd && (
+        <div className="b2b-modal-backdrop" onClick={() => setShowAdd(false)}>
+          <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="b2b-modal-head"><h2 className="b2b-modal-title">발송 기록 입력</h2><button className="b2b-modal-close" aria-label="닫기" onClick={() => setShowAdd(false)}>✕</button></div>
+            <div className="b2b-modal-body">
+              {addErr && <div className="b2b-error">{addErr}</div>}
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">발송 수단</span>
+                  <select className="b2b-select" value={add.source} onChange={(e) => setAdd({ ...add, source: e.target.value })}>{defs.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></label>
+                <label className="b2b-field"><span className="b2b-field-label">단위</span>
+                  <select className="b2b-select" value={add.grain} onChange={(e) => setAdd({ ...add, grain: e.target.value })}><option value="day">일별(그 날)</option><option value="week">주별(주 시작일)</option></select></label>
+              </div>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">날짜<span className="req">*</span></span><input className="b2b-input" type="date" value={add.date} onChange={(e) => setAdd({ ...add, date: e.target.value })} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">템플릿·캠페인 이름</span><input className="b2b-input" value={add.template} onChange={(e) => setAdd({ ...add, template: e.target.value })} /></label>
+              </div>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">발송 건수<span className="req">*</span></span><input className="b2b-input" type="number" min={0} value={add.sent} onChange={(e) => setAdd({ ...add, sent: e.target.value })} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">클릭 수 <span className="opt">모르면 비움</span></span><input className="b2b-input" type="number" min={0} value={add.clicked} onChange={(e) => setAdd({ ...add, clicked: e.target.value })} /></label>
+              </div>
+              <label className="b2b-field"><span className="b2b-field-label">메모</span><input className="b2b-input" value={add.note} onChange={(e) => setAdd({ ...add, note: e.target.value })} /></label>
+            </div>
+            <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
+              <button className="b2b-btn-secondary" onClick={() => setShowAdd(false)} disabled={busy === "add"}>그만두기</button>
+              <button className="b2b-btn-primary" onClick={submitAdd} disabled={busy === "add"}>{busy === "add" ? "저장 중..." : "기록 저장"}</button>
+            </div></div>
+          </div>
+        </div>
       )}
     </div>
   );

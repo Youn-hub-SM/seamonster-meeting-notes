@@ -15,7 +15,7 @@ import ImportModal from "./ImportModal";
 import OptionsModal from "./OptionsModal";
 import ListView from "./ListView";
 import JourneyView from "./JourneyView";
-import PerfView from "./PerfView";
+import WeeklyStats from "./WeeklyStats";
 import Drawer from "./Drawer";
 import type { Channel, GaStat, GaState, Labels, Stage } from "./types";
 
@@ -105,7 +105,6 @@ export default function CrmPage() {
     }
     return [...map.values()].sort((a, b) => a.stage_num - b.stage_num || a.stage.localeCompare(b.stage, "ko"));
   }, [filtered]);
-  const campaigns = useMemo(() => [...new Set(byChannel.map((m) => (m.links?.utm_campaign || "").trim()).filter(Boolean))], [byChannel]);
   const kpi = useMemo(() => {
     const active = byChannel.filter((m) => statusKey(m.status) === "active").length;
     const tracked = byChannel.filter(isTracked).length;
@@ -159,12 +158,14 @@ export default function CrmPage() {
 
       {error && <div className="b2b-error">{error}</div>}
 
+      {view !== "perf" && (
       <div className="crm-kpis">
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">메시지</div><div className="b2b-stat-card-value">{qty(kpi.total)}</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">활성</div><div className="b2b-stat-card-value">{qty(kpi.active)}</div>{kpi.total - kpi.active > 0 && <div className="b2b-stat-card-hint">비활성 {qty(kpi.total - kpi.active)}</div>}</div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">추적(UTM)</div><div className="b2b-stat-card-value">{qty(kpi.tracked)}</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">GA 세션 90일</div><div className="b2b-stat-card-value">{ga ? qty(kpi.sessions) : "-"}</div>{ga && ga.configured === false && <div className="b2b-stat-card-hint">GA 연동 없음</div>}</div>
       </div>
+      )}
 
       <div className="crm-bar">
         <div className="sm-tabs" role="tablist" aria-label="판매 채널">
@@ -187,7 +188,7 @@ export default function CrmPage() {
         : messages.length === 0 ? (
           <div className="b2b-empty">등록된 메시지가 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => setShowImport(true)}>엑셀로 가져오기</button></div></div>
         ) : view === "perf" ? (
-          <PerfView channel={channel} campaigns={campaigns} gaConfigured={ga?.configured} />
+          <WeeklyStats channel={channel} />
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">조건에 맞는 메시지가 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => { setSearch(""); pickChannel(""); }}>조건 지우기</button></div></div>
         ) : view === "journey" ? (
