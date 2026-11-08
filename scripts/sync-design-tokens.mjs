@@ -78,6 +78,7 @@ const TARGETS = [
       "--border-light": "--sm-border-light",
       "--bg-subtle": "--sm-bg-subtle",
       "--black-hover": "--sm-black-hover",
+      "--border-strong": "--sm-border-strong",
       "--success-bg": "--sm-success-bg",
       "--warning-bg": "--sm-warning-bg",
       "--danger-bg": "--sm-danger-bg",
