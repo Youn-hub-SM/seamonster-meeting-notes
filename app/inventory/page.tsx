@@ -4,7 +4,6 @@
 //  기본 열(SKU·품목·현재고·안전재고·하루 출고·예상소진) + 재고(총입고·총출고·재고자산)
 //  + 판단(입고 예정·권장생산) + 액션(입·출·조정). 체크 후 '선택 N종 생산 요청'을 누르면
 //  '생산 요청' 메뉴로 이동해 새 생산 요청 창이 권장 수량 채워진 채 열린다(sessionStorage 핸드오프).
-//  AI 조언도 이 화면에서.
 //  재고 수치 = /api/inventory/overview, 생산 수치(권장생산) = /api/production/inventory
 //  (소매·도매 필터 = 그 채널 수식, 전체 = 소매+도매 권장 합) — SKU 로 조인.
 
@@ -34,13 +33,6 @@ type ProdRow = {
   inbound?: number; inboundDue?: string | null; // 입고 예정(확정된 제조사 요청서 잔여) — 권장에서 이미 뺀 양
   recommendNet?: number; wholesaleReq?: number;  // 도매 화면용 권장(도매 요청 잔여를 뺀 값)·도매 요청 잔여 — 제조사 합산에는 쓰지 않는다
   requestByDays: number | null; requestBy: string | null;
-};
-type Priority = { sku: string; name: string; urgency: string; qty: number; byWhen: string; reason: string };
-type Advice = { summary: string; priorities: Priority[]; notes: string[] };
-const URG_STYLE: Record<string, { bg: string; fg: string }> = {
-  "높음": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
-  "중간": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
-  "낮음": { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },
 };
 
 // ── 표 열 폭 ──
@@ -132,7 +124,6 @@ export default function InventoryPage() {
   useEffect(() => { load(); }, [load]);
 
   // ── 생산 수치 — 소매·도매 둘 다 조회. 표시 기준: 소매/도매 필터 = 그 채널 수식, 전체 = 소매+도매 합 ──
-  const prodChannel = channel === "도매" ? "도매" : "소매"; // AI 조언용(조언 API 는 단일 채널)
   const [retailMap, setRetailMap] = useState<Map<string, ProdRow>>(new Map());
   const [wholeMap, setWholeMap] = useState<Map<string, ProdRow>>(new Map());
   const [spanDays, setSpanDays] = useState(0);
@@ -309,20 +300,6 @@ export default function InventoryPage() {
   }
 
 
-  // ── AI 조언(생산) ──
-  const [advice, setAdvice] = useState<Advice | null>(null);
-  const [adviceLoading, setAdviceLoading] = useState(false);
-  useEffect(() => { setAdvice(null); }, [prodChannel]);
-  async function genAdvice() {
-    setAdviceLoading(true); setError("");
-    try {
-      const res = await fetch("/api/production/advice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel: prodChannel }) });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "AI 조언을 만들지 못했습니다. [AI 조언]을 다시 누르세요.");
-      setAdvice(j.advice);
-    } catch (e) { setError(e instanceof Error ? e.message : "AI 조언을 만들지 못했습니다. [AI 조언]을 다시 누르세요."); }
-    setAdviceLoading(false);
-  }
 
   return (
     <div className="b2b-container">
@@ -331,8 +308,7 @@ export default function InventoryPage() {
           <h1 className="b2b-page-title">재고 목록</h1>
         </div>
         <div className="b2b-page-actions">
-          {/* 확정형 탭엔 생산 판단 액션이 없다 — AI 조언·선택 생산 요청은 속도 기반 칸(전체·소매·도매) 전용 */}
-          {!confirmedTab && <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>{adviceLoading ? "AI 분석 중..." : advice ? "다시 분석" : "AI 조언"}</button>}
+          {/* 확정형 탭엔 생산 판단 액션이 없다 — 선택 생산 요청은 속도 기반 칸(전체·소매·도매) 전용. AI 조언은 2026-11-08 삭제(AI 비서가 대신) */}
           <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="행사 기간·예상판매 등록">프로모션 보기</button>
           {!confirmedTab && (
             <button className="b2b-btn-primary" onClick={goRequest} disabled={sel.size === 0}
@@ -394,44 +370,6 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU 검색" aria-label="품목·SKU·옵션·속성/분류 검색(초성 가능)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {!confirmedTab && adviceLoading && <div className="b2b-loading">AI 분석 중입니다... (최대 1분)</div>}
-      {!confirmedTab && advice && (
-        <section style={{ marginBottom: 18 }}>
-          <div className="prod-advice-summary">
-            <div className="prod-advice-summary-icon"></div>
-            <div>{advice.summary}</div>
-          </div>
-          {advice.priorities && advice.priorities.length > 0 && (
-            <div className="prod-prio-list" style={{ marginTop: 12 }}>
-              {advice.priorities.map((p, i) => {
-                const u = URG_STYLE[p.urgency] || URG_STYLE["낮음"];
-                return (
-                  <div key={i} className="prod-prio-card">
-                    <div className="prod-prio-rank">{i + 1}</div>
-                    <div className="prod-prio-body">
-                      <div className="prod-prio-top">
-                        <span className="prod-prio-name">{p.name}</span>
-                        <code className="prod-prio-sku">{p.sku}</code>
-                        <span className="prod-prio-urg" style={{ background: u.bg, color: u.fg }}>{p.urgency}</span>
-                      </div>
-                      <div className="prod-prio-meta">
-                        <span className="prod-prio-qty">{qtyText(Number(p.qty))}</span>
-                        <span className="prod-prio-when">{p.byWhen}</span>
-                      </div>
-                      <div className="prod-prio-reason">{p.reason}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {advice.notes && advice.notes.length > 0 && (
-            <ul style={{ margin: "10px 0 0", paddingLeft: 18, lineHeight: 1.8, fontSize: 12, color: "var(--sm-text-mid)" }}>
-              {advice.notes.map((n, i) => <li key={i}>{n}</li>)}
-            </ul>
-          )}
-        </section>
-      )}
 
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>

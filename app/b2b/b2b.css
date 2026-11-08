@@ -716,49 +716,6 @@ a.b2b-history-item:hover {
 }
 
 /* 생산 조언 */
-.prod-advice-summary {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  background: var(--sm-bg-subtle);
-  border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius);
-  padding: 18px 20px;
-  font-size: var(--sm-fs-base);
-  line-height: var(--sm-lh-body);
-  color: var(--sm-black);
-}
-.prod-advice-summary-icon { font-size: var(--sm-fs-xl); line-height: var(--sm-lh-ui); flex-shrink: 0; }
-
-.prod-prio-list { display: flex; flex-direction: column; gap: 10px; }
-.prod-prio-card {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius);
-  background: var(--sm-white);
-  padding: 14px 16px;
-}
-.prod-prio-rank {
-  flex-shrink: 0;
-  width: 26px; height: 26px;
-  border-radius: 999px;
-  background: var(--sm-black);
-  color: var(--sm-white);
-  font-size: var(--sm-fs-xs); font-weight: 600;
-  display: flex; align-items: center; justify-content: center;
-}
-.prod-prio-body { flex: 1; min-width: 0; }
-.prod-prio-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.prod-prio-name { font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black); }
-.prod-prio-sku { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-.prod-prio-urg { font-size: var(--sm-fs-xs); font-weight: 600; line-height: var(--sm-lh-ui); padding: 1px 8px; border-radius: 999px; }
-.prod-prio-meta { display: flex; gap: 10px; align-items: baseline; margin-top: 5px; }
-/* 강조 숫자 = 검정 700 (주황 금지 — 숫자 색은 값의 뜻만 말한다) */
-.prod-prio-qty { font-size: var(--sm-fs-lg); font-weight: 600; color: var(--sm-black); font-variant-numeric: tabular-nums; }
-.prod-prio-when { font-size: var(--sm-fs-xs); font-weight: 500; color: var(--sm-text-mid); }
-.prod-prio-reason { margin-top: 5px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 
 /* 재고 목록 표(밀집 표) — 열이 14개라 기본 셀 여백(좌우 16px)만으로 448px 을 먹는다.
    사이드바를 켠 노트북 화면에서도 가로 스크롤 없이 들어가도록 이 표만 여백을 좁힌다. */
