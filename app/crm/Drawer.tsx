@@ -2,7 +2,7 @@
 
 // 드로어 — 메시지 하나를 보고 고치는 유일한 곳(인라인 편집 폐지, 2026-11-06). 본문 미리보기·버튼 링크·트리거·UTM·성과·기간·태그.
 import { useMemo, useState } from "react";
-import { CRM_STATUSES, CRM_TRIGGERS, statusKey, type CrmMessageInput, type CrmOption, type CrmOptions } from "@/app/lib/crm";
+import { CRM_STATUSES, CRM_TRIGGERS, CRM_CAMPAIGN_ALIASES, statusKey, type CrmMessageInput, type CrmOption, type CrmOptions } from "@/app/lib/crm";
 import { CRM_MEDIA, isTrackedUrl, parseUtm } from "@/app/lib/utm-rules";
 import { qty, wonText } from "@/app/lib/format";
 import type { GaStat, Labels } from "./types";
@@ -15,6 +15,7 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
   const [editBody, setEditBody] = useState(!data.id || !data.msg);
   const set = <K extends keyof CrmMessageInput>(k: K, v: CrmMessageInput[K]) => onChange({ ...data, [k]: v });
   const setLink = (k: "url" | "utm_campaign" | "utm_term", v: string) => onChange({ ...data, links: { ...data.links, [k]: v } });
+  const [aliasText, setAliasText] = useState((data.links.utm_campaign_aliases || []).join(", ")); // 입력 중 쉼표를 그대로 두려고 문자열로 들고 있다가 blur 때 배열로
   const urls = useMemo(() => (data.links.urls?.length ? data.links.urls : data.links.url ? [data.links.url] : []), [data.links]);
   const setUrls = (text: string) => {
     const list = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -107,6 +108,9 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
                   <option value="">없음</option><option value="a">a</option><option value="b">b</option>
                 </select></label>
             </div>
+            <label className="b2b-field"><span className="b2b-field-label">이전 캠페인 이름 <span className="opt">쉼표로 여러 개 · 옛 UTM·데이터라이즈 캠페인 ID</span></span>
+              <input className="b2b-input" value={aliasText} onChange={(e) => setAliasText(e.target.value)} onBlur={() => onChange({ ...data, links: { ...data.links, utm_campaign_aliases: aliasText.split(/[,\n]/).map((s) => s.trim()).filter(Boolean) } })} spellCheck={false} /></label>
+            {!aliasText && (CRM_CAMPAIGN_ALIASES[(data.links.utm_campaign || "").trim()] || []).length > 0 && <div className="crm-ga-line">기본 별칭 적용 중: {CRM_CAMPAIGN_ALIASES[(data.links.utm_campaign || "").trim()].join(", ")}</div>}
             {ga && <div className="crm-ga-line">GA 90일 · 세션 {qty(ga.sessions)} · 구매 {qty(ga.purchases)}{ga.revenue ? ` · ${wonText(ga.revenue)}` : ""}</div>}
           </section>
 

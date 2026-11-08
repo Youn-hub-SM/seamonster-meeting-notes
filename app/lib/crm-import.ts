@@ -26,6 +26,7 @@ const COL = {
   stage: "단계", title: "메시지명", customer: "고객군", channel: "발송 수단", msgType: "유형", trigger: "트리거", offset: "D+n",
   note: "조건 메모", timing: "발송 시점 설명", status: "상태", msg: "본문", urls: "링크 URL", campaign: "UTM 캠페인", medium: "UTM 매체",
   solapi: "솔라피 템플릿 ID", ctr: "목표 클릭률(%)", start: "시작일", end: "종료일", tags: "태그·메모",
+  aliases: "이전 캠페인", // 선택 열(2026-11-09) — 없어도 된다
 } as const;
 
 // 양식 선택지 라벨 → 저장 키. 선택지 표(b2b_settings crm_options)에 있으면 그 키, 없으면 아래 기본, 그래도 없으면 라벨 그대로(한글 키 허용)
@@ -159,7 +160,7 @@ export function planCrmImport(
       ...EMPTY_CRM_MESSAGE,
       stage_num: stageNum.get(stage)!, stage, title,
       status, channel: ch.key, timing: isoTimeToText(c("timing")), msg: c("msg"),
-      links: { url: urls.find(isTrackedUrl) ?? urls[0] ?? "", utm_campaign: campaign, urls, utm_term: term },
+      links: { url: urls.find(isTrackedUrl) ?? urls[0] ?? "", utm_campaign: campaign, urls, utm_term: term, utm_campaign_aliases: c("aliases").split(/[,\n]/).map((s) => s.trim()).filter(Boolean) },
       tags: c("tags"), sort_order: sort, active: true,
       start_date: toYmd(c("start")), end_date: toYmd(c("end")),
       customer: cu?.key ?? "", msg_type: mt?.key ?? "",

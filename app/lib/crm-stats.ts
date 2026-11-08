@@ -5,7 +5,7 @@ import { isGaConfigured, runGaReport } from "./ga";
 import { fetchSolapiMessages, aggregateSolapi, isSolapiConfigured, fetchSolapiTemplates, type SolapiTemplate } from "./solapi";
 import { getKv, setKv } from "./b2b-settings";
 import { estimateAudience, estimateAudienceWeekly } from "./crm-audience";
-import { isTracked, triggerText, CRM_CUSTOMER_LABEL, type CrmMessage } from "./crm";
+import { isTracked, triggerText, campaignKeys, campaignAliases, CRM_CUSTOMER_LABEL, type CrmMessage } from "./crm";
 
 export const CRM_SOURCES = [
   { key: "datarize_brand", label: "데이터라이즈 브랜드메시지", how: "csv" },
@@ -102,16 +102,16 @@ export async function weeklyStats(weekStart: string): Promise<{ week: string; un
   return { week: weekStart, until, sources, rows };
 }
 
-// GA — 소스/매체가 'kakao / …'(utm 규칙 source=kakao) 인 세션·구매·매출을 매체별로. 설정 없으면 null.
+// GA — 소스가 kakao(utm 규칙) 또는 datarize(데이터라이즈 자동 UTM, 2026-11-09) 인 세션·구매·매출을 매체별로. 설정 없으면 null.
 export async function gaByMedium(since: string, until: string): Promise<GaMediumRow[] | null> {
   if (!isGaConfigured()) return null;
-  const r = await runGaReport({ since, until, dimensions: ["source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 200, filter: { dimension: "source_medium", match: "begins_with", value: "kakao" } });
-  return r.rows.map((row) => ({ medium: String(row["소스/매체"] || "").replace(/^kakao\s*\/\s*/, ""), sessions: Number(row["세션"]) || 0, purchases: Number(row["구매"]) || 0, revenue: Math.round(Number(row["구매액(원)"]) || 0) })).filter((x) => x.medium).sort((a, b) => b.sessions - a.sessions);
+  const r = await runGaReport({ since, until, dimensions: ["source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 200, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" } });
+  return r.rows.map((row) => ({ medium: String(row["소스/매체"] || "").replace(/^kakao\s*\/\s*/, "").replace(/^datarize\s*\/\s*/, "datarize-"), sessions: Number(row["세션"]) || 0, purchases: Number(row["구매"]) || 0, revenue: Math.round(Number(row["구매액(원)"]) || 0) })).filter((x) => x.medium).sort((a, b) => b.sessions - a.sessions);
 }
 
 // ── 추적 메시지(utm_campaign 있는 것)별 주간 성과 — 발송 = 실제(솔라피 템플릿) → 직접 입력(제목) → 추정(업무도우미), 클릭 = GA 세션 ──
 export type TrackedRow = {
-  id: string; title: string; stage: string; customer: string; medium: string; campaign: string; triggerText: string;
+  id: string; title: string; stage: string; customer: string; medium: string; campaign: string; aliases: string[]; triggerText: string;
   sent: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sentNote: string;
   sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null;
 };
@@ -129,14 +129,14 @@ export async function trackedMessages(weekStart: string, until: string, rows: Cr
 async function buildTracked(sb: ReturnType<typeof supabaseAdmin>, msgs: CrmMessage[], weekStart: string, until: string, rows: CrmStatRow[]): Promise<TrackedRow[]> {
   const tracked = msgs.filter((m) => isTracked(m));
   if (!tracked.length) return [];
-  // GA: 캠페인 × 소스/매체(kakao 만) 한 번에
+  // GA: 캠페인 × 소스/매체(kakao·datarize) 한 번에 — 캠페인 키는 소문자, 메시지는 utm_campaign + 별칭을 합산
   const ga = new Map<string, { sessions: number; purchases: number; revenue: number }>();
   let gaOk = false;
   if (isGaConfigured()) {
     try {
-      const r = await runGaReport({ since: weekStart, until, dimensions: ["campaign", "source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 500, filter: { dimension: "source_medium", match: "begins_with", value: "kakao" } });
+      const r = await runGaReport({ since: weekStart, until, dimensions: ["campaign", "source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 500, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" } });
       for (const row of r.rows) {
-        const c = String(row["캠페인"] || ""); const cur = ga.get(c) || { sessions: 0, purchases: 0, revenue: 0 };
+        const c = String(row["캠페인"] || "").trim().toLowerCase(); const cur = ga.get(c) || { sessions: 0, purchases: 0, revenue: 0 };
         cur.sessions += Number(row["세션"]) || 0; cur.purchases += Number(row["구매"]) || 0; cur.revenue += Number(row["구매액(원)"]) || 0; ga.set(c, cur);
       }
       gaOk = true;
@@ -151,9 +151,9 @@ async function buildTracked(sb: ReturnType<typeof supabaseAdmin>, msgs: CrmMessa
     if (tid) { const s = rows.filter((r) => r.source === "solapi" && r.template.endsWith(`:${tid}`)).reduce((a, r) => a + r.sent, 0); if (s > 0 || rows.some((r) => r.source === "solapi")) { sent = s; sentBasis = "solapi"; sentNote = "솔라피 실제"; } }
     if (sent == null) { const manual = rows.filter((r) => r.batch === "manual" && r.template === m.title); if (manual.length) { sent = manual.reduce((a, r) => a + r.sent, 0); sentBasis = "manual"; sentNote = "직접 입력"; } }
     if (sent == null && m.trigger) { const e = await estimateAudience(sb, m, weekStart, until); if (e.count != null) { sent = e.count; sentBasis = "estimate"; sentNote = `추정 · ${e.note}`; } else sentNote = e.note; }
-    const g = gaOk ? ga.get(campaign) || { sessions: 0, purchases: 0, revenue: 0 } : null;
+    const g = gaOk ? campaignKeys(m).reduce((acc, k) => { const x = ga.get(k); if (x) { acc.sessions += x.sessions; acc.purchases += x.purchases; acc.revenue += x.revenue; } return acc; }, { sessions: 0, purchases: 0, revenue: 0 }) : null;
     const ctr = g && sent ? Math.round((g.sessions / sent) * 1000) / 10 : null;
-    out.push({ id: m.id, title: m.title, stage: m.stage, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, triggerText: triggerText(m), sent, sentBasis, sentNote, sessions: g ? g.sessions : null, purchases: g ? g.purchases : null, revenue: g ? g.revenue : null, ctr, targetCtr: m.target_ctr ?? null });
+    out.push({ id: m.id, title: m.title, stage: m.stage, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, aliases: campaignAliases(m), triggerText: triggerText(m), sent, sentBasis, sentNote, sessions: g ? g.sessions : null, purchases: g ? g.purchases : null, revenue: g ? g.revenue : null, ctr, targetCtr: m.target_ctr ?? null });
   }
   return out.sort((a, b) => (b.sessions || 0) - (a.sessions || 0));
 }
@@ -176,7 +176,7 @@ export async function weeklyTrend(weeks = 12, endWeek?: string): Promise<{ week:
 
 // ── 메시지별 주간 클릭률 이력(2026-11-09, 대표 "매주 클릭률이 어땠는지") — 최근 N주, 끝 주 = 보고 있는 주.
 //  발송 = 솔라피 템플릿 → 직접 입력(제목) → 주별 추정(한 메시지 SQL 한 번), 클릭 = GA 캠페인×날짜(kakao) 를 주로 묶음. 전체 줄 = 수단별 기록 합 ÷ kakao 세션 합.
-export type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; targetCtr: number | null; sentBasis: TrackedRow["sentBasis"]; sent: (number | null)[]; sessions: (number | null)[]; purchases: (number | null)[]; revenue: (number | null)[]; ctr: (number | null)[] };
+export type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; aliases: string[]; targetCtr: number | null; sentBasis: TrackedRow["sentBasis"]; sent: (number | null)[]; sessions: (number | null)[]; purchases: (number | null)[]; revenue: (number | null)[]; ctr: (number | null)[] };
 export type TrackedHistory = { weeks: string[]; rows: HistoryRow[]; total: { sent: number[]; sessions: (number | null)[]; ctr: (number | null)[] }; note: string };
 export async function trackedHistory(endWeek: string, weeks = 12, opts: { onlyIds?: string[] } = {}): Promise<TrackedHistory> {
   const first = shiftDays(endWeek, -7 * (weeks - 1));
@@ -203,10 +203,10 @@ export async function trackedHistory(endWeek: string, weeks = 12, opts: { onlyId
     try {
       const yesterday = shiftDays(kstToday(), -1);
       const until = shiftDays(endWeek, 6) < yesterday ? shiftDays(endWeek, 6) : yesterday;
-      const r = await runGaReport({ since: first, until, dimensions: ["date", "campaign"], metrics: ["sessions", "purchases", "revenue"], limit: 5000, filter: { dimension: "source_medium", match: "begins_with", value: "kakao" } });
+      const r = await runGaReport({ since: first, until, dimensions: ["date", "campaign"], metrics: ["sessions", "purchases", "revenue"], limit: 5000, filter: { dimension: "source_medium", match: "regex", value: "^(kakao|datarize)" } });
       for (const row of r.rows) {
         const i = idx(weekStartOf(String(row["날짜"] || ""))); if (i < 0) continue;
-        const c = String(row["캠페인"] || ""); const n = Number(row["세션"]) || 0;
+        const c = String(row["캠페인"] || "").trim().toLowerCase(); const n = Number(row["세션"]) || 0;
         const arr = ga.get(c) || list.map(() => 0); arr[i] += n; ga.set(c, arr); gaTotal[i] += n;
         const ap = gaP.get(c) || list.map(() => 0); ap[i] += Number(row["구매"]) || 0; gaP.set(c, ap);
         const ar = gaR.get(c) || list.map(() => 0); ar[i] += Math.round(Number(row["구매액(원)"]) || 0); gaR.set(c, ar);
@@ -235,11 +235,11 @@ export async function trackedHistory(endWeek: string, weeks = 12, opts: { onlyId
         if (est) { sentBasis = "estimate"; sent = list.map((w) => est[w] ?? null); }
       }
     }
-    const sess: (number | null)[] = gaOk ? ga.get(campaign) || list.map(() => 0) : list.map(() => null);
-    const purchases: (number | null)[] = gaOk ? gaP.get(campaign) || list.map(() => 0) : list.map(() => null);
-    const revenue: (number | null)[] = gaOk ? gaR.get(campaign) || list.map(() => 0) : list.map(() => null);
+    const keys = campaignKeys(m);
+    const sumKeys = (map: Map<string, number[]>): (number | null)[] => (gaOk ? list.map((_, i) => keys.reduce((a, k) => a + (map.get(k)?.[i] || 0), 0)) : list.map(() => null));
+    const sess = sumKeys(ga), purchases = sumKeys(gaP), revenue = sumKeys(gaR);
     const ctr = list.map((_, i) => { const s = sent[i], g = sess[i]; return s && g != null ? Math.round((g / s) * 1000) / 10 : null; });
-    rows.push({ id: m.id, title: m.title, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, targetCtr: m.target_ctr ?? null, sentBasis, sent, sessions: sess, purchases, revenue, ctr });
+    rows.push({ id: m.id, title: m.title, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, aliases: campaignAliases(m), targetCtr: m.target_ctr ?? null, sentBasis, sent, sessions: sess, purchases, revenue, ctr });
   }
   const last = weeks - 1;
   rows.sort((a, b) => (b.sessions[last] ?? -1) - (a.sessions[last] ?? -1) || (b.sent[last] ?? -1) - (a.sent[last] ?? -1));
@@ -248,7 +248,7 @@ export async function trackedHistory(endWeek: string, weeks = 12, opts: { onlyId
 }
 
 // ── 메시지 하나 대시보드(2026-11-09, 대표 "이 메시지 성과는 어땠는지 봅시다") — 12주 이력(그 메시지 줄 + 전체 줄) + GA 날짜×term(캠페인 exact) 1회.
-//  daily = 날짜별 세션·구매·매출(요일별 합도 여기서), byTerm = utm_term(A/B)별. 추적(utm_campaign) 없는 메시지는 이력만 비어서 돌아간다.
+//  daily = 날짜별 세션·구매·매출(요일별 합도 여기서), byTerm = utm_term(A/B)별. 캠페인은 utm_campaign + 별칭 전부(전체 일치 정규식). 추적(utm_campaign) 없는 메시지는 이력만 비어서 돌아간다.
 export type MessageStats = {
   weeks: string[]; row: HistoryRow | null; total: TrackedHistory["total"]; note: string;
   daily: { date: string; sessions: number; purchases: number; revenue: number }[];
@@ -264,14 +264,16 @@ export async function messageStats(id: string, endWeek: string, weeks = 12): Pro
     const first = h.weeks[0];
     const yesterday = shiftDays(kstToday(), -1);
     const until = shiftDays(endWeek, 6) < yesterday ? shiftDays(endWeek, 6) : yesterday;
-    const r = await runGaReport({ since: first, until, dimensions: ["date", "term"], metrics: ["sessions", "purchases", "revenue"], limit: 2000, filter: { dimension: "campaign", match: "exact", value: row.campaign } });
+    const keys = [row.campaign, ...row.aliases].map((s) => s.trim()).filter(Boolean);
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const r = await runGaReport({ since: first, until, dimensions: ["date", "term"], metrics: ["sessions", "purchases", "revenue"], limit: 2000, filter: { dimension: "campaign", match: "regex_full", value: `(${keys.map(esc).join("|")})` } });
     const byDate = new Map<string, { date: string; sessions: number; purchases: number; revenue: number }>();
     const byTerm = new Map<string, { term: string; sessions: number; purchases: number; revenue: number }>();
     for (const x of r.rows) {
       const date = String(x["날짜"] || ""); if (!date) continue;
       const sessions = Number(x["세션"]) || 0, purchases = Number(x["구매"]) || 0, revenue = Math.round(Number(x["구매액(원)"]) || 0);
       const d = byDate.get(date) || { date, sessions: 0, purchases: 0, revenue: 0 }; d.sessions += sessions; d.purchases += purchases; d.revenue += revenue; byDate.set(date, d);
-      const term = String(x["키워드(term)"] || "").trim() || "(없음)";
+      const termRaw = String(x["키워드(term)"] || "").trim(); const term = !termRaw || termRaw === "(not set)" ? "(없음)" : termRaw;
       const t = byTerm.get(term) || { term, sessions: 0, purchases: 0, revenue: 0 }; t.sessions += sessions; t.purchases += purchases; t.revenue += revenue; byTerm.set(term, t);
       const dow = (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7; out.weekday[dow] += sessions;
     }

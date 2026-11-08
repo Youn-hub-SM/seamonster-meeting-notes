@@ -9,6 +9,8 @@ export type CrmLinks = {
   urls?: string[];
   /** A/B 변형 utm_term(a·b). 없으면 "" */
   utm_term?: string;
+  /** 이전 캠페인 이름들(2026-11-09) — UTM 통일 전 발송 템플릿이 쓰던 utm_campaign·데이터라이즈 자동 캠페인 ID. GA 집계 때 utm_campaign 과 합산. 비면 CRM_CAMPAIGN_ALIASES 기본값 */
+  utm_campaign_aliases?: string[];
   // 구 데이터 호환(읽기 전용) — normalize 가 url 로 이관 후 버린다.
   solapi?: string; cafe24?: string; meta?: string; sheets?: string; channel?: string; blog?: string; onsite?: string;
 };
@@ -107,6 +109,25 @@ export const CRM_TRIGGERS: { key: string; label: string; estimable: boolean }[] 
 export const CRM_TRIGGER_LABEL: Record<string, string> = Object.fromEntries(CRM_TRIGGERS.map((t) => [t.key, t.label]));
 /** 추적 메시지 = utm_campaign 이 있는 메시지(대표 결정 2026-10-26 — 따로 켜고 끄지 않는다) */
 export const isTracked = (m: { links?: CrmLinks }) => !!(m.links?.utm_campaign || "").trim();
+/** 기본 별칭(2026-11-09 GA 대조) — UTM 통일(11-05 공지) 전 발송 템플릿이 쓰던 캠페인 이름. 261104 원본 엑셀 링크에서 확인한 것 + GA 에만 있는 옛 리뷰 요청 2개(추정).
+ *  드로어 '이전 캠페인 이름' 칸이 비어 있을 때만 쓴다. 템플릿이 새 이름으로 바뀐 뒤에도 옛 데이터와 이어지게 그대로 둔다. */
+export const CRM_CAMPAIGN_ALIASES: Record<string, string[]> = {
+  "review-30d": ["30d_purchase_review_2610"],
+  "review-repeat": ["repeat_purchase_review_2610", "review-request2"],   // review-request2 → 재구매자 리뷰(추정, GA 에만 있음)
+  "review-first": ["first_purchase_review_2610", "review-request"],      // review-request → 첫 구매자 리뷰(추정, GA 에만 있음)
+  "subscription-nudge-2nd": ["subscription-nudge"],
+  "subscription-nudge-4th": ["subscription-nudge-2"],
+  "babyfish-guide": ["baby_guide"],
+};
+/** GA 집계에 쓸 캠페인 키 전부(소문자) = utm_campaign + 별칭(드로어 값 → 기본 매핑). 없으면 [] */
+export function campaignKeys(m: { links?: CrmLinks }): string[] {
+  const main = (m.links?.utm_campaign || "").trim();
+  if (!main) return [];
+  const own = m.links?.utm_campaign_aliases?.length ? m.links.utm_campaign_aliases : CRM_CAMPAIGN_ALIASES[main] || [];
+  return [...new Set([main, ...own].map((s) => s.trim().toLowerCase()).filter(Boolean))];
+}
+/** 화면 표시용 별칭(드로어 값 → 기본 매핑) */
+export const campaignAliases = (m: { links?: CrmLinks }): string[] => (m.links?.utm_campaign_aliases?.length ? m.links.utm_campaign_aliases : CRM_CAMPAIGN_ALIASES[(m.links?.utm_campaign || "").trim()] || []);
 /** 트리거 D+n 짧은 표기: '첫 구매 D+3', '정기배송 회차 D-3', '상시' */
 export function triggerText(m: { trigger: string; offset_days: number | null; offset_note?: string }): string {
   if (!m.trigger) return "";
@@ -150,6 +171,9 @@ export function normalizeCrmMessage(input: CrmMessageInput): CrmMessageInput {
   if (urls.length) links.urls = urls;
   const term = clean(raw.utm_term);
   if (term) links.utm_term = term;
+  const aliasesRaw = Array.isArray(raw.utm_campaign_aliases) ? raw.utm_campaign_aliases : String(raw.utm_campaign_aliases ?? "").split(/[,\n]/);
+  const aliases = [...new Set(aliasesRaw.map(clean).filter(Boolean).filter((a) => a !== utm))];
+  if (aliases.length) links.utm_campaign_aliases = aliases;
   const perfIn = input.perf || {};
   const perf: CrmPerf = {};
   (["sent", "reached", "opened", "clicked", "converted", "revenue"] as (keyof CrmPerf)[]).forEach((k) => {

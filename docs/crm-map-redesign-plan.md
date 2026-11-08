@@ -88,3 +88,11 @@ API 호출은 지금과 같다(메시지 1회·옵션 1회·GA 1회·주간 성�
 - KPI 4: 이 주 클릭률(전주 %p·목표) · 12주 평균 클릭률(전체 메시지 평균과 비교) · 12주 발송·클릭(목표 달성 주 수) · 12주 구매·매출(최고·최저 주).
 - 차트 2열: 주간 클릭률(TrendChart, ‰ 축) | 주간 발송과 클릭(ComboBarLine 막대 발송·선 클릭). 2열: 요일별 클릭(BarList) | 주별 표. 같은 캠페인에 term 이 2개 이상이면 A/B 표.
 - API `/api/crm/message-stats?id=`(`messageStats`): `trackedHistory(onlyIds)` 그 메시지 줄 + 전체 줄, GA 날짜×term(캠페인 exact) 1회. history 줄에 구매·매출 추가, GA 차원 `term`(sessionManualTerm) 추가. UTM 캠페인 없는 메시지는 요약 카드만.
+
+## 11-09 캠페인 별칭(옛 이름 합산) — 대표 "클릭이 안 잡히는 것 같다"
+
+GA 대조 결과: 카카오 세션은 들어오는데(28일 약 120) 맵의 새 캠페인 이름 23개 중 GA 에 있는 건 7개. 발송 템플릿이 아직 옛 UTM(review-request, 30d_purchase_review_2610, subscription-nudge …)을 쓰고, 데이터라이즈 자동 UTM(source=datarize, campaign=템플릿 ID)이 90일 261 세션으로 가장 큼.
+- `links.utm_campaign_aliases`(드로어 '이전 캠페인 이름', 엑셀 '이전 캠페인' 선택 열) + 기본 매핑 `CRM_CAMPAIGN_ALIASES`(crm.ts, 261104 원본 엑셀 링크 기준 + GA 에만 있는 review-request/review-request2 는 첫 구매/재구매로 추정). `campaignKeys(m)` 가 집계 키.
+- GA 소스 필터 `^(kakao|datarize)` 정규식(ga.ts GaMatch regex 추가). 매체 표기는 datarize 는 `datarize-alimtalk` 식.
+- 성과·12주 이력·살펴보기·목록 GA 90일 모두 별칭 합산. 살펴보기 A/B 는 키 전체 일치 정규식.
+- 아직 매핑 못 한 것: delivery-start(공식몰 배송 시작, 블룸 메시지에 캠페인 없음), collab-agriim·chuseok-promotion(행사), 데이터라이즈 ID 01J1Y6…(쿠폰 알림톡 추정)·I_01K9V…·I_01KH8…. 드로어에서 캠페인/별칭을 넣으면 잡힌다.

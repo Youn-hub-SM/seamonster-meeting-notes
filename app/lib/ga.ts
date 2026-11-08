@@ -158,9 +158,9 @@ export type GaMetricKey = keyof typeof GA_METRICS;
 export const GA_MAX_DAYS = 400;
 
 export type GaReportResult = { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; truncated: boolean; note: string };
-export type GaMatch = "exact" | "contains" | "begins_with";
+export type GaMatch = "exact" | "contains" | "begins_with" | "regex" | "regex_full"; // regex = 부분 일치, regex_full = 전체 일치(2026-11-09 CRM 캠페인 별칭)
 export type GaFilter = { dimension: GaDimensionKey; match: GaMatch; value: string };
-const MATCH_API: Record<GaMatch, string> = { exact: "EXACT", contains: "CONTAINS", begins_with: "BEGINS_WITH" };
+const MATCH_API: Record<GaMatch, string> = { exact: "EXACT", contains: "CONTAINS", begins_with: "BEGINS_WITH", regex: "PARTIAL_REGEXP", regex_full: "FULL_REGEXP" };
 const RATE_METRICS = new Set<GaMetricKey>(["bounce_rate", "engagement_rate"]); // API 비율(0~1) → %
 
 // since·until = YYYY-MM-DD(어제까지). 행 = 차원 조합, 측정항목 순. 구매·세션이 함께 있으면 '구매 전환율(%)' 열을 덧붙인다.

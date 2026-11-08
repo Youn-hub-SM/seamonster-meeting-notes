@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import {
   CrmMessage, CrmMessageInput, EMPTY_CRM_MESSAGE,
-  CRM_CHANNEL_LABEL, CRM_CUSTOMER_LABEL, CRM_MSG_TYPE_LABEL, statusKey, isTracked,
+  CRM_CHANNEL_LABEL, CRM_CUSTOMER_LABEL, CRM_MSG_TYPE_LABEL, statusKey, isTracked, campaignKeys,
   DEFAULT_CRM_OPTIONS, type CrmOption, type CrmOptions,
 } from "@/app/lib/crm";
 import { matchKoQuery } from "@/app/lib/hangul";
@@ -78,7 +78,7 @@ export default function CrmPage() {
   useEffect(() => { load(); }, [load]);
 
   // GA 성과(90일) — utm_campaign 이 달린 메시지가 있을 때만 1회
-  const allCampaigns = useMemo(() => [...new Set(messages.map((m) => (m.links?.utm_campaign || "").trim()).filter(Boolean))], [messages]);
+  const allCampaigns = useMemo(() => [...new Set(messages.flatMap((m) => campaignKeys(m)))], [messages]); // utm_campaign + 별칭(2026-11-09)
   const allKey = allCampaigns.join(",");
   useEffect(() => {
     if (!allKey) { setGa(null); return; }
@@ -89,7 +89,12 @@ export default function CrmPage() {
     })();
     return () => { alive = false; };
   }, [allKey]);
-  const gaOf = useCallback((m: CrmMessage): GaStat | undefined => { const c = (m.links?.utm_campaign || "").trim(); return c ? ga?.stats?.[c] : undefined; }, [ga]);
+  const gaOf = useCallback((m: CrmMessage): GaStat | undefined => {
+    const keys = campaignKeys(m); if (!keys.length || !ga?.stats) return undefined;
+    const byLower = new Map(Object.entries(ga.stats).map(([k, v]) => [k.toLowerCase(), v]));
+    const hits = keys.map((k) => byLower.get(k)).filter(Boolean) as GaStat[];
+    return hits.length ? hits.reduce((a, b) => ({ sessions: a.sessions + b.sessions, users: a.users + b.users, purchases: a.purchases + b.purchases, revenue: a.revenue + b.revenue }), { sessions: 0, users: 0, purchases: 0, revenue: 0 }) : undefined;
+  }, [ga]);
 
   // 세그먼트(판매 채널 = 고객군) + 검색
   const byChannel = useMemo(() => messages.filter((m) => !channel || m.customer === channel), [messages, channel]);

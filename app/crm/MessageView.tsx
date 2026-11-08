@@ -5,7 +5,7 @@
 //  데이터: /api/crm/message-stats?id= (12주 이력 그 메시지 줄 + 전체 줄 + GA 날짜·term). 메시지 본문·메타는 페이지가 이미 가진 목록에서.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ComboBarLine, BarList, TrendChart } from "@/app/components/charts";
-import { crmTags, statusKey, triggerText, type CrmMessage } from "@/app/lib/crm";
+import { crmTags, campaignAliases, statusKey, triggerText, type CrmMessage } from "@/app/lib/crm";
 import { isTrackedUrl } from "@/app/lib/utm-rules";
 import { qty, wonText } from "@/app/lib/format";
 import type { Labels } from "./types";
@@ -72,6 +72,7 @@ export default function MessageView({ msgs, labels, onOpen }: { msgs: CrmMessage
   const st = statusKey(cur.status);
   const trig = triggerText({ trigger: cur.trigger, offset_days: cur.offset_days });
   const campaign = (cur.links?.utm_campaign || "").trim();
+  const aliases = campaignAliases(cur);
 
   return (
     <div>
@@ -102,7 +103,7 @@ export default function MessageView({ msgs, labels, onOpen }: { msgs: CrmMessage
             <dt>단계</dt><dd>{cur.stage_num ? `${cur.stage_num}. ` : ""}{cur.stage || "-"}{cur.sub ? ` · ${cur.sub}` : ""}</dd>
             <dt>트리거</dt><dd>{trig || "-"}{cur.offset_note && <span className="crm-sub">{cur.offset_note}</span>}</dd>
             {(cur.timing || period) && <><dt>발송 시점</dt><dd>{[cur.timing, period].filter(Boolean).join(" · ")}</dd></>}
-            <dt>UTM</dt><dd>{campaign ? <>{campaign}{cur.utm_medium ? ` · ${cur.utm_medium}` : ""}{cur.links?.utm_term ? ` · ${cur.links.utm_term}` : ""}</> : <span className="sm-faint">캠페인 없음 · 클릭을 셀 수 없다</span>}</dd>
+            <dt>UTM</dt><dd>{campaign ? <>{campaign}{cur.utm_medium ? ` · ${cur.utm_medium}` : ""}{cur.links?.utm_term ? ` · ${cur.links.utm_term}` : ""}{aliases.length > 0 && <span className="crm-sub">이전 이름 합산: {aliases.join(", ")}</span>}</> : <span className="sm-faint">캠페인 없음 · 클릭을 셀 수 없다</span>}</dd>
             <dt>링크</dt><dd>{urls.length ? <>{qty(urls.length)}개{tracked < urls.length ? ` · 추적 ${qty(tracked)}` : ""}</> : <span className="sm-faint">없음</span>}</dd>
             <dt>목표 클릭률</dt><dd>{cur.target_ctr != null ? `${cur.target_ctr}%` : <span className="sm-faint">없음</span>}</dd>
             {v && <><dt>발송 수 기준</dt><dd>{SENT_BASIS[v.r.sentBasis]}</dd></>}

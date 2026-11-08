@@ -4,7 +4,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getCrmOptions } from "@/app/lib/crm-options";
 import {
   CRM_CHANNEL_LABEL, CRM_CUSTOMER_LABEL, CRM_MSG_TYPE_LABEL, CRM_STATUS_LABEL,
-  statusKey, type CrmMessage, type CrmOption,
+  statusKey, campaignAliases, type CrmMessage, type CrmOption,
 } from "@/app/lib/crm";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 // GET /api/crm/export — CRM 메시지 전체를 엑셀로. UTM 캠페인을 한 시트에서 훑고 편집하는 용도.
 //  라벨은 선택지(crm_options) → 내장 맵 → 원문 순으로 변환. 선택 컬럼(customer/msg_type/start/end)은
 //  미적용 DB 폴백을 위해 select("*")로 있는 것만 받는다.
-const HEADERS = ["스테이지", "순서", "메시지명", "고객", "발송채널", "유형", "발송시점", "상태", "UTM 캠페인", "링크", "태그", "진행시작", "진행종료", "메시지내용"] as const;
+const HEADERS = ["스테이지", "순서", "메시지명", "고객", "발송채널", "유형", "발송시점", "상태", "UTM 캠페인", "이전 캠페인", "링크", "태그", "진행시작", "진행종료", "메시지내용"] as const;
 
 const labelOf = (list: CrmOption[], fallback: Record<string, string>) => (k: string) =>
   (k ? list.find((o) => o.key === k)?.label || fallback[k] || k : "");
@@ -42,7 +42,7 @@ export async function GET() {
         m.stage || "", m.stage_num ?? "", m.title || "",
         cust(m.customer || ""), ch(m.channel || ""), type(m.msg_type || ""),
         m.timing || "", CRM_STATUS_LABEL[statusKey(m.status || "")] || "",
-        m.links?.utm_campaign || "", m.links?.url || "", m.tags || "",
+        m.links?.utm_campaign || "", campaignAliases(m).join(", "), m.links?.url || "", m.tags || "",
         m.start_date || "", m.end_date || "", m.msg || "",
       ]);
     }

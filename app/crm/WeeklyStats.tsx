@@ -14,8 +14,8 @@ type SourceDef = { key: string; label: string; how: "csv" | "api" | "manual" };
 type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; label: string; sent: number; clicked: number | null; days: number }[] };
 type GaRow = { medium: string; sessions: number; purchases: number; revenue: number };
 type StatRow = { id: string; source: string; grain: "day" | "week"; date: string; template: string; sent: number; clicked: number | null; cost: number | null; note: string; batch: string };
-type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; triggerText: string; sent: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null };
-type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; targetCtr: number | null; sentBasis: TrackedRow["sentBasis"]; sent: (number | null)[]; sessions: (number | null)[]; ctr: (number | null)[] };
+type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; aliases?: string[]; triggerText: string; sent: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null };
+type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; aliases?: string[]; targetCtr: number | null; sentBasis: TrackedRow["sentBasis"]; sent: (number | null)[]; sessions: (number | null)[]; ctr: (number | null)[] };
 type History = { weeks: string[]; rows: HistoryRow[]; total: { sent: number[]; sessions: (number | null)[]; ctr: (number | null)[] }; note: string };
 type Resp = { ok: boolean; error?: string; week: string; until: string; sources: WeeklySource[]; rows: StatRow[]; ga: GaRow[] | null; gaNote: string; trend: { week: string; bySource: Record<string, number> }[]; tracked: TrackedRow[]; trackedNote: string; history?: History | null; sourceDefs: SourceDef[]; solapi: boolean };
 
@@ -177,7 +177,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
                 </tr>
                 {v.hRows.map((r) => (
                   <tr key={r.id}>
-                    <td className="crm-hist-title"><div className="crm-ellipsis" title={r.title}>{r.title}</div><span className="crm-sub">{[r.customer, r.campaign, r.sentBasis === "estimate" ? "발송 추정" : r.sentBasis === "none" ? "발송 수 없음" : ""].filter(Boolean).join(" · ")}</span></td>
+                    <td className="crm-hist-title"><div className="crm-ellipsis" title={r.title}>{r.title}</div><span className="crm-sub" title={r.aliases?.length ? `이전 이름: ${r.aliases.join(", ")}` : undefined}>{[r.customer, r.campaign + (r.aliases?.length ? ` +${r.aliases.length}` : ""), r.sentBasis === "estimate" ? "발송 추정" : r.sentBasis === "none" ? "발송 수 없음" : ""].filter(Boolean).join(" · ")}</span></td>
                     <td className="num">{r.targetCtr != null ? `${r.targetCtr}%` : <span className="sm-faint">-</span>}</td>
                     {hWeeks.map((_, i) => histCell(r, i, i === last, hWeeks))}
                     <td className="num" style={{ color: deltaTone(r.ctr[last], r.ctr[last - 1]) }}>{diffPoint(r.ctr[last], r.ctr[last - 1]) || <span className="sm-faint">-</span>}</td>
@@ -201,7 +201,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
                 const tone = ctrTone(t.ctr, t.targetCtr);
                 return (
                   <tr key={t.id}>
-                    <td className="crm-title-cell"><div>{t.title}</div><span className="crm-sub">{[t.stage, t.customer, t.campaign].filter(Boolean).join(" · ")}</span></td>
+                    <td className="crm-title-cell"><div>{t.title}</div><span className="crm-sub" title={t.aliases?.length ? `이전 이름: ${t.aliases.join(", ")}` : undefined}>{[t.stage, t.customer, t.campaign + (t.aliases?.length ? ` +${t.aliases.length}` : "")].filter(Boolean).join(" · ")}</span></td>
                     <td className="crm-cell-nowrap">{t.medium || "-"}</td>
                     <td>{(() => { const [head, ...rest] = (t.triggerText || "").split(" · "); return <><span className="crm-cell-nowrap">{head || "-"}</span>{rest.length > 0 && <span className="crm-sub crm-trig-note" title={rest.join(" · ")}>{rest.join(" · ")}</span>}</>; })()}</td>
                     <td className="num" title={t.sentNote}>{t.sent == null ? "-" : qty(t.sent)}{t.sentBasis === "estimate" && <span className="crm-sub">추정</span>}</td>
