@@ -68,7 +68,7 @@ export default function ListView({ stages, labels, gaOf, onOpen, onAdd }: {
                     </td>
                     <td>
                       <span className="crm-cell-nowrap">{triggerText({ trigger: m.trigger, offset_days: m.offset_days }) || <span className="sm-faint">없음</span>}</span>
-                      {m.offset_note && <span className="crm-sub">{m.offset_note.split(/\r?\n/)[0]}</span>}
+                      {m.offset_note && <span className="crm-sub crm-trig-note" title={m.offset_note}>{m.offset_note.split(/\r?\n/)[0]}</span>}
                     </td>
                     <td>
                       {urls.length === 0 ? <span className="sm-faint">없음</span> : (

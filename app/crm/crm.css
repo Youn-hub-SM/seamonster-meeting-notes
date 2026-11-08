@@ -21,7 +21,8 @@
 .crm-group-count { font-weight: 400; color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
 .crm-group-sub { font-weight: 400; color: var(--sm-text-mid); font-size: var(--sm-fs-xs); }
 .crm-sub { display: block; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); margin-top: 2px; white-space: normal; }
-.crm-title-cell { min-width: 260px; }
+.crm-title-cell { min-width: 280px; width: 34%; }
+.crm-trig-note { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* 조건 메모는 한 줄로 줄여 메시지 열을 밀지 않게(2026-11-08) */
 .crm-cell-nowrap { white-space: nowrap; }
 .crm-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: 6px; vertical-align: middle; }
 .crm-tag { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); background: var(--sm-bg-subtle); border-radius: 4px; padding: 1px 6px; line-height: var(--sm-lh-ui); }
