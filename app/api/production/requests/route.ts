@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST { title?, requested_by?, request_date?, due_date?, prod_start?, purpose?, memo?, items:[{product_id, requested_qty, memo?}], client_key? } — 요청서 생성
-//  생성 규칙(폴백·알림 포함)은 production-request-create 에 — 주간 AI 초안도 같은 함수로 만든다.
+//  생성 규칙(폴백·알림 포함)은 production-request-create 에로 만든다.
 //  client_key = 화면이 창을 열 때 만든 재시도 키(136). 응답을 잃고 다시 눌러도 같은 키면 첫 요청서를 돌려준다(existing).
 export async function POST(req: NextRequest) {
   try {

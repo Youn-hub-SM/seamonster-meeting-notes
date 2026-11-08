@@ -1,4 +1,4 @@
-// 생산 요청서 생성 — 화면 POST(/api/production/requests)와 주간 AI 초안(/api/production/requests/draft)이 같은 규칙으로 만든다.
+// 생산 요청서 생성 — 화면 POST(/api/production/requests)이 같은 규칙으로 만든다.
 //  머리(production_requests) + 품목(production_request_items) 삽입, 선택 컬럼 미적용 폴백, 작성 알림까지 한 곳에.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadRequests, formatRequestDetail } from "./wholesale-production-db";

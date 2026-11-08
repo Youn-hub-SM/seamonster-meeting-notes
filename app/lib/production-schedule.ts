@@ -20,7 +20,7 @@ export function defaultProdStart(requestDate: string): string { return addBusine
 
 // ─────────────────────────────────────────────
 // 권장생산 목표 기간 — 위 일정에서 나온다(2026-09-28 대표 요청: 권장량에 D-day 일정 반영).
-//  요청서는 매주 수요일(AI 초안) 한 번 나간다. 오늘 시킨 물량은 판매 가능일(D+8 영업일)에야 팔 수 있고,
+//  요청서는 매주 수요일 한 번 나간다. 오늘 시킨 물량은 판매 가능일(D+8 영업일)에야 팔 수 있고,
 //  그다음 물량은 다음 요청일(오늘 다음의 첫 수요일 — 월·화엔 이번 주 수요일) 요청분의 판매 가능일에 온다. 그래서
 //   목표 = 평상시 하루 출고 × (오늘 → 다음 요청분 판매 가능일) 일수   ← 권장생산(주문 후 재고 수준)
 //   부족 기준 = 평상시 하루 출고 × (오늘 → 오늘 요청분 판매 가능일) 일수 ← 지금 시켜도 판매 가능일 전에 바닥나는가
@@ -28,7 +28,7 @@ export function defaultProdStart(requestDate: string): string { return addBusine
 //  (재고도 하루치씩 줄므로) 같은 주 안에서는 권장이 거의 그대로이고, 다음 수요일에 새 주기가 시작된다.
 // ─────────────────────────────────────────────
 export const SELLABLE_BDAYS = 8;   // 작성 D → 판매 가능 D+8 영업일
-export const DRAFT_WEEKDAY = 3;    // 주간 요청서(AI 초안) 요일 — 수요일(0=일)
+export const DRAFT_WEEKDAY = 3;    // 주간 요청서 요일 — 수요일(0=일). 권장 목표 기간 계산 기준(AI 초안 자동 작성은 2026-11-08 삭제)
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400e3);
 

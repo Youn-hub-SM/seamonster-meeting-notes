@@ -21,7 +21,7 @@ import { getOpenInboundByProduct, type InboundRow } from "./production-inbound";
 //  (production-inbound). 시켜 둔 물량을 또 시키던 이중 발주의 차단 항(2026-09-17 대표 확정 1단계).
 // 도매 채널은 여기에 더해 '도매 요청 잔여'(열린 도매 납품 요청서의 요청 − 이동 배정)를 recommendNet 에만 뺀다
 //  (2026-09-29 대표 요청 — 도매 담당자가 이미 낸 요청을 또 내지 않게). recommend 는 gross 그대로다:
-//  제조사 합산(재고 목록 전체·소매 탭, 제조사 요청 창, 수요일 AI 초안)이 도매 행 recommend 를 ②로 읽는데,
+//  제조사 합산(재고 목록 전체·소매 탭, 제조사 요청 창)이 도매 행 recommend 를 ②로 읽는데,
 //  도매 요청 잔여는 새로 들어올 물량이 아니라 소매 재고(①에 이미 반영)에 대한 청구라 빼면 제조사 생산이 그만큼 과소가 된다.
 
 export interface InvRow {
@@ -201,7 +201,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   }
 
   // 4) SKU 합집합으로 행 구성 — 입고 예정만 있는 품목(소매 원장이 아직 없는 도매 전용 품목 등)도 넣는다.
-  //  빠지면 전체·소매 권장과 요청 창·AI 초안이 그 품목의 입고 예정을 못 빼 같은 물량을 또 시킨다(최종 점검 확정).
+  //  빠지면 전체·소매 권장과 요청 창이 그 품목의 입고 예정을 못 빼 같은 물량을 또 시킨다(최종 점검 확정).
   //  이런 행은 현재고 null → 권장 = 수요, 입고 예정만 실린다(도매 채널은 입고 예정 맵이 비어 영향 없음).
   const allSkus = new Set<string>([...stockBySku.keys(), ...demandBySku.keys(), ...inboundBySku.keys()]);
   for (const k of untracked.skus) allSkus.delete(k); // 재고 관리 사용 안함 품목은 권장 대상이 아니다

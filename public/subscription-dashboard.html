@@ -122,7 +122,7 @@
   /* 분석 히스토리(추세) */
   .history-empty { font-size: 12px; color: var(--text-sub); padding: 16px 4px; }
   .history-chart-wrap { margin-bottom: 16px; height: 280px; position: relative; }
-  .history-table-wrap { overflow-x: auto; }
+  .history-table-wrap { overflow: auto; max-height: 360px; }  /* 2026-11-08: 이력·변화 표가 길어도 카드 안에서만 스크롤 */
   .history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .history-table th {
     text-align: left; padding: 10px 12px; background: var(--bg);
@@ -273,7 +273,7 @@
   .table th.sort-asc .sort-arrow, .table th.sort-desc .sort-arrow { color: var(--primary); }
   .table tr:hover td { background: #fafafa; }
   .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .scroll-y { max-height: 360px; overflow-y: auto; }
+  .scroll-y { max-height: 320px; overflow-y: auto; }
 
   .pill {
     display: inline-block; padding: 2px 7px;
@@ -359,7 +359,7 @@
   .ship-list-actions {
     display: flex; gap: 6px; margin-bottom: 6px;
   }
-  .ship-list { display: block; }
+  .ship-list { display: block; max-height: 560px; overflow-y: auto; }  /* 2026-11-08: 30일 발송 일정도 카드 안에서만 스크롤 */
   .ship-day {
     border-bottom: 1px solid var(--border);
     background: #fff;

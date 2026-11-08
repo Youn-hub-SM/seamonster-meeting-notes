@@ -359,7 +359,6 @@ export default function DetailSendPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">상세페이지 전송</h1>
-          <p className="b2b-page-subtitle">같은 소스를 다시 쏘면 상세설명 안의 그 소스 자리만 바뀝니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button type="button" className="b2b-btn-secondary" onClick={() => (kind === "set" ? pickSet("new") : pick("new"))}>{kind === "set" ? "새 조합 만들기" : "새 소스 만들기"}</button>

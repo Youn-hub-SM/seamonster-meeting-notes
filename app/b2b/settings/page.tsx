@@ -19,7 +19,7 @@ import ConnectSection from "./sections/Connect";
 type Key = "orders" | "production" | "fulfill" | "reports" | "ai" | "connect";
 const SECTIONS: { key: Key; label: string; desc: string; C: ComponentType<SectionProps> }[] = [
   { key: "orders", label: "발주(B2B)", desc: "발주 알림 · 아침 일정 알림 · 거래명세표", C: OrdersSection },
-  { key: "production", label: "생산·재고", desc: "생산·재고 알림 · 상품마스터 변경알림 · 주간 초안", C: ProductionSection },
+  { key: "production", label: "생산·재고", desc: "생산·재고 알림 · 상품마스터 변경알림", C: ProductionSection },
   { key: "fulfill", label: "온라인 발주", desc: "중복 방지 · 박스 종류 · 택배 단가", C: FulfillSection },
   { key: "reports", label: "매출·리포트", desc: "종합 리포트 메일", C: ReportsSection },
   { key: "ai", label: "AI", desc: "AI 비서 · 모델 · 프롬프트(회의록·CS·공지)", C: AiSection },
