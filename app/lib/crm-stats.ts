@@ -4,7 +4,7 @@ import { supabaseAdmin } from "./supabase";
 import { isGaConfigured, runGaReport } from "./ga";
 import { fetchSolapiMessages, aggregateSolapi, isSolapiConfigured, fetchSolapiTemplates, type SolapiTemplate } from "./solapi";
 import { getKv, setKv } from "./b2b-settings";
-import { estimateAudience } from "./crm-audience";
+import { estimateAudience, estimateAudienceWeekly } from "./crm-audience";
 import { isTracked, triggerText, CRM_CUSTOMER_LABEL, type CrmMessage } from "./crm";
 
 export const CRM_SOURCES = [
@@ -172,4 +172,72 @@ export async function weeklyTrend(weeks = 12, endWeek?: string): Promise<{ week:
     b[r.source] = (b[r.source] || 0) + (r.sent || 0);
   }
   return [...out.entries()].map(([week, bySource]) => ({ week, bySource }));
+}
+
+// ── 메시지별 주간 클릭률 이력(2026-11-09, 대표 "매주 클릭률이 어땠는지") — 최근 N주, 끝 주 = 보고 있는 주.
+//  발송 = 솔라피 템플릿 → 직접 입력(제목) → 주별 추정(한 메시지 SQL 한 번), 클릭 = GA 캠페인×날짜(kakao) 를 주로 묶음. 전체 줄 = 수단별 기록 합 ÷ kakao 세션 합.
+export type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; targetCtr: number | null; sentBasis: TrackedRow["sentBasis"]; sent: (number | null)[]; sessions: (number | null)[]; ctr: (number | null)[] };
+export type TrackedHistory = { weeks: string[]; rows: HistoryRow[]; total: { sent: number[]; sessions: (number | null)[]; ctr: (number | null)[] }; note: string };
+export async function trackedHistory(endWeek: string, weeks = 12): Promise<TrackedHistory> {
+  const first = shiftDays(endWeek, -7 * (weeks - 1));
+  const list: string[] = []; for (let i = 0; i < weeks; i++) list.push(shiftDays(first, 7 * i));
+  const idx = (w: string) => list.indexOf(w);
+  const sb = supabaseAdmin();
+  const [msgRes, statRes] = await Promise.all([
+    sb.from("crm_messages").select("id,title,customer,links,trigger,offset_days,offset_note,target_ctr,solapi_template_id,utm_medium,active").eq("active", true),
+    sb.from("crm_send_stats").select("source,grain,date,template,sent,batch").gte("date", first).lte("date", shiftDays(endWeek, 6)),
+  ]);
+  if (msgRes.error) throw msgRes.error;
+  if (statRes.error) throw statRes.error;
+  const msgs = ((msgRes.data || []) as unknown as CrmMessage[]).filter((m) => isTracked(m));
+  const stats = (statRes.data || []) as { source: string; grain: string; date: string; template: string; sent: number; batch: string }[];
+  const weekOf = (r: { grain: string; date: string }) => (r.grain === "week" ? r.date : weekStartOf(r.date));
+  const totalSent = list.map(() => 0);
+  for (const r of stats) { const i = idx(weekOf(r)); if (i >= 0) totalSent[i] += r.sent || 0; }
+  // GA: 날짜 × 캠페인(kakao) 한 번 → 주별
+  const ga = new Map<string, number[]>(); // 캠페인 → 주별 세션
+  const gaTotal = list.map(() => 0);
+  let gaOk = false, note = "";
+  if (isGaConfigured()) {
+    try {
+      const yesterday = shiftDays(kstToday(), -1);
+      const until = shiftDays(endWeek, 6) < yesterday ? shiftDays(endWeek, 6) : yesterday;
+      const r = await runGaReport({ since: first, until, dimensions: ["date", "campaign"], metrics: ["sessions"], limit: 5000, filter: { dimension: "source_medium", match: "begins_with", value: "kakao" } });
+      for (const row of r.rows) {
+        const i = idx(weekStartOf(String(row["날짜"] || ""))); if (i < 0) continue;
+        const c = String(row["캠페인"] || ""); const n = Number(row["세션"]) || 0;
+        const arr = ga.get(c) || list.map(() => 0); arr[i] += n; ga.set(c, arr); gaTotal[i] += n;
+      }
+      gaOk = true;
+    } catch (e) { note = e instanceof Error ? e.message : "GA 조회 실패"; }
+  } else note = "GA4 가 연결되어 있지 않습니다.";
+  const solapiWeeks = new Set(stats.filter((r) => r.source === "solapi").map(weekOf));
+  const rows: HistoryRow[] = [];
+  const estCache = new Map<string, Record<string, number> | null>();
+  for (const m of msgs) {
+    const campaign = (m.links?.utm_campaign || "").trim();
+    const tid = (m.solapi_template_id || "").trim();
+    let sentBasis: TrackedRow["sentBasis"] = "none";
+    let sent: (number | null)[] = list.map(() => null);
+    if (tid && solapiWeeks.size) {
+      sentBasis = "solapi";
+      sent = list.map((w) => (solapiWeeks.has(w) ? stats.filter((r) => r.source === "solapi" && r.template.endsWith(`:${tid}`) && weekOf(r) === w).reduce((a, r) => a + (r.sent || 0), 0) : null));
+    } else {
+      const manual = stats.filter((r) => r.batch === "manual" && r.template === m.title);
+      if (manual.length) { sentBasis = "manual"; sent = list.map((w) => { const xs = manual.filter((r) => weekOf(r) === w); return xs.length ? xs.reduce((a, r) => a + (r.sent || 0), 0) : null; }); }
+      else if (m.trigger) {
+        const key = `${m.trigger}|${m.offset_days ?? ""}|${m.customer}|${(m.offset_note || "").match(/(\d+)\s*회/)?.[1] || ""}`;
+        if (!estCache.has(key)) estCache.set(key, await estimateAudienceWeekly(sb, m, first, endWeek));
+        const est = estCache.get(key);
+        if (est) { sentBasis = "estimate"; sent = list.map((w) => est[w] ?? null); }
+      }
+    }
+    const sess: (number | null)[] = gaOk ? ga.get(campaign) || list.map(() => 0) : list.map(() => null);
+    const ctr = list.map((_, i) => { const s = sent[i], g = sess[i]; return s && g != null ? Math.round((g / s) * 1000) / 10 : null; });
+    rows.push({ id: m.id, title: m.title, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, targetCtr: m.target_ctr ?? null, sentBasis, sent, sessions: sess, ctr });
+  }
+  const last = weeks - 1;
+  rows.sort((a, b) => (b.sessions[last] ?? -1) - (a.sessions[last] ?? -1) || (b.sent[last] ?? -1) - (a.sent[last] ?? -1));
+  const total = { sent: totalSent, sessions: gaOk ? gaTotal : list.map(() => null), ctr: list.map((_, i) => (gaOk && totalSent[i] ? Math.round((gaTotal[i] / totalSent[i]) * 1000) / 10 : null)) };
+  return { weeks: list, rows, total, note };
 }

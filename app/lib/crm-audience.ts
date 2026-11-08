@@ -64,3 +64,49 @@ export async function estimateAudience(sb: SupabaseClient, m: { trigger: string;
     return { count: null, basis: "estimate", note: `추정 실패: ${e instanceof Error ? e.message.slice(0, 80) : "오류"}` };
   }
 }
+
+// ── 주별 추정(2026-11-09 성과 '메시지별 주간 클릭률') — 한 메시지의 여러 주를 SQL 한 번으로. 주 = 월요일 시작(date_trunc('week')).
+//  트리거 날짜 d 에 n 일을 더한 날이 속한 주가 '발송 주'. 반환 = { 주 시작일: 대상 수 }. 셀 수 없는 트리거는 null.
+export async function estimateAudienceWeekly(sb: SupabaseClient, m: { trigger: string; offset_days: number | null; customer: string; offset_note?: string }, firstWeek: string, lastWeek: string): Promise<Record<string, number> | null> {
+  if (!DATE_RE.test(firstWeek) || !DATE_RE.test(lastWeek)) return null;
+  const n = Number.isFinite(Number(m.offset_days)) ? Math.trunc(Number(m.offset_days)) : 0;
+  const cw = chanWhere(m.customer);
+  const to = shift(lastWeek, 6);
+  const blank = () => { const out: Record<string, number> = {}; for (let w = firstWeek; w <= lastWeek; w = shift(w, 7)) out[w] = 0; return out; };
+  let inner = "";
+  switch (m.trigger) {
+    case "first_order":
+      inner = `select min(order_date)::date d from sales_orders where customer_key <> '' ${cw} group by customer_key`;
+      break;
+    case "reorder": {
+      const k = Number((m.offset_note || "").match(/(\d+)\s*회/)?.[1]);
+      const having = k >= 2 ? `= ${k}` : ">= 2";
+      inner = `with o as (select customer_key, order_unit, min(order_date) d from sales_orders where customer_key <> '' ${cw} group by customer_key, order_unit), r as (select customer_key, d, row_number() over (partition by customer_key order by d) rn from o) select d::date d from r where rn ${having}`;
+      break;
+    }
+    case "shipped":
+    case "delivered":
+      inner = `select min(order_date)::date + ${m.trigger === "shipped" ? 1 : 2} d from sales_orders where order_unit <> '' ${cw} group by order_unit`;
+      break;
+    case "inactive":
+      inner = `select max(order_date)::date d from sales_orders where customer_key <> '' ${cw} group by customer_key`;
+      break;
+    case "subscription": {
+      try {
+        const rows = await runSql<{ n: number }>(sb, `select count(*)::int n from cafe24_subscriptions where state = 'U'`, 1);
+        const c = Number(rows[0]?.n) || 0; const out = blank();
+        for (const w of Object.keys(out)) out[w] = c;
+        return out;
+      } catch { return null; }
+    }
+    default:
+      return null;
+  }
+  const q = `select to_char(date_trunc('week', (x.d + ${n})::timestamp)::date, 'YYYY-MM-DD') w, count(*)::int n from (${inner}) x where x.d + ${n} between '${firstWeek}' and '${to}' group by 1`;
+  try {
+    const rows = await runSql<{ w: string; n: number }>(sb, q, 200);
+    const out = blank();
+    for (const r of rows) if (r.w in out) out[r.w] = Number(r.n) || 0;
+    return out;
+  } catch { return null; }
+}

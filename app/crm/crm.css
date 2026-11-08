@@ -54,18 +54,18 @@
 .crm-ga-line { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
 .crm-active-check { font-size: var(--sm-fs-base); cursor: pointer; display: flex; align-items: center; gap: var(--sm-space-2); }
 
-/* 여정 — 트리거 × D+n 타임라인 */
+/* 여정 — D+n(세로) × 트리거(가로) 타임라인 (2026-11-09 축 교체) */
 .crm-journey-wrap { overflow-x: auto; }
-.crm-journey { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+.crm-journey { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; } /* 고정 레이아웃: 열이 트리거 수로 균등 분배, 칩은 칸 폭에 맞춰 말줄임 */
 .crm-journey th, .crm-journey td { border-bottom: 1px solid var(--sm-border); vertical-align: top; padding: 12px 10px; }
 .crm-journey thead th { font-size: var(--sm-fs-xs); font-weight: 500; color: var(--sm-text-mid); text-align: left; white-space: nowrap; background: var(--sm-white); position: sticky; top: 0; z-index: 2; }
-.crm-journey th.crm-jtrig { position: sticky; left: 0; background: var(--sm-white); z-index: 3; font-size: var(--sm-fs-base); font-weight: 500; color: var(--sm-black); white-space: nowrap; min-width: 140px; }
-.crm-journey thead th.crm-jtrig { z-index: 4; }
-.crm-jcell { min-width: 170px; }
+.crm-journey th.crm-jday { position: sticky; left: 0; background: var(--sm-white); z-index: 3; font-size: var(--sm-fs-base); font-weight: 500; color: var(--sm-black); white-space: nowrap; min-width: 72px; font-variant-numeric: tabular-nums; }
+.crm-journey thead th.crm-jday { z-index: 4; }
+.crm-journey th.crm-jday { width: 72px; }
 .crm-jcell-in { display: flex; flex-direction: column; gap: 4px; border-radius: var(--sm-radius); padding: 2px; }
 .crm-jcell-in.is-crowded { border: 1px solid var(--sm-danger-border); background: var(--sm-danger-bg); }
 .crm-jchip { font: inherit; font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); text-align: left; background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius);
-  padding: 4px 8px; cursor: pointer; color: var(--sm-black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+  padding: 4px 8px; cursor: pointer; color: var(--sm-black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .crm-jchip:hover { background: var(--sm-bg-subtle); }
 .crm-jchip.is-inactive { color: var(--sm-text-mid); border-style: dashed; }
 .crm-jcrowd { font-size: var(--sm-fs-xs); color: var(--sm-danger); font-weight: 500; }
@@ -74,17 +74,27 @@
 .crm-band-chips { display: flex; flex-wrap: wrap; gap: var(--sm-space-2); }
 .crm-journey-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-top: var(--sm-space-2); }
 
-/* 성과(2026-11-08 개편) — 상단 한 줄 + KPI + 메시지별 표, 나머지는 접기 */
+/* 성과(2026-11-09 개편) — 접기 없이 구역 카드로 펼침: KPI → 12주 클릭률 표 → 이 주 표 → 차트 2 → 수단·GA 2 → 기록 */
 .crm-perf-bar { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-5); }
 .crm-perf-bar .sm-tabs { align-items: center; }
 .crm-perf-week { font-size: var(--sm-fs-base); font-weight: 600; padding: 0 var(--sm-space-2); white-space: nowrap; }
-.crm-more { background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); padding: 0 var(--sm-space-5); margin-top: var(--sm-space-4); }
-.crm-more > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--sm-space-2); padding: 16px 0; font-size: var(--sm-fs-lg); font-weight: 600; color: var(--sm-black); }
-.crm-more > summary::-webkit-details-marker { display: none; }
-.crm-more > summary::before { content: "▸"; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-.crm-more[open] > summary { border-bottom: 1px solid var(--sm-border); margin-bottom: var(--sm-space-4); }
-.crm-more[open] > summary::before { content: "▾"; }
-.crm-more > :last-child { margin-bottom: var(--sm-space-5); }
+.crm-perf-sec { margin-bottom: var(--sm-space-5); }
+.crm-perf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-5); }
+.crm-perf-grid .crm-perf-sec { min-width: 0; }
+@media (max-width: 900px) { .crm-perf-grid { grid-template-columns: 1fr; } }
+/* 메시지 × 주 클릭률 표 — 첫 열 고정, 주 칸은 좁게, 보고 있는 주는 현재 위치 색 */
+.crm-hist-wrap { overflow-x: auto; }
+.crm-hist { min-width: 100%; }
+.crm-hist th.crm-hist-title, .crm-hist td.crm-hist-title { position: sticky; left: 0; background: var(--sm-white); z-index: 2; min-width: 220px; max-width: 300px; }
+.crm-hist thead th.crm-hist-title { z-index: 3; }
+.crm-hist .crm-ellipsis { max-width: 280px; }
+.crm-hist-cell { min-width: 58px; padding-left: 6px !important; padding-right: 8px !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crm-hist .is-this-week { background: var(--sm-orange-light); }
+.crm-hist thead th.is-this-week { color: var(--sm-black); font-weight: 600; }
+.crm-hist-total td { font-weight: 600; background: var(--sm-bg-subtle); }
+.crm-hist-total td.crm-hist-title { background: var(--sm-bg-subtle); }
+.crm-hist-total td.is-this-week { background: var(--sm-orange-light); }
+.crm-hist-total .crm-sub { font-weight: 400; }
 .crm-sub-row { padding-left: 28px !important; color: var(--sm-text-mid); }
 .crm-ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crm-summary-spacer { flex: 1; }

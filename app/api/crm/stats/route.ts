@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { weeklyStats, gaByMedium, weeklyTrend, upsertCrmStats, weekStartOf, kstToday, isCrmSource, CRM_SOURCES, trackedMessages } from "@/app/lib/crm-stats";
+import { weeklyStats, gaByMedium, weeklyTrend, upsertCrmStats, weekStartOf, kstToday, isCrmSource, CRM_SOURCES, trackedMessages, trackedHistory } from "@/app/lib/crm-stats";
 import { isSolapiConfigured } from "@/app/lib/solapi";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ export const maxDuration = 60;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// GET ?week=YYYY-MM-DD(아무 날짜나 — 그 주 월요일로 맞춤) → 주간 수단별 집계 + GA 매체별 + 12주 추이
+// GET ?week=YYYY-MM-DD(아무 날짜나 — 그 주 월요일로 맞춤) → 주간 수단별 집계 + GA 매체별 + 12주 추이 + 메시지별 주간 클릭률 이력(history, 2026-11-09)
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
@@ -22,7 +22,9 @@ export async function GET(req: NextRequest) {
     try { ga = await gaByMedium(week, w.until); } catch (e) { gaNote = e instanceof Error ? e.message : "GA 조회 실패"; }
     let tracked: Awaited<ReturnType<typeof trackedMessages>>["tracked"] = [], trackedNote = "";
     try { tracked = (await trackedMessages(week, w.until, w.rows)).tracked; } catch (e) { trackedNote = e instanceof Error ? e.message : "추적 메시지 집계 실패"; }
-    return NextResponse.json({ ok: true, ...w, ga, gaNote, trend, tracked, trackedNote, sources: w.sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured() });
+    let history: Awaited<ReturnType<typeof trackedHistory>>;
+    try { history = await trackedHistory(week, 12); } catch (e) { history = { weeks: [], rows: [], total: { sent: [], sessions: [], ctr: [] }, note: e instanceof Error ? e.message : "주간 이력 집계 실패" }; }
+    return NextResponse.json({ ok: true, ...w, ga, gaNote, trend, tracked, trackedNote, history, sources: w.sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured() });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
