@@ -342,7 +342,6 @@ export default function InventoryPage() {
               {`선택 ${qtyText(sel.size, "종")} 생산 요청`}
             </button>
           )}
-          {!confirmedTab && sel.size === 0 && <span className="b2b-btn-why">아래 표에서 품목을 체크하면 켜집니다</span>}
           <button className="b2b-btn-primary" onClick={() => setModalFor("__new__")}>+ 입·출·조정 기록</button>
         </div>
       </header>
