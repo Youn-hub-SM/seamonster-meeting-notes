@@ -124,6 +124,7 @@ export const GA_DIMENSIONS = {
   channel: { api: "sessionDefaultChannelGroup", label: "채널 그룹" },          // Organic Search·Paid Social·Direct …
   source_medium: { api: "sessionSourceMedium", label: "소스/매체" },
   campaign: { api: "sessionCampaignName", label: "캠페인" },
+  term: { api: "sessionManualTerm", label: "키워드(term)" },                   // 2026-11-09 CRM A/B(utm_term) 나누기
   landing_page: { api: "landingPage", label: "랜딩 페이지" },
   device: { api: "deviceCategory", label: "기기" },
   new_vs_returning: { api: "newVsReturning", label: "신규/재방문" },

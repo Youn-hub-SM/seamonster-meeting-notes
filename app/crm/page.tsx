@@ -1,6 +1,6 @@
 "use client";
 
-// CRM 메시지맵 — 판매 채널(고객군) 세그먼트 + 목록·여정·성과 + 드로어. 2026-11-06 개편(docs/crm-map-redesign-plan.md, 대표 결정 1~6 전부 (가)).
+// CRM 메시지맵 — 판매 채널(고객군) 세그먼트 + 목록·여정·성과·살펴보기(메시지 하나씩, 2026-11-09) + 드로어. 2026-11-06 개편(docs/crm-map-redesign-plan.md, 대표 결정 1~6 전부 (가)).
 //  데이터·API 는 그대로(/api/crm/messages·options·ga-stats·stats). 메시지 편집은 드로어 한 곳.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
@@ -16,12 +16,13 @@ import OptionsModal from "./OptionsModal";
 import ListView from "./ListView";
 import JourneyView from "./JourneyView";
 import WeeklyStats from "./WeeklyStats";
+import MessageView from "./MessageView";
 import Drawer from "./Drawer";
 import type { Channel, GaStat, GaState, Labels, Stage } from "./types";
 
 const VIEW_KEY = "crm.view";
 const CH_KEY = "crm.channel";
-type View = "list" | "journey" | "perf";
+type View = "list" | "journey" | "perf" | "msg";
 const optLabel = (list: CrmOption[], fallback: Record<string, string>) => {
   const m = Object.fromEntries(list.map((o) => [o.key, o.label]));
   return (k: string) => m[k] || fallback[k] || k;
@@ -49,7 +50,7 @@ export default function CrmPage() {
 
   useEffect(() => {
     try {
-      const v = localStorage.getItem(VIEW_KEY); if (v === "list" || v === "journey" || v === "perf") setView(v);
+      const v = localStorage.getItem(VIEW_KEY); if (v === "list" || v === "journey" || v === "perf" || v === "msg") setView(v);
       const c = localStorage.getItem(CH_KEY); if (c != null) setChannel(c);
     } catch { /* 저장 안 됨 */ }
     fetch("/api/crm/stats/solapi", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setSolapiTpls(j.templates || []); }).catch(() => {});
@@ -158,7 +159,7 @@ export default function CrmPage() {
 
       {error && <div className="b2b-error">{error}</div>}
 
-      {view !== "perf" && (
+      {view !== "perf" && view !== "msg" && (
       <div className="crm-kpis">
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">메시지</div><div className="b2b-stat-card-value">{qty(kpi.total)}</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">활성</div><div className="b2b-stat-card-value">{qty(kpi.active)}</div>{kpi.total - kpi.active > 0 && <div className="b2b-stat-card-hint">비활성 {qty(kpi.total - kpi.active)}</div>}</div>
@@ -179,9 +180,10 @@ export default function CrmPage() {
           <button className={`sm-tab${view === "list" ? " is-active" : ""}`} role="tab" onClick={() => pickView("list")}>목록</button>
           <button className={`sm-tab${view === "journey" ? " is-active" : ""}`} role="tab" onClick={() => pickView("journey")}>여정</button>
           <button className={`sm-tab${view === "perf" ? " is-active" : ""}`} role="tab" onClick={() => pickView("perf")}>성과</button>
+          <button className={`sm-tab${view === "msg" ? " is-active" : ""}`} role="tab" onClick={() => pickView("msg")}>살펴보기</button>
         </div>
         <span className="crm-bar-spacer" />
-        {view !== "perf" && <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" aria-label="메시지·단계·캠페인 검색" />}
+        {view !== "perf" && view !== "msg" && <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" aria-label="메시지·단계·캠페인 검색" />}
       </div>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div>
@@ -189,6 +191,8 @@ export default function CrmPage() {
           <div className="b2b-empty">등록된 메시지가 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => setShowImport(true)}>엑셀로 가져오기</button></div></div>
         ) : view === "perf" ? (
           <WeeklyStats channel={channel} />
+        ) : view === "msg" ? (
+          byChannel.length === 0 ? <div className="b2b-empty">이 채널에 메시지가 없습니다.</div> : <MessageView msgs={byChannel} labels={labels} onOpen={openEdit} />
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">조건에 맞는 메시지가 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => { setSearch(""); pickChannel(""); }}>조건 지우기</button></div></div>
         ) : view === "journey" ? (

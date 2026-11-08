@@ -119,3 +119,15 @@
 /* 2026-11-08 대표 "시원하게": 목록·성과 표는 공용 .b2b-table 기본 밀도(행 44px), 드로어 섹션 간격 24 */
 .crm-drawer-body { gap: var(--sm-space-5); }
 .crm-row-main td { padding-top: 14px; padding-bottom: 14px; }
+
+/* 살펴보기(2026-11-09) — 메시지 하나 대시보드: 드롭다운 + 요약 카드(메타 | 본문) */
+.crm-msg-select { min-width: 320px; max-width: 560px; flex: 0 1 auto; }
+.crm-msg-card { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--sm-space-5); }
+@media (max-width: 900px) { .crm-msg-card { grid-template-columns: 1fr; } }
+.crm-msg-meta { min-width: 0; }
+.crm-msg-title { font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); letter-spacing: var(--sm-ls-heading); margin: 0 0 var(--sm-space-2); }
+.crm-msg-badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: var(--sm-space-4); }
+.crm-msg-dl { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px var(--sm-space-3); margin: 0; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); }
+.crm-msg-dl dt { color: var(--sm-text-mid); font-weight: 500; }
+.crm-msg-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.crm-msg-preview { max-height: 320px; overflow-y: auto; align-self: start; }
