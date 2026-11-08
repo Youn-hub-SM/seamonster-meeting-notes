@@ -1,12 +1,11 @@
 /* CRM 메시지맵(/crm) 전용 — 접두사 .crm-* (2026-11-06 개편: 판매 채널 세그먼트 + 목록·여정·성과 + 드로어). 공용 .b2b-* 신설 금지 */
 
 /* KPI 타일 4개 */
-.crm-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sm-space-3); margin-bottom: var(--sm-space-4); }
+.crm-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sm-space-4); margin-bottom: var(--sm-space-5); }
 @media (max-width: 760px) { .crm-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.crm-kpis .b2b-stat-card { padding: 16px 18px; }
 
 /* 세그먼트(판매 채널) + 보기 + 검색 */
-.crm-bar { display: flex; align-items: center; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-4); }
+.crm-bar { display: flex; align-items: center; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-5); }
 .crm-bar .sm-tabs { margin: 0; }
 .crm-bar-gap { width: 1px; height: 24px; background: var(--sm-border); flex: 0 0 auto; }
 .crm-bar-spacer { flex: 1 1 auto; }
@@ -15,14 +14,14 @@
 
 /* 목록 — 단계별 묶음 표 */
 .crm-group-row td { background: var(--sm-bg-subtle); padding: 0; }
-.crm-group-btn { display: flex; align-items: center; gap: var(--sm-space-2); padding: 4px 12px 4px 4px; }
+.crm-group-btn { display: flex; align-items: center; gap: var(--sm-space-2); padding: 6px 12px 6px 4px; }
 .crm-group-toggle { background: none; border: none; font: inherit; font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black); text-align: left;
-  padding: 6px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: var(--sm-space-2); line-height: var(--sm-lh-ui); border-radius: var(--sm-radius); }
+  padding: 8px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: var(--sm-space-2); line-height: var(--sm-lh-ui); border-radius: var(--sm-radius); }
 .crm-group-toggle:hover { background: var(--sm-border-light); }
 .crm-group-count { font-weight: 400; color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
 .crm-group-sub { font-weight: 400; color: var(--sm-text-mid); font-size: var(--sm-fs-xs); }
 .crm-sub { display: block; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); margin-top: 2px; white-space: normal; }
-.crm-title-cell { min-width: 220px; }
+.crm-title-cell { min-width: 260px; }
 .crm-cell-nowrap { white-space: nowrap; }
 .crm-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: 6px; vertical-align: middle; }
 .crm-tag { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); background: var(--sm-bg-subtle); border-radius: 4px; padding: 1px 6px; line-height: var(--sm-lh-ui); }
@@ -57,11 +56,11 @@
 /* 여정 — 트리거 × D+n 타임라인 */
 .crm-journey-wrap { overflow-x: auto; }
 .crm-journey { border-collapse: separate; border-spacing: 0; min-width: 100%; }
-.crm-journey th, .crm-journey td { border-bottom: 1px solid var(--sm-border); vertical-align: top; padding: 8px 10px; }
+.crm-journey th, .crm-journey td { border-bottom: 1px solid var(--sm-border); vertical-align: top; padding: 12px 10px; }
 .crm-journey thead th { font-size: var(--sm-fs-xs); font-weight: 500; color: var(--sm-text-mid); text-align: left; white-space: nowrap; background: var(--sm-white); position: sticky; top: 0; z-index: 2; }
 .crm-journey th.crm-jtrig { position: sticky; left: 0; background: var(--sm-white); z-index: 3; font-size: var(--sm-fs-base); font-weight: 500; color: var(--sm-black); white-space: nowrap; min-width: 140px; }
 .crm-journey thead th.crm-jtrig { z-index: 4; }
-.crm-jcell { min-width: 150px; }
+.crm-jcell { min-width: 170px; }
 .crm-jcell-in { display: flex; flex-direction: column; gap: 4px; border-radius: var(--sm-radius); padding: 2px; }
 .crm-jcell-in.is-crowded { border: 1px solid var(--sm-danger-border); background: var(--sm-danger-bg); }
 .crm-jchip { font: inherit; font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); text-align: left; background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius);
@@ -75,16 +74,16 @@
 .crm-journey-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-top: var(--sm-space-2); }
 
 /* 성과(2026-11-08 개편) — 상단 한 줄 + KPI + 메시지별 표, 나머지는 접기 */
-.crm-perf-bar { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-4); }
+.crm-perf-bar { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-5); }
 .crm-perf-bar .sm-tabs { align-items: center; }
 .crm-perf-week { font-size: var(--sm-fs-base); font-weight: 600; padding: 0 var(--sm-space-2); white-space: nowrap; }
-.crm-more { background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); padding: 0 var(--sm-space-4); margin-top: var(--sm-space-3); }
-.crm-more > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--sm-space-2); padding: 12px 0; font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black); }
+.crm-more { background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); padding: 0 var(--sm-space-5); margin-top: var(--sm-space-4); }
+.crm-more > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--sm-space-2); padding: 16px 0; font-size: var(--sm-fs-lg); font-weight: 600; color: var(--sm-black); }
 .crm-more > summary::-webkit-details-marker { display: none; }
 .crm-more > summary::before { content: "▸"; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-.crm-more[open] > summary { border-bottom: 1px solid var(--sm-border); margin-bottom: var(--sm-space-3); }
+.crm-more[open] > summary { border-bottom: 1px solid var(--sm-border); margin-bottom: var(--sm-space-4); }
 .crm-more[open] > summary::before { content: "▾"; }
-.crm-more > :last-child { margin-bottom: var(--sm-space-4); }
+.crm-more > :last-child { margin-bottom: var(--sm-space-5); }
 .crm-sub-row { padding-left: 28px !important; color: var(--sm-text-mid); }
 .crm-ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crm-summary-spacer { flex: 1; }
@@ -105,3 +104,7 @@
 /* 가져오기 모달 체크박스 — .b2b-checkbox 는 타일형(세로)이라 글자가 한 자씩 쌓인다(2026-11-08 대표 "화면이 깨져 보여") */
 .crm-import-check { display: inline-flex; align-items: center; gap: var(--sm-space-2); font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); cursor: pointer; margin-bottom: var(--sm-space-3); white-space: nowrap; }
 .crm-import-check input { margin: 0; }
+
+/* 2026-11-08 대표 "시원하게": 목록·성과 표는 공용 .b2b-table 기본 밀도(행 44px), 드로어 섹션 간격 24 */
+.crm-drawer-body { gap: var(--sm-space-5); }
+.crm-row-main td { padding-top: 14px; padding-bottom: 14px; }

@@ -128,7 +128,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
           <div className="b2b-empty">UTM 캠페인이 달린 메시지가 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
-            <table className="b2b-table is-compact">
+            <table className="b2b-table">
               <thead><tr><th>메시지</th><th>수단</th><th>트리거</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th className="num">구매</th><th className="num">매출</th></tr></thead>
               <tbody>{v.tracked.map((t) => {
                 const tone = t.ctr == null || t.targetCtr == null ? undefined : t.ctr >= t.targetCtr ? "var(--sm-success)" : "var(--sm-danger)";
@@ -153,7 +153,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
       <details className="crm-more">
         <summary>수단별 발송 <span className="crm-group-count">{loading ? "" : qtyText(totalSent, "건")}</span></summary>
         {loading ? <div className="b2b-loading">불러오는 중...</div> : !v?.sources.length ? <div className="b2b-empty">이 주의 발송 기록이 없습니다.</div> : (
-          <div className="b2b-table-wrap"><table className="b2b-table is-compact">
+          <div className="b2b-table-wrap"><table className="b2b-table">
             <thead><tr><th>발송 수단</th><th className="num">발송</th><th className="num">클릭</th><th className="num">클릭률</th><th>수집</th></tr></thead>
             <tbody>{v.sources.map((s) => {
               const def = defs.find((d) => d.key === s.source);
@@ -171,7 +171,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
       <details className="crm-more">
         <summary>랜딩 성과 · GA 매체별 <span className="crm-group-count">{hasGa && !loading ? `세션 ${qty(gaTotal.sessions)}` : ""}</span></summary>
         {loading ? <div className="b2b-loading">불러오는 중...</div> : v?.ga === null ? <div className="b2b-empty">{v?.gaNote || "GA4 가 연결되어 있지 않습니다."}</div> : !v?.ga?.length ? <div className="b2b-empty">이 주에 kakao 로 들어온 세션이 없습니다.</div> : (
-          <div className="b2b-table-wrap"><table className="b2b-table is-compact">
+          <div className="b2b-table-wrap"><table className="b2b-table">
             <thead><tr><th>매체(utm_medium)</th><th className="num">세션</th><th className="num">구매</th><th className="num">구매전환율</th><th className="num">매출</th></tr></thead>
             <tbody>{v.ga.map((g) => (<tr key={g.medium}><td>{g.medium}</td><td className="num">{qty(g.sessions)}</td><td className="num">{qty(g.purchases)}</td><td className="num">{pct(g.purchases, g.sessions)}</td><td className="num">{wonText(g.revenue)}</td></tr>))}</tbody>
           </table></div>
@@ -187,7 +187,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
       <details className="crm-more">
         <summary>이 주의 기록 <span className="crm-group-count">{v?.rows.length ? qtyText(v.rows.length, "줄") : ""}</span></summary>
         {!v?.rows.length ? <div className="b2b-empty">기록이 없습니다.</div> : (
-          <div className="b2b-table-wrap"><table className="b2b-table is-compact">
+          <div className="b2b-table-wrap"><table className="b2b-table">
             <thead><tr><th>날짜</th><th>수단</th><th>템플릿·캠페인</th><th className="num">발송</th><th className="num">클릭</th><th>메모</th><th>출처</th><th /></tr></thead>
             <tbody>{v.rows.map((r) => (
               <tr key={r.id}>

@@ -18,12 +18,11 @@ export default function ListView({ stages, labels, gaOf, onOpen, onAdd }: {
   const hasGa = stages.some((s) => s.msgs.some((m) => gaOf(m)));
   return (
     <div className="b2b-table-wrap is-sticky-head">
-      <table className="b2b-table is-compact is-clickable">
+      <table className="b2b-table is-clickable">
         <thead>
           <tr>
             <th className="crm-title-cell">메시지</th>
             <th>발송 수단</th>
-            <th>유형</th>
             <th>트리거</th>
             <th>링크</th>
             <th>상태</th>
@@ -36,7 +35,7 @@ export default function ListView({ stages, labels, gaOf, onOpen, onAdd }: {
             const inactiveN = s.msgs.filter((m) => statusKey(m.status) === "inactive").length;
             return [
               <tr key={`g-${s.stage}`} className="crm-group-row">
-                <td colSpan={hasGa ? 7 : 6}>
+                <td colSpan={hasGa ? 6 : 5}>
                   <div className="crm-group-btn">
                     <button type="button" className="crm-group-toggle" aria-expanded={open} onClick={() => setClosed((c) => ({ ...c, [s.stage]: !c[s.stage] }))}>
                       <span>{open ? "▾" : "▸"}</span>
@@ -63,8 +62,10 @@ export default function ListView({ stages, labels, gaOf, onOpen, onAdd }: {
                       {tags.length > 0 && <span className="crm-tags">{tags.map((t) => <span key={t} className="crm-tag">{t}</span>)}</span>}
                       {(m.timing || period) && <span className="crm-sub">{[m.timing, period].filter(Boolean).join(" · ")}</span>}
                     </td>
-                    <td className="crm-cell-nowrap">{m.channel ? <span className="b2b-status-pill">{labels.ch(m.channel)}</span> : <span className="sm-faint">미지정</span>}</td>
-                    <td className="crm-cell-nowrap">{m.msg_type ? labels.type(m.msg_type) : ""}</td>
+                    <td className="crm-cell-nowrap">
+                      {m.channel ? <span className="b2b-status-pill">{labels.ch(m.channel)}</span> : <span className="sm-faint">미지정</span>}
+                      {m.msg_type && <span className="crm-sub">{labels.type(m.msg_type)}</span>}
+                    </td>
                     <td>
                       <span className="crm-cell-nowrap">{triggerText({ trigger: m.trigger, offset_days: m.offset_days }) || <span className="sm-faint">없음</span>}</span>
                       {m.offset_note && <span className="crm-sub">{m.offset_note.split(/\r?\n/)[0]}</span>}
