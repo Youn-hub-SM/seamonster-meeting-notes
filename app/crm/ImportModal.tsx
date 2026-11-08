@@ -67,7 +67,7 @@ export default function ImportModal({ onClose, onDone }: { onClose: () => void; 
                 <input ref={fileRef} type="file" accept=".xlsx" style={{ display: "none" }} onChange={(e) => { setFile(e.target.files?.[0] ?? null); setPreview(null); e.target.value = ""; }} />
                 {file && <span className="sm-faint" style={{ fontSize: 12 }}>{file.name}</span>}
               </div>
-              <label className="b2b-checkbox" style={{ marginBottom: 12 }}>
+              <label className="crm-import-check">
                 <input type="checkbox" checked={replace} onChange={(e) => { setReplace(e.target.checked); setPreview(null); }} /> 기존 메시지를 전부 지우고 파일 내용으로 새로 등록
               </label>
               {error && <div className="b2b-error" style={{ marginBottom: 10 }}>{error}</div>}
@@ -78,7 +78,7 @@ export default function ImportModal({ onClose, onDone }: { onClose: () => void; 
                     <span>덮어쓰기 <strong>{preview.counts.update}</strong></span>
                     <span>건너뜀 <strong>{preview.counts.skip}</strong></span>
                     {replace && <span>지움 <strong>{preview.existing}</strong></span>}
-                    {issueCount > 0 && <label className="b2b-checkbox" style={{ marginLeft: "auto" }}><input type="checkbox" checked={onlyIssues} onChange={(e) => setOnlyIssues(e.target.checked)} /> 문제 있는 줄만 ({issueCount})</label>}
+                    {issueCount > 0 && <label className="crm-import-check" style={{ marginLeft: "auto", marginBottom: 0 }}><input type="checkbox" checked={onlyIssues} onChange={(e) => setOnlyIssues(e.target.checked)} /> 문제 있는 줄만 ({issueCount})</label>}
                   </div>
                   {(preview.newStages.length > 0 || preview.newOptions.channels.length > 0 || preview.newOptions.customers.length > 0 || preview.newOptions.msgTypes.length > 0) && (
                     <div className="sm-warn" style={{ marginBottom: 8 }}>

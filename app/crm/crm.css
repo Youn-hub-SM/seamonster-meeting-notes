@@ -93,3 +93,7 @@
 .crm-opt-add { gap: var(--sm-space-2); }
 .crm-opt-add .b2b-input { max-width: 220px; }
 .crm-opt-empty { font-size: var(--sm-fs-xs); }
+
+/* 가져오기 모달 체크박스 — .b2b-checkbox 는 타일형(세로)이라 글자가 한 자씩 쌓인다(2026-11-08 대표 "화면이 깨져 보여") */
+.crm-import-check { display: inline-flex; align-items: center; gap: var(--sm-space-2); font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); cursor: pointer; margin-bottom: var(--sm-space-3); white-space: nowrap; }
+.crm-import-check input { margin: 0; }
