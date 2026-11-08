@@ -122,7 +122,7 @@ export default function CustomStatementPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>공급자 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(고쳐도 설정은 안 바뀝니다)</span></div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>공급자 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(고쳐도 설정은 안 바뀝니다)</span></div>
             <Field label="상호" value={supplier.name} onChange={(v) => setSupplier({ ...supplier, name: v })} />
             <Field label="등록번호" value={supplier.biz_no} onChange={(v) => setSupplier({ ...supplier, biz_no: v })} />
             <Field label="대표" value={supplier.ceo} onChange={(v) => setSupplier({ ...supplier, ceo: v })} />
@@ -138,7 +138,7 @@ export default function CustomStatementPage() {
             )}
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>공급받는자</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>공급받는자</div>
             <Field label="상호" value={buyer.name} onChange={(v) => setBuyer({ ...buyer, name: v })} />
             <Field label="등록번호" value={buyer.biz_no} onChange={(v) => setBuyer({ ...buyer, biz_no: v })} />
             <Field label="성명" value={buyer.ceo} onChange={(v) => setBuyer({ ...buyer, ceo: v })} />
@@ -148,7 +148,7 @@ export default function CustomStatementPage() {
 
         <div style={{ marginTop: 18 }}>
           <div className="sm-between" style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>품목</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>품목</span>
             <button className="b2b-btn-secondary" style={{ padding: "5px 12px", fontSize: 12 }} onClick={() => setLines((p) => [...p, newLine()])}>+ 품목 추가</button>
           </div>
           <div className="b2b-table-wrap">
@@ -182,7 +182,7 @@ export default function CustomStatementPage() {
       {/* ───── 출력부 (발주 명세표와 같은 모양) ───── */}
       <section className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "30px 34px", maxWidth: 860, boxShadow: "var(--sm-shadow-card)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 10, marginBottom: 14 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: 10 }}>거래명세표</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 600, letterSpacing: 10 }}>거래명세표</h2>
           <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>
             <div>(공급받는자 보관용)</div>
             <div style={{ marginTop: 4 }}>
@@ -194,7 +194,7 @@ export default function CustomStatementPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, marginBottom: 16 }}>
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
             <InfoRow label="등록번호" value={supplier.biz_no} strong />
             <InfoRow label="상호" value={supplier.name} stampSrc={useStamp && stamp ? stamp : undefined} extraLabel="대표" extra={supplier.ceo} />
             <InfoRow label="사업장" value={supplier.addr} />
@@ -202,7 +202,7 @@ export default function CustomStatementPage() {
             <InfoRow label="이메일" value={supplier.email} />
           </div>
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
             <InfoRow label="등록번호" value={buyer.biz_no} strong />
             <InfoRow label="상호" value={buyer.name} extraLabel="성명" extra={buyer.ceo} />
             <InfoRow label="주소" value={buyer.addr} />
@@ -230,7 +230,7 @@ export default function CustomStatementPage() {
               {filled.length === 0 && (
                 <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--sm-text-light)", padding: "18px 0" }}>입력된 품목이 없습니다. 위 [+ 품목 추가]로 넣으세요</td></tr>
               )}
-              <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
+              <tr style={{ fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                 <td colSpan={5}>합계</td>
                 <td className="num b2b-money">{won(calc.subtotal)}</td>
                 <td className="num b2b-money">{won(calc.vat)}</td>
@@ -246,8 +246,8 @@ export default function CustomStatementPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 14px", marginTop: 10 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", flex: "0 0 auto" }}>입금계좌</span>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{supplier.bank || "-"}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", flex: "0 0 auto" }}>입금계좌</span>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{supplier.bank || "-"}</span>
         </div>
 
         <p style={{ marginTop: 14, fontSize: 12, color: "var(--sm-text-mid)" }}>위와 같이 거래하였음을 확인합니다.</p>

@@ -334,7 +334,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                           <tr key={i}>
                             <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</td>
                             <td className="sm-faint">{r.sku || "-"}</td>
-                            <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>{fmtQty(r.qty)}</td>
+                            <td className="num b2b-money" style={{ fontWeight: 600, color: "var(--sm-danger)" }}>{fmtQty(r.qty)}</td>
                             <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "매입가"}</td>
                             <td className="sm-faint">{r.memo || "-"}</td>
                           </tr>
@@ -346,7 +346,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                 )}
                 {preview.errors.length > 0 && (
                   <section>
-                    <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
+                    <div className="b2b-field-label" style={{ fontWeight: 600, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
                     <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 130, overflow: "auto" }}>
                       {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
                     </ul>
@@ -428,7 +428,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                             <tr key={r.id}>
                               <td data-label="날짜" style={{ whiteSpace: "nowrap" }}>{r.return_date.slice(5)}</td>
                               <td data-label="품목" style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.memo || ""}>{r.name}</td>
-                              <td data-label="수량" className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 700 }}>{fmtQty(r.qty)}</td>
+                              <td data-label="수량" className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 600 }}>{fmtQty(r.qty)}</td>
                               <td data-label="단가" className="num b2b-money">{r.unit_amount ? won(r.unit_amount) : <span className="sm-faint">매입가</span>}</td>
                               <td className="actions">
                                 <IconButton className="is-danger" label="삭제" onClick={() => remove(r.id)} disabled={outBusy || !!removingId}>{removingId === r.id ? "..." : "✕"}</IconButton>

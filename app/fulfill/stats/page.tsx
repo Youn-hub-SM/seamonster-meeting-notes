@@ -226,7 +226,7 @@ export default function FulfillStatsPage() {
                       {m.cats.map((v, i) => <td key={i} className="num b2b-money">{v || "-"}</td>)}
                       <td className="num b2b-money">{qty(m.n)}</td>
                       <td className="num b2b-money">{qty(m.g)}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(m.n + m.g)}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 600 }}>{qty(m.n + m.g)}</td>
                       <td className="num b2b-money">{m.boxCost ? won(m.boxCost) : "-"}</td>
                     </tr>
                   ))}

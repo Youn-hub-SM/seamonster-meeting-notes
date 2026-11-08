@@ -243,10 +243,10 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
       </svg>
       {hi != null && (
         <div style={{ position: "absolute", left: `${clamp((cx(hi) / W) * 100, lo, hex)}%`, top: 6, transform: "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 12, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5 }}>
-          <div style={{ fontWeight: 800, marginBottom: 2 }}>{periods[hi]}</div>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>{periods[hi]}</div>
           {barSeries.map((ser, si) => <div key={si}><span style={{ color: barColors[si % barColors.length] }}>●</span> {ser.key} <strong>{(ser.values[hi] || 0).toLocaleString()}{barUnit}</strong></div>)}
           <div style={{ borderTop: "1px solid var(--sm-border)", marginTop: 3, paddingTop: 3 }}>합계 <strong>{totals[hi].toLocaleString()}{barUnit}</strong></div>
-          <div style={{ color: lineColor, fontWeight: 700 }}>{lineLabel} {lineValues[hi] == null ? "-" : `${lineFmt(lineValues[hi] as number)}${lineUnit}`}</div>
+          <div style={{ color: lineColor, fontWeight: 600 }}>{lineLabel} {lineValues[hi] == null ? "-" : `${lineFmt(lineValues[hi] as number)}${lineUnit}`}</div>
         </div>
       )}
     </div>

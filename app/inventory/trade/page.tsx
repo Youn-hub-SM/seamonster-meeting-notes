@@ -178,7 +178,7 @@ export default function TradePage() {
                     <option value="">연결 안 함</option>
                     {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` ${r.title}` : ""} — 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
                   </select>
-                  {reqWarn && !customerReturn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{reqWarn}</span>}
+                  {reqWarn && !customerReturn && <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--sm-danger)", marginTop: 4 }}>{reqWarn}</span>}
                 </div>
               )}
 
@@ -252,7 +252,7 @@ export default function TradePage() {
                           <td style={{ whiteSpace: "nowrap" }}>{r.txn_date?.slice(5)}</td>
                           <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{r.type}</span></td>
                           <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
-                          <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{qty(r.qty)}</td>
+                          <td className="num b2b-money" style={{ color: c.fg, fontWeight: 600 }}>{r.qty > 0 ? "+" : ""}{qty(r.qty)}</td>
                           <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "-"}</td>
                           <td>{r.partner || "-"}</td>
                         </tr>
@@ -264,7 +264,7 @@ export default function TradePage() {
               )}
               {preview.errors.length > 0 && (
                 <section>
-                  <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
+                  <div className="b2b-field-label" style={{ fontWeight: 600, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 140, overflow: "auto" }}>
                     {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
                   </ul>

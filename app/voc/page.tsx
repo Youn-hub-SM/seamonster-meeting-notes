@@ -436,19 +436,19 @@ export default function VocPage() {
                       {r.asana_task_at ? (
                         r.asana_task_url ? (
                           <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 (${dateFull(r.asana_task_at)}) — 클릭하면 업무 열림`}
-                            style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
+                            style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
                         ) : (
-                          <span title={`아사나 등록됨 (${dateFull(r.asana_task_at)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
+                          <span title={`아사나 등록됨 (${dateFull(r.asana_task_at)})`} style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-success)" }}>✓ 아사나</span>
                         )
                       ) : asanaReady ? (
                         <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
-                          title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
+                          title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-info)" }}>
                           {flowBusy === r.id ? "등록중..." : "아사나 등록"}
                         </button>
                       ) : null}
                       {/* 과거 flow 등록 기록 — 표시만(등록 기능은 제거됨) */}
                       {r.flow_task_at && (
-                        <span title={`flow 등록됨 (${dateFull(r.flow_task_at)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
+                        <span title={`flow 등록됨 (${dateFull(r.flow_task_at)})`} style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-success)" }}>✓ flow</span>
                       )}
                     </span>
                   </td>
@@ -496,7 +496,7 @@ export default function VocPage() {
               )}
               {preview.errors.length > 0 && (
                 <section>
-                  <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행 제외</div>
+                  <div className="b2b-field-label" style={{ fontWeight: 600, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행 제외</div>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 140, overflow: "auto" }}>
                     {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
                   </ul>
@@ -629,12 +629,12 @@ export default function VocPage() {
                     <span className="sm-row" style={{ gap: 8, alignItems: "center" }}>
                       {er.asana_task_at ? (
                         er.asana_task_url
-                          ? <a href={er.asana_task_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>아사나 등록됨 ✓ (열기)</a>
-                          : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>아사나 등록됨 ✓</span>
+                          ? <a href={er.asana_task_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-success)" }}>아사나 등록됨 ✓ (열기)</a>
+                          : <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-success)" }}>아사나 등록됨 ✓</span>
                       ) : asanaReady ? (
                         <button className="b2b-btn-secondary" onClick={() => registerAsana(er)} disabled={flowBusy === edit.id}>{flowBusy === edit.id ? "등록중..." : "아사나에 업무 등록"}</button>
                       ) : null}
-                      {er.flow_task_at && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>flow 등록됨 ✓</span>}
+                      {er.flow_task_at && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-success)" }}>flow 등록됨 ✓</span>}
                     </span>
                   );
                 })()}
@@ -667,8 +667,8 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
     <>
       <tr onClick={onToggle} className={expanded ? "is-parent" : ""}>
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
-        <td style={{ fontWeight: 700 }}>{b.name}{b.cat && !b.cat.active ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>(비활성)</span> : null}</td>
-        <td className="num" style={{ fontWeight: 700 }}>{b.monthRows.length > 0 ? qty(b.monthRows.length) : <span className="sm-faint">-</span>}</td>
+        <td style={{ fontWeight: 600 }}>{b.name}{b.cat && !b.cat.active ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>(비활성)</span> : null}</td>
+        <td className="num" style={{ fontWeight: 600 }}>{b.monthRows.length > 0 ? qty(b.monthRows.length) : <span className="sm-faint">-</span>}</td>
         <td className="num sm-faint">{qty(b.totalCount)}</td>
         <td className="b2b-col-status" onClick={(e) => e.stopPropagation()}>
           {b.cat && managed ? (
@@ -700,7 +700,7 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
                         <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
                         <td style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
                         <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.resolution || ""}>{r.resolution || "-"}</td>
-                        <td style={{ whiteSpace: "nowrap" }}>{r.asana_task_at || r.flow_task_at ? <span style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓</span> : <span className="sm-faint">-</span>}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{r.asana_task_at || r.flow_task_at ? <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-success)" }}>✓</span> : <span className="sm-faint">-</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -759,7 +759,7 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
               <tbody>
                 {cats.map((c) => (
                   <tr key={c.id}>
-                    <td data-label="유형" style={{ fontWeight: 600 }}>{c.name}</td>
+                    <td data-label="유형" style={{ fontWeight: 500 }}>{c.name}</td>
                     <td data-label="귀책 기본값">{c.fault}</td>
                     <td data-label="정렬" className="num">{c.sort}</td>
                     <td data-label="활성">{c.active ? "활성" : <span className="sm-faint">비활성</span>}</td>
@@ -774,14 +774,14 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
           </div>
           {draft ? (
             <div className="sm-row" style={{ gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>이름<span className="req">*</span></span>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 500 }}>이름<span className="req">*</span></span>
                 <input className="b2b-input" style={{ width: 140 }} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} aria-invalid={nameErr ? "true" : undefined} />
                 {nameErr && <span className="b2b-field-error">{nameErr}</span>}</label>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>귀책 기본값</span>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 500 }}>귀책 기본값</span>
                 <select className="b2b-input" value={draft.fault} onChange={(e) => setDraft({ ...draft, fault: e.target.value })}>
                   {VOC_FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </select></label>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>정렬</span>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 500 }}>정렬</span>
                 <input className="b2b-input" type="number" style={{ width: 70 }} value={draft.sort} onChange={(e) => setDraft({ ...draft, sort: e.target.value })} /></label>
               <label className="sm-row" style={{ gap: 5, fontSize: 13, paddingBottom: 9 }}>
                 <input type="checkbox" className="b2b-checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />활성</label>

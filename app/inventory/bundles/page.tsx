@@ -224,7 +224,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             : error ? <div className="b2b-error" style={{ marginBottom: 8 }}>{error}</div> : null}
           {/* ── 판매담당 입력 구역 — 묶음 정보·구성품·가격 ── */}
           <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">묶음 SKU(코드)</label>
               <input className="b2b-input" value={parentSku} onChange={(e) => { setParentSku(e.target.value); if (fieldErr.sku) setFieldErr((x) => ({ ...x, sku: undefined })); }} placeholder="SET-DG-100" aria-invalid={fieldErr.sku ? "true" : undefined} />
@@ -233,7 +233,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
               <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="대구 실속세트" /></div>
           </div>
           <p className="sm-faint" style={{ fontSize: 12, margin: "-2px 0 8px" }}>SKU가 상품 마스터에 없으면 자동 생성됩니다</p>
-          <div className="b2b-field-label" style={{ fontWeight: 700 }}>구성품</div>
+          <div className="b2b-field-label" style={{ fontWeight: 600 }}>구성품</div>
           {rows.map((r, i) => (
             <div key={i} className="promo-item-row">
               <div className="promo-item-combo">
@@ -255,7 +255,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
 
           {/* ── 생산담당 입력 구역 — 택배 발주 정보 ── */}
           <div style={{ background: "var(--sm-bg-subtle)", borderRadius: 10, padding: "12px 14px" }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-text-mid)", marginBottom: 10 }}>생산담당 입력</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", marginBottom: 10 }}>생산담당 입력</div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">택배 상품명</label>
               <input className="b2b-input" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="진공 씨몬스터 참돔순살 100g×3" /></div>

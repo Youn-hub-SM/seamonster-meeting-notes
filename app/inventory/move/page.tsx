@@ -325,7 +325,7 @@ export default function InventoryMovePage() {
           return (
             <div key={l.key} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 14, marginTop: 12 }}>
               <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span className="sm-faint" style={{ fontSize: 12, fontWeight: 700 }}>품목 {idx + 1}</span>
+                <span className="sm-faint" style={{ fontSize: 12, fontWeight: 600 }}>품목 {idx + 1}</span>
                 {lines.length > 1 && (
                   <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", fontSize: 12 }} onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}>줄 삭제</button>
                 )}
@@ -400,12 +400,12 @@ export default function InventoryMovePage() {
                                   <td style={{ whiteSpace: "nowrap" }}>{t.due_date || "-"}</td>
                                   <td className="num b2b-money">{qty(t.requested_qty)}</td>
                                   <td className="num b2b-money">{qty(t.received_qty)}</td>
-                                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(t.remaining)}</td>
+                                  <td className="num b2b-money" style={{ fontWeight: 600 }}>{qty(t.remaining)}</td>
                                   <td className="num">
                                     <input className="b2b-input b2b-money" type="number" min={0} step={0.01} value={v}
                                       onChange={(e) => { const m2 = new Map(l.alloc); m2.set(t.item_id, e.target.value); patchLine(l.key, { alloc: m2, allocTouched: true }); }}
                                       style={{ width: 100, textAlign: "right" }} placeholder="0" aria-label={`${t.req_no || "요청서"} 배정 수량`} />
-                                    {overRemain && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)" }}>잔여보다 많음</div>}
+                                    {overRemain && <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)" }}>잔여보다 많음</div>}
                                   </td>
                                 </tr>
                               );
@@ -481,7 +481,7 @@ export default function InventoryMovePage() {
                         </div>
                       )}
                     </td>
-                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(m.qty)}</td>
+                    <td className="num b2b-money" style={{ fontWeight: 600 }}>{qty(m.qty)}</td>
                     <td><span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{m.from}에서 {m.to}로</span>{!m.complete && <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-danger)" }}>불완전</span>}</td>
                     <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{m.created_by || "-"}</td>
                     <td><button className="b2b-link-btn" onClick={() => cancelMove(m.group_id)} style={{ color: "var(--sm-danger)" }}>이동 취소</button></td>

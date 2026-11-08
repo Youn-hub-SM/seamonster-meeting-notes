@@ -7,19 +7,20 @@
   --sm-orange-border: rgba(241, 90, 48, 0.12);
   --sm-orange-text: #C8431C;     /* 글자용 주황(흰 바탕 4.9:1) — 호버·강조 글자. 채움(#F15A30)은 글자로 쓰지 않는다 */
   --sm-black: #1A1A1A;
-  --sm-dark: #37352F;
+  --sm-black-hover: #333333;    /* 검정 채움(1차 버튼) 호버 */
+  --sm-dark: #1A1A1A;           /* 2026-11-08 unslop 점검: 글자 색 3역할(primary·secondary·muted)로 — dark 는 primary 별칭, 신규 사용 금지 */
   --sm-white: #FFFFFF;
   --sm-border: #E3E3E3;          /* 기본 경계(카드·표 줄·구분선) */
   --sm-border-strong: #C9C9C9;   /* 입력칸·선택칸처럼 '칸'으로 보여야 하는 경계 */
   --sm-text-mid: #555555;
-  --sm-text-light: #6B6B6B;
+  --sm-text-light: #737373;      /* muted — 메타·캡션 전용(흰 바탕 4.6:1). 본문에 쓰지 않는다 */
   --sm-bg: #FAFAFA;
   --sm-bg-warm: #FFF5F0;
   --sm-container: 1800px;  /* B2B(.b2b-main)와 동일하게 화면 전체 폭 */
   --sm-pad: 24px;
   --sm-radius: 8px;
   --sm-radius-card: 16px;
-  --sm-radius-btn: 12px;
+  --sm-radius-btn: 8px;          /* 2026-11-08: 컨트롤(버튼·입력·탭) 한 값 — 옛 12 는 입력칸 8 과 나란히 놓여 어긋났다 */
   --sm-radius-pill: 50px;
   --sm-shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
   --sm-shadow-float: 0 10px 30px rgba(0, 0, 0, 0.06);
@@ -73,10 +74,10 @@
   --sm-lh-ui: 1.5;        /* 표·버튼·목록·배지 */
   --sm-lh-heading: 1.3;   /* 제목 */
   --sm-lh-kpi: 1.2;       /* KPI 숫자 */
-  --sm-ls-heading: -0.01em;  /* 17px 이상 제목 */
+  --sm-ls-heading: 0;        /* 2026-11-08: 24px 이하 제목에 음수 자간 없음(음수는 40px 넘는 글에만). 이름은 호환용 */
   --sm-ls-label: 0.02em;     /* 12px 분류 라벨 */
 
-  /* ── 굵기 3단(토큰 없음): 400 본문 · 600 강조·라벨·버튼 · 700 제목. 800 은 KPI 값만 ── */
+  /* ── 굵기 3단(토큰 없음, 2026-11-08 unslop 점검): 400 본문 · 500 라벨·버튼·탭·네비 · 600 제목·KPI·현재 위치. 700 이상 없음 ── */
 
   /* ── 폰트 스택 ── */
   --sm-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;  /* SKU·코드 */
@@ -116,7 +117,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [contentedita
 /* 본문·부제목 안 인라인 링크 — 글자 크기는 문맥을 따른다.
    (.change-link 는 홈 업데이트 노트 전용: 12.5px 고정 + margin-top 이라 부제목 안에서 어긋난다) */
 /* 링크 = 검정 글자 + 밑줄(2026-10-14 색 규칙 — 주황 링크 폐지: 버튼과 헷갈리고 대비 3.4:1 미달) */
-.sm-link { color: var(--sm-black); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.sm-link { color: var(--sm-black); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
 .sm-link:hover { color: var(--sm-orange-text); }
 
 /* iframe 도구(/utm·/subscription) 전체 높이 — 모바일은 상단바(52px)만큼 빼고, 데스크톱은 꽉 채움.
@@ -130,21 +131,22 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [contentedita
 .sm-tabbar { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-4); }
 .sm-tabs { display: inline-flex; gap: var(--sm-space-2); flex-wrap: wrap; }
 .sm-tab {
-  display: inline-flex; align-items: center; gap: 7px;
-  font-family: inherit; font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-ui);
-  padding: 8px 15px; border-radius: var(--sm-radius-btn);
+  display: inline-flex; align-items: center; gap: 8px; position: relative;
+  font-family: inherit; font-size: var(--sm-fs-base); font-weight: 500; line-height: var(--sm-lh-ui);
+  padding: 8px 16px; border-radius: var(--sm-radius-btn);
   border: 1px solid var(--sm-border); background: var(--sm-white); color: var(--sm-text-mid);
   cursor: pointer; transition: background .15s, border-color .15s, color .15s;
 }
 .sm-tab:hover:not(.is-active):not(:disabled) { border-color: var(--sm-border-strong); color: var(--sm-black); }
-/* 활성 = 현재 위치 — 주황 채움 + 흰 글자(앱 표준). 흰/주황 3.4:1 이라 굵기 700 으로 큰 글자 기준을 맞춘다 */
-.sm-tab.is-active { background: var(--sm-orange); border-color: var(--sm-orange); color: var(--sm-white); font-weight: 700; }
+/* 활성 = 현재 위치(2026-11-08 unslop 점검) — 연주황 바탕 + 검정 글자 600 + 왼쪽 주황 점(시그니처). 옛 '주황 채움 + 흰 글자'는 3.4:1 이라 폐지 */
+.sm-tab.is-active { background: var(--sm-orange-light); border-color: var(--sm-orange-border); color: var(--sm-black); font-weight: 500; padding-left: 24px; }
+.sm-tab.is-active::before { content: ""; position: absolute; left: 11px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--sm-orange); }
 .sm-tab:disabled { opacity: .5; cursor: not-allowed; }
 .sm-tab-count {
-  font-size: var(--sm-fs-xs); font-weight: 700; line-height: 1; min-width: 16px; text-align: center;
-  padding: 3px 6px; border-radius: 999px; background: var(--sm-bg-subtle); color: var(--sm-text-mid);
+  font-size: var(--sm-fs-xs); font-weight: 600; line-height: 1; min-width: 16px; text-align: center;
+  padding: 0; background: none; color: var(--sm-text-mid);  /* 2026-11-08: 알약 배경 없이 조용한 숫자 */
 }
-.sm-tab.is-active .sm-tab-count { background: rgba(255, 255, 255, .28); color: var(--sm-white); }
+.sm-tab.is-active .sm-tab-count { color: var(--sm-text-mid); }
 /* 동반 검색창(우측 정렬, 고정폭). .b2b-input width:100% 보다 우선하도록 복합 선택자 사용 */
 .sm-tabbar .sm-tab-search { margin-left: auto; width: 240px; max-width: 100%; flex: 0 0 auto; }
 @media (max-width: 640px) { .sm-tabbar .sm-tab-search { margin-left: 0; width: 100%; } }
@@ -203,7 +205,7 @@ a {
 
 .header-logo {
   font-size: var(--sm-fs-lg);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--sm-orange);  /* 브랜드 로고 — 주황 허용 세 자리 중 하나 */
   display: flex;
   align-items: center;
@@ -248,7 +250,7 @@ a {
 /* Page Title — .b2b-page-title 와 동일 스케일(단일 기준) */
 .page-title {
   font-size: var(--sm-fs-2xl);
-  font-weight: 700;
+  font-weight: 600;
   line-height: var(--sm-lh-heading);
   letter-spacing: var(--sm-ls-heading);
   color: var(--sm-black);
@@ -268,13 +270,13 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: var(--sm-orange);
+  background: var(--sm-black);   /* 2026-11-08: 1차 버튼 = 검정 채움 + 흰 글자(13:1). 주황은 현재 위치 점·로고에만 */
   color: var(--sm-white);
   border: 1px solid transparent;
   border-radius: var(--sm-radius-btn);
-  padding: 11px 18px;
-  font-size: 14px;   /* 1차 버튼 예외 — 흰/주황 3.4:1 이라 16px/700 '큰 글자' 기준(3:1)으로 맞춘다 */
-  font-weight: 700;
+  padding: 10px 16px;
+  font-size: var(--sm-fs-base);
+  font-weight: 500;
   line-height: var(--sm-lh-ui);
   cursor: pointer;
   transition: background 0.15s;
@@ -282,7 +284,7 @@ a {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--sm-orange-hover);
+  background: var(--sm-black-hover);
 }
 
 .btn-primary:disabled {
@@ -299,9 +301,9 @@ a {
   color: var(--sm-dark);
   border: 1px solid var(--sm-border-strong);
   border-radius: var(--sm-radius-btn);
-  padding: 11px 18px;
+  padding: 10px 16px;
   font-size: var(--sm-fs-base);
-  font-weight: 600;
+  font-weight: 500;
   line-height: var(--sm-lh-ui);
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
@@ -323,9 +325,9 @@ a {
   color: var(--sm-danger);
   border: 1px solid var(--sm-danger);
   border-radius: var(--sm-radius-btn);
-  padding: 11px 18px;
+  padding: 10px 16px;
   font-size: var(--sm-fs-base);
-  font-weight: 600;
+  font-weight: 500;
   line-height: var(--sm-lh-ui);
   cursor: pointer;
   transition: background 0.15s;
@@ -366,7 +368,7 @@ a {
 .file-drop-text {
   font-size: var(--sm-fs-base);
   color: var(--sm-text-mid);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .file-drop-hint {
@@ -380,14 +382,14 @@ a {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--sm-bg-warm);
-  border: 1px solid var(--sm-orange-border);
+  background: var(--sm-bg-subtle);
+  border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
 }
 
 .file-name {
   font-size: var(--sm-fs-base);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--sm-black);
 }
 
@@ -415,7 +417,7 @@ a {
 .form-label {
   display: block;
   font-size: var(--sm-fs-base);
-  font-weight: 600;
+  font-weight: 500;
   margin-bottom: 8px;
   color: var(--sm-dark);
 }
@@ -565,13 +567,13 @@ a {
 .home-tool-card:hover {
   background: var(--sm-bg-subtle);
 }
-.home-tool-name { font-size: var(--sm-fs-xl); font-weight: 700; color: var(--sm-black); letter-spacing: var(--sm-ls-heading); line-height: var(--sm-lh-heading); }
+.home-tool-name { font-size: var(--sm-fs-xl); font-weight: 600; color: var(--sm-black); letter-spacing: var(--sm-ls-heading); line-height: var(--sm-lh-heading); }
 .home-tool-sub { font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 /* NEW 배지 — 주황은 1차 버튼·현재 위치·로고 전용이라 검정 배지로 */
 .change-new {
   display: inline-block;
   font-size: var(--sm-fs-xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--sm-ls-label);
   color: var(--sm-white);
   background: var(--sm-black);
@@ -579,9 +581,9 @@ a {
   padding: 1px 6px;
   line-height: var(--sm-lh-ui);
 }
-.home-tool-card.is-external { background: var(--sm-bg-warm); border-color: var(--sm-orange-border); }
+.home-tool-card.is-external { background: var(--sm-bg-subtle); border-style: dashed; }
 
-.home-section-title { font-size: var(--sm-fs-xl); font-weight: 700; letter-spacing: var(--sm-ls-heading); line-height: var(--sm-lh-heading); margin-bottom: 4px; }
+.home-section-title { font-size: var(--sm-fs-xl); font-weight: 600; letter-spacing: var(--sm-ls-heading); line-height: var(--sm-lh-heading); margin-bottom: 4px; }
 
 /* 홈 첫 줄 아래 한 문장(2026-10-17 디자인 4차 D1) — "오늘 발송 2건, 입금 대기 3건 7,334,800원". 13px 회색 글 한 줄, 숫자 카드 아님.
    비어 있어도 높이는 유지한다(문장이 뒤늦게 오며 아래 검색 줄이 밀리지 않게) */
@@ -597,10 +599,10 @@ a {
    색 없음: 이름 검정 600, 하위 메뉴 회색 15px, 호버는 밑줄. 분류 경계가 보여야 '어디에 있는지'를 안다. */
 .home-map { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .home-map-cat { border-top: 1px solid var(--sm-border); padding: 18px 0 22px; }
-.home-map-cat-title { margin: 0 0 12px; font-size: var(--sm-fs-lg); font-weight: 700; line-height: var(--sm-lh-heading); letter-spacing: var(--sm-ls-heading); color: var(--sm-black); }
+.home-map-cat-title { margin: 0 0 12px; font-size: var(--sm-fs-lg); font-weight: 600; line-height: var(--sm-lh-heading); letter-spacing: var(--sm-ls-heading); color: var(--sm-black); }
 .home-map-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; align-items: start; }
 .home-map-tool { min-width: 0; background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); padding: 12px 14px; }
-.home-map-tool-link { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-ui); color: var(--sm-black); text-decoration: none; }
+.home-map-tool-link { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: var(--sm-fs-base); font-weight: 500; line-height: var(--sm-lh-ui); color: var(--sm-black); text-decoration: none; }
 .home-map-tool-link:hover .home-map-name { text-decoration: underline; text-underline-offset: 2px; }
 .home-map-icon { flex: 0 0 auto; display: inline-flex; color: var(--sm-text-mid); }
 .home-map-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -608,7 +610,7 @@ a {
 .home-map-subs { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 0 24px; }
 .home-map-sub { display: block; padding: 4px 0; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); text-decoration: none; }
 .home-map-sub:hover { color: var(--sm-black); text-decoration: underline; text-underline-offset: 2px; }
-.home-map-beta { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: var(--sm-fs-xs); font-weight: 600; line-height: 1.4; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); vertical-align: 1px; }
+.home-map-beta { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: var(--sm-fs-xs); font-weight: 500; line-height: 1.4; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); vertical-align: 1px; }
 
 .changelog-list {
   display: flex;
@@ -621,12 +623,12 @@ a {
 }
 .change-tag {
   font-size: var(--sm-fs-xs);
-  font-weight: 700;
+  font-weight: 500;
   line-height: var(--sm-lh-ui);
-  padding: 2px 10px;
-  border-radius: var(--sm-radius-pill);
+  padding: 2px 8px;
+  border-radius: 6px;  /* 2026-11-08: 태그는 6 — 알약 아님 */
 }
-.change-tool { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-weight: 600; }
+.change-tool { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-weight: 500; }
 .change-desc { font-size: var(--sm-fs-base); color: var(--sm-text-mid); line-height: var(--sm-lh-body); }
 
 /* 업데이트 노트 — 날짜별 묶음 */
@@ -640,7 +642,7 @@ a {
   background: var(--sm-bg);
   border-bottom: 1px solid var(--sm-border);
 }
-.change-day-date { font-size: var(--sm-fs-base); font-weight: 700; color: var(--sm-black); font-variant-numeric: tabular-nums; }
+.change-day-date { font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black); font-variant-numeric: tabular-nums; }
 .change-day-items { display: flex; flex-direction: column; }
 .change-row {
   display: flex;
@@ -652,7 +654,7 @@ a {
 .change-row .change-tag { flex-shrink: 0; height: fit-content; margin-top: 1px; }
 .change-row-main { min-width: 0; flex: 1; }
 .change-row-title {
-  font-size: var(--sm-fs-base); font-weight: 700; color: var(--sm-black);
+  font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black);
   display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
 }
 .change-row .change-desc { margin-top: 3px; font-size: var(--sm-fs-xs); }
@@ -674,7 +676,7 @@ a {
    ─────────────────────────────────────────────── */
 .app-shell { display: flex; min-height: 100vh; background: var(--sm-bg); }
 .app-sidebar {
-  width: 236px; flex-shrink: 0;
+  width: 240px; flex-shrink: 0;
   background: var(--sm-white);
   border-right: 1px solid var(--sm-border);
   position: sticky; top: 0; height: 100vh;
@@ -683,7 +685,7 @@ a {
   padding: 12px 10px;
   z-index: 60;
 }
-.app-sb-brand { font-size: 16px; font-weight: 800; color: var(--sm-orange); padding: 8px 10px 8px; display: block; }
+.app-sb-brand { font-size: 16px; font-weight: 600; color: var(--sm-orange); padding: 8px 10px 8px; display: block; }
 .app-sb-nav { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
 /* 스크롤 구역 — 즐겨찾기 반전 블록이 이미 고정/스크롤 경계를 색면으로 보여주므로 선은 두지 않음 */
 .app-sb-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
@@ -692,13 +694,13 @@ a {
 .app-sb-fav { margin-top: 8px; padding: 4px 6px 8px; background: var(--sm-bg-warm); border-radius: var(--sm-radius); }
 .app-sb-fav .app-sb-tool-row:hover { background: var(--sm-white); }  /* 반전 배경 위 호버는 흰색으로 */
 /* 분류 라벨 12px — 12px 보조 글은 --sm-text-mid(대비 7:1, 기획 3-T) */
-.app-sb-cat { font-size: 12px; font-weight: 700; color: var(--sm-text-mid); letter-spacing: 0.4px; padding: 6px 10px 3px; }
+.app-sb-cat { font-size: 12px; font-weight: 500; color: var(--sm-text-mid); letter-spacing: var(--sm-ls-label); padding: 6px 10px 3px; }
 .app-sb-cat-row { display: flex; align-items: center; gap: 8px; }  /* 라벨 + 편집·접기 버튼이 한 줄(즐겨찾기) */
 /* 카테고리 라벨을 아코디언 토글로 쓸 때(즐겨찾기) — .app-sb-cat 의 타이포를 그대로 상속. 높이 24px 이상(WCAG 2.5.8) */
 .app-sb-cat-toggle { flex: 1; min-width: 0; min-height: 24px; background: none; border: none; padding: 0; font: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; text-align: left; }
 .app-sb-cat-toggle:hover { color: var(--sm-black); }
 /* 즐겨찾기 '편집/완료' — 글자 버튼이지만 대상 높이 24px 확보 */
-.app-sb-fav-edit { min-height: 24px; padding: 0 4px; background: none; border: none; border-radius: 6px; font: inherit; font-size: 12px; font-weight: 700; color: var(--sm-text-mid); cursor: pointer; }
+.app-sb-fav-edit { min-height: 24px; padding: 0 4px; background: none; border: none; border-radius: 6px; font: inherit; font-size: 12px; font-weight: 600; color: var(--sm-text-mid); cursor: pointer; }
 .app-sb-fav-edit:hover { background: var(--sm-white); color: var(--sm-black); }
 .app-sb-fav-edit.is-on { color: var(--sm-black); text-decoration: underline; text-underline-offset: 2px; }
 /* 즐겨찾기 담기(＋)/빼기(✕) — 24×24 이상 */
@@ -706,44 +708,45 @@ a {
 .app-sb-favstar:hover { background: var(--sm-bg); color: var(--sm-black); }
 .app-sb-favstar.is-on { color: var(--sm-black); }
 .app-sb-tool-row {
-  display: flex; align-items: center; border-radius: 8px;
+  display: flex; align-items: center; border-radius: 8px; position: relative;
 }
 .app-sb-tool-row:hover { background: var(--sm-bg); }
-/* 현재 위치: 연주황 바탕 + 주황 700 글자(2026-10-14 대표 결정 — 막대 없이 색으로만, 굵기는 700 유지). */
+/* 현재 위치(2026-11-08 unslop 점검, 대표 결정 2번): 연주황 바탕 + 검정 600 글자 + 왼쪽 주황 점 6px(시그니처). 주황 글자(3.15:1)는 폐지 */
 .app-sb-tool-row.is-active { background: var(--sm-orange-light); }
+.app-sb-tool-row.is-active::before, .app-sb-menu-item.is-active::before { content: ""; position: absolute; left: 2px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--sm-orange); }
 /* 한 클래스를 <a>(단일 메뉴)와 <button>(하위메뉴 펼침)이 같이 쓴다. 폼 컨트롤은 부모의 글꼴을
    물려받지 않아 line-height 를 안 적으면 버튼만 다른 줄 높이가 되어 행 높이가 어긋났다 —
    본문과 같은 1.6 으로 못 박아 두 형태를 같은 높이로 맞춘다(단일형 기준, <a> 쪽은 값 변화 없음). */
 .app-sb-tool {
   flex: 1; min-width: 0;
-  display: flex; align-items: center; gap: 9px;
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 10px; border-radius: 8px;
-  font-size: 13px; line-height: 1.6; font-weight: 600; color: var(--sm-text-mid);
+  font-size: 13px; line-height: 1.6; font-weight: 500; color: var(--sm-text-mid);
   background: none; border: none; cursor: pointer; text-align: left; font-family: inherit;
 }
 .app-sb-tool-row:hover .app-sb-tool { color: var(--sm-black); }
-.app-sb-tool-row.is-active .app-sb-tool { color: var(--sm-orange); font-weight: 700; }
+.app-sb-tool-row.is-active .app-sb-tool { color: var(--sm-black); font-weight: 500; }
 .app-sb-tool-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-sb-tool-sub { margin-left: 6px; font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); } /* 즐겨찾기의 상위 툴 이름(옛 'B2B · 발주' 결합 대신) */
 /* 베타 배지 — 회색 글자만(색 없음, 기획 3-C 색 줄이기). 홈 전체 메뉴 .home-map-beta 와 같은 모양 */
-.app-sb-beta { flex: 0 0 auto; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0.02em; color: var(--sm-text-mid); }
+.app-sb-beta { flex: 0 0 auto; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: 12px; font-weight: 500; line-height: 1.4; letter-spacing: 0.02em; color: var(--sm-text-mid); }
 .app-sb-ext { margin-left: auto; font-size: 12px; color: var(--sm-text-mid); }  /* 외부 링크 표시 ↗ */
 /* 새 업데이트 수 배지(2026-10-14 D2) — '업데이트 노트' 행 오른쪽, 회색 바탕 검정 글자 12px(색 없음). 0이면 안 그린다 */
-.app-sb-count { flex: 0 0 auto; margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--sm-bg-subtle); font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--sm-black); text-align: center; font-variant-numeric: tabular-nums; }
+.app-sb-count { flex: 0 0 auto; margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--sm-bg-subtle); font-size: 12px; font-weight: 500; line-height: 1.5; color: var(--sm-black); text-align: center; font-variant-numeric: tabular-nums; }
 .app-sb-tool-row.is-active .app-sb-count { background: var(--sm-white); }
 /* '최근'(2026-10-14 C4) — 즐겨찾기 아래, 이 브라우저에서 마지막으로 연 화면 5개. 행 모양은 즐겨찾기와 같다(.app-sb-tool-row) */
 .app-sb-emoji { width: 18px; height: 18px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--sm-text-light); }
 .app-sb-tool-row:hover .app-sb-emoji { color: var(--sm-text-mid); }
-.app-sb-tool-row.is-active .app-sb-emoji { color: var(--sm-orange); }
+.app-sb-tool-row.is-active .app-sb-emoji { color: var(--sm-black); }
 .app-sb-emoji svg { width: 18px; height: 18px; display: block; }
 .app-sb-chev {
   flex-shrink: 0; display: flex; align-items: center; justify-content: center;
   background: none; border: none; cursor: pointer;
-  padding: 6px 9px; margin-right: 1px; border-radius: 7px;
+  padding: 8px 8px; margin-right: 1px; border-radius: 8px;
   color: var(--sm-text-light);
 }
 .app-sb-chev:hover { color: var(--sm-text-mid); }
-.app-sb-tool-row.is-active .app-sb-chev { color: var(--sm-orange); }
+.app-sb-tool-row.is-active .app-sb-chev { color: var(--sm-text-mid); }
 .app-sb-chev svg { transition: transform 0.18s ease; }  /* 남기는 모션 (2) 펼침 화살표 회전 */
 .app-sb-chev.is-open svg { transform: rotate(90deg); }
 .app-sb-menu { margin: 1px 0 5px; padding-left: 27px; display: flex; flex-direction: column; gap: 1px; }
@@ -751,9 +754,9 @@ a {
 .app-sb-menu-row .app-sb-menu-item { flex: 1; min-width: 0; }
 .app-sb-menu-item { display: flex; align-items: center; padding: 6px 10px; border-radius: 7px; font-size: 13px; color: var(--sm-text-mid); }
 .app-sb-menu-item:hover { background: var(--sm-bg); color: var(--sm-black); }
-.app-sb-menu-item.is-active { color: var(--sm-orange); font-weight: 700; background: var(--sm-orange-light); }
+.app-sb-menu-item.is-active { color: var(--sm-black); font-weight: 500; background: var(--sm-orange-light); position: relative; }
 .app-sb-foot { border-top: 1px solid var(--sm-border); padding: 12px 10px 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.app-sb-username { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--sm-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-sb-username { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 13px; font-weight: 500; color: var(--sm-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-sb-username svg { flex-shrink: 0; color: var(--sm-text-light); }
 /* 로그아웃 — 높이 28px(24px 이상, WCAG 2.5.8) */
 .app-sb-logout { min-height: 28px; background: none; border: 1px solid var(--sm-border); border-radius: 7px; padding: 4px 10px; font-size: 12px; line-height: 1.5; color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
@@ -782,8 +785,8 @@ a {
   .app-shell.is-collapsed .app-sb-collapse { margin-right: 0; }
 
   /* 접힌 상태에서 마우스 오버 → 임시 펼침(메뉴는 이때만 렌더). 레이아웃 자리는 40px 그대로 두고
-     (margin-right 음수 = 236 − 40) 본문 위로 겹쳐 펼친다 — 본문이 밀리지 않음. */
-  .app-shell.is-collapsed .app-sidebar.is-hover-open { width: 236px; padding: 12px 10px; margin-right: -196px; box-shadow: var(--sm-shadow-float); }  /* 떠 있는 면(ⓒ) */
+     (margin-right 음수 = 240 − 40) 본문 위로 겹쳐 펼친다 — 본문이 밀리지 않음. */
+  .app-shell.is-collapsed .app-sidebar.is-hover-open { width: 240px; padding: 12px 10px; margin-right: -200px; box-shadow: var(--sm-shadow-float); }  /* 떠 있는 면(ⓒ) */
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-brand { display: block; }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-head { justify-content: flex-start; }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-collapse { margin-right: 2px; }
@@ -799,7 +802,7 @@ a {
 @keyframes sm-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .sm-toast.is-error { border-color: var(--sm-danger); color: var(--sm-danger); }
 .sm-toast-text { flex: 1; min-width: 0; }
-.sm-toast-undo { flex: 0 0 auto; min-height: 28px; padding: 0 8px; background: none; border: none; font: inherit; font-weight: 700; color: var(--sm-black); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; border-radius: 6px; }
+.sm-toast-undo { flex: 0 0 auto; min-height: 28px; padding: 0 8px; background: none; border: none; font: inherit; font-weight: 600; color: var(--sm-black); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; border-radius: 6px; }
 .sm-toast-undo:hover { background: var(--sm-bg-subtle); }
 .sm-toast-close { flex: 0 0 auto; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 6px; font-size: 12px; line-height: 1; color: var(--sm-text-mid); cursor: pointer; }
 .sm-toast-close:hover { background: var(--sm-bg-subtle); color: var(--sm-black); }
@@ -828,7 +831,7 @@ a {
     background: var(--sm-white); border-bottom: 1px solid var(--sm-border);
   }
   .app-sb-toggle { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--sm-border); border-radius: 8px; background: var(--sm-white); font-size: 16px; cursor: pointer; color: var(--sm-orange); }
-  .app-topbar-brand { font-size: 15px; font-weight: 800; color: var(--sm-orange); }
+  .app-topbar-brand { font-size: 15px; font-weight: 600; color: var(--sm-orange); }
 }
 
 .print-only { display: none; }  /* 화면엔 숨기고 인쇄 시에만 노출 */
@@ -882,7 +885,7 @@ a {
 .sm-search-input::placeholder { color: var(--sm-text-light); }
 .sm-search-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sm-space-2) var(--sm-space-2) var(--sm-space-3); }
 .sm-search-group + .sm-search-group { margin-top: var(--sm-space-2); border-top: 1px solid var(--sm-border); padding-top: var(--sm-space-2); }
-.sm-search-group-title { padding: var(--sm-space-2) var(--sm-space-3) var(--sm-space-1); font-size: var(--sm-fs-xs); font-weight: 600; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); }
+.sm-search-group-title { padding: var(--sm-space-2) var(--sm-space-3) var(--sm-space-1); font-size: var(--sm-fs-xs); font-weight: 500; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); }
 .sm-search-item {
   display: flex; align-items: baseline; gap: var(--sm-space-3); min-height: 40px;
   padding: var(--sm-space-2) var(--sm-space-3); border-radius: var(--sm-radius); cursor: pointer;
@@ -890,12 +893,12 @@ a {
 }
 .sm-search-item:hover { background: var(--sm-bg-subtle); }
 .sm-search-item.is-active { background: var(--sm-orange-light); color: var(--sm-black); }
-.sm-search-item-label { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-search-item-label { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-search-item-sub { flex: 0 1 auto; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-search-ext { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }  /* 외부 링크 ↗ — 사이드바 .app-sb-ext 와 같은 뜻 */
 .sm-search-empty { padding: var(--sm-space-4) var(--sm-space-3); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
 /* 사이드바 진입 버튼(로고 아래·즐겨찾기 위) — 입력칸처럼 보이는 한 줄: 돋보기 + '검색' + 오른쪽 끝 회색 12px 단축키 */
-.sm-search-open { display: flex; align-items: center; gap: var(--sm-space-2); width: 100%; min-height: 36px; margin: var(--sm-space-1) 0 var(--sm-space-1); padding: 6px 10px; background: var(--sm-white); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius); font-family: inherit; font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-ui); color: var(--sm-text-mid); cursor: pointer; text-align: left; }
+.sm-search-open { display: flex; align-items: center; gap: var(--sm-space-2); width: 100%; min-height: 36px; margin: var(--sm-space-1) 0 var(--sm-space-1); padding: 6px 10px; background: var(--sm-white); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius); font-family: inherit; font-size: var(--sm-fs-base); font-weight: 500; line-height: var(--sm-lh-ui); color: var(--sm-text-mid); cursor: pointer; text-align: left; }
 .sm-search-open:hover { background: var(--sm-bg-subtle); color: var(--sm-black); }
 .sm-search-open svg { flex-shrink: 0; display: block; }
 .sm-search-open-label { flex: 1; min-width: 0; }

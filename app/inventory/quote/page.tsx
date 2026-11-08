@@ -226,11 +226,11 @@ export default function QuotePage() {
               <tbody>
                 {snapList.map((r) => (
                   <tr key={r.month} style={viewMonth === r.month ? { background: "var(--sm-bg-subtle)" } : undefined}>
-                    <td data-label="대상 월" style={{ fontWeight: 700 }}>{r.month}</td>
+                    <td data-label="대상 월" style={{ fontWeight: 600 }}>{r.month}</td>
                     <td data-label="확정" className="sm-faint" style={{ fontSize: 12 }}>{dtKst(r.confirmed_at)}{r.confirmed_by ? ` ${r.confirmed_by}` : ""}</td>
                     <td data-label="품목" className="num b2b-money">{(r.summary?.itemCount ?? 0).toLocaleString()}종</td>
                     <td data-label="총 매입금액" className="num b2b-money">{won(r.summary?.totalAmount ?? 0)}</td>
-                    <td data-label="총 입금액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.summary?.deposit ?? 0)}</td>
+                    <td data-label="총 입금액" className="num b2b-money" style={{ fontWeight: 600 }}>{won(r.summary?.deposit ?? 0)}</td>
                     <td className="actions">
                       {viewMonth === r.month
                         ? <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={closeSnap}>닫기</button>

@@ -144,7 +144,7 @@ export default function PaymentsPage() {
                     <td>{o.ship_date || "-"}</td>
                     <td className="num b2b-money" data-label="청구액(원)">{formatMoney(o.total)}</td>
                     <td className="num b2b-money">{formatMoney(o.paid)}</td>
-                    <td className="num b2b-money" style={{ color: o.remaining > 0 ? "var(--sm-danger)" : "inherit", fontWeight: 600 }}>
+                    <td className="num b2b-money" style={{ color: o.remaining > 0 ? "var(--sm-danger)" : "inherit", fontWeight: 500 }}>
                       {formatMoney(o.remaining)}
                     </td>
                     <td data-label="입금상태">
@@ -773,7 +773,7 @@ function PaymentModal({
                 {payments.map((p) => (
                   <div key={p.id} className="pay-history-row">
                     <div className="pay-history-main">
-                      <span className="b2b-money" style={{ fontWeight: 700 }}>{wonText(p.amount)}</span>
+                      <span className="b2b-money" style={{ fontWeight: 600 }}>{wonText(p.amount)}</span>
                       <span className="pay-history-date">{p.paid_at}</span>
                     </div>
                     {p.notes && <div className="pay-history-note">{p.notes}</div>}

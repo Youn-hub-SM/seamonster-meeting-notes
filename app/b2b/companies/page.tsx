@@ -302,7 +302,7 @@ function CompanyModal({
     aiFields.has(k) ? { background: "var(--sm-warning-bg)", borderColor: "var(--sm-warning-border)" } : {};
   const aiBadge = (k: keyof CompanyInput) =>
     aiFields.has(k) ? (
-      <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "var(--sm-warning)", background: "var(--sm-warning-bg)", padding: "1px 6px", borderRadius: 8 }}>
+      <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: "var(--sm-warning)", background: "var(--sm-warning-bg)", padding: "1px 6px", borderRadius: 8 }}>
         확인 필요
       </span>
     ) : null;
@@ -395,7 +395,7 @@ function CompanyModal({
               </button>
               {data.biz_doc_path && (
                 <>
-                  <span style={{ fontSize: 12, color: "var(--sm-success)", fontWeight: 600 }}>✓ 첨부됨</span>
+                  <span style={{ fontSize: 12, color: "var(--sm-success)", fontWeight: 500 }}>✓ 첨부됨</span>
                   <button type="button" className="b2b-link-btn" onClick={viewDoc} style={{ fontSize: 12 }}>원본 보기</button>
                   <button
                     type="button"

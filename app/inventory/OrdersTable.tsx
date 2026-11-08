@@ -280,11 +280,11 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                     {!done && o.txn_date && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{o.txn_date.slice(5)}</span>}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
-                  <td style={{ whiteSpace: "nowrap", fontWeight: 700 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
+                  <td style={{ whiteSpace: "nowrap", fontWeight: 600 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
                   <td>{o.partner || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{qtyText(o.item_count)} 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>{isOpen ? "▲" : "▼"}</span></td>
                   <td className="num b2b-money">{qty(o.total_qty)}</td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(o.total_amount)}</td>
+                  <td className="num b2b-money" style={{ fontWeight: 600 }}>{qty(o.total_amount)}</td>
                   <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={displayMemo(o.memo) || ""}>{displayMemo(o.memo) || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                     {!done && <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12, marginRight: 6 }} onClick={() => setProc(o)}>{o.type === "입고" ? "입고처리" : "출고처리"}</button>}
@@ -307,7 +307,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                               <tr key={it.id}>
                                 <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product_name}{it.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{it.sku}</span> : null}</td>
                                 <td className="num" style={{ whiteSpace: "nowrap" }}>
-                                  <span className="b2b-money" style={{ fontWeight: 700 }}>{qty(it.qty)}</span>
+                                  <span className="b2b-money" style={{ fontWeight: 600 }}>{qty(it.qty)}</span>
                                   {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({qty(bal.before)} → {qty(bal.after)})</span>}
                                 </td>
                                 <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>

@@ -127,8 +127,8 @@ export default function MeetingPage() {
             if (!t) return <div key={i} style={{ height: 10 }} />;
             if (t === "---") return <hr key={i} style={{ border: "none", borderTop: "1px solid var(--sm-border)", margin: "14px 0" }} />;
             const bold = (txt: string) => txt.split(/\*\*(.+?)\*\*/g).map((seg, k) => (k % 2 ? <strong key={k}>{seg}</strong> : seg));
-            if (/^##\s/.test(t)) return <div key={i} style={{ fontSize: 16, fontWeight: 800, marginTop: 16, marginBottom: 6 }}>{t.replace(/^##\s*/, "")}</div>;
-            if (/^###\s/.test(t)) return <div key={i} style={{ fontSize: 14, fontWeight: 700, marginTop: 10, marginBottom: 4 }}>{t.replace(/^###\s*/, "")}</div>;
+            if (/^##\s/.test(t)) return <div key={i} style={{ fontSize: 16, fontWeight: 600, marginTop: 16, marginBottom: 6 }}>{t.replace(/^##\s*/, "")}</div>;
+            if (/^###\s/.test(t)) return <div key={i} style={{ fontSize: 14, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{t.replace(/^###\s*/, "")}</div>;
             if (/^-\s/.test(t)) return <div key={i} style={{ paddingLeft: 18, textIndent: -12 }}>{"\u00b7 "}{bold(t.replace(/^-\s*/, ""))}</div>;
             return <div key={i}>{bold(t)}</div>;
           })}

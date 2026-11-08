@@ -386,7 +386,7 @@ export default function ProductsPage() {
                         </td>
                         <td data-label="상태">
                           {p.active ? (
-                            <span style={{ fontSize: 12, color: "var(--sm-success)", fontWeight: 600 }}>사용</span>
+                            <span style={{ fontSize: 12, color: "var(--sm-success)", fontWeight: 500 }}>사용</span>
                           ) : (
                             <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>미사용</span>
                           )}
@@ -469,7 +469,7 @@ export default function ProductsPage() {
 
               {preview.updates.length > 0 && (
                 <section style={{ marginBottom: 12 }}>
-                  <div className="b2b-field-label" style={{ fontWeight: 700 }}>변경 ({preview.updates.length})</div>
+                  <div className="b2b-field-label" style={{ fontWeight: 600 }}>변경 ({preview.updates.length})</div>
                   {preview.updates.map((u) => (
                     <div key={u.id} style={{ padding: "8px 10px", border: "1px solid var(--sm-border)", borderRadius: 8, marginTop: 6 }}>
                       <strong>{u.name}</strong>
@@ -485,7 +485,7 @@ export default function ProductsPage() {
 
               {preview.creates.length > 0 && (
                 <section style={{ marginBottom: 12 }}>
-                  <div className="b2b-field-label" style={{ fontWeight: 700 }}>신규 ({preview.creates.length})</div>
+                  <div className="b2b-field-label" style={{ fontWeight: 600 }}>신규 ({preview.creates.length})</div>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 13 }}>
                     {preview.creates.map((c, i) => <li key={i}>{c.name}</li>)}
                   </ul>
@@ -494,7 +494,7 @@ export default function ProductsPage() {
 
               {preview.errors.length > 0 && (
                 <section>
-                  <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외됩니다</div>
+                  <div className="b2b-field-label" style={{ fontWeight: 600, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외됩니다</div>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)" }}>
                     {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
                   </ul>
@@ -554,7 +554,7 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
   }
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", marginBottom: 8 }}>
         원가 변경 이력
       </div>
       <div className="b2b-table-wrap">
@@ -650,7 +650,7 @@ function ProductModal({
           {(error || fieldErrors.name) && <div className="b2b-error">{fieldErrors.name || error}</div>}
           {/* ── 판매담당 입력 구역 — 품목·가격·분류 ── */}
           <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
           <Field label="품목명" required>
             <input
               type="text"
@@ -762,8 +762,8 @@ function ProductModal({
 
           {/* ── 생산담당 입력 구역 — 원가 상세 · 택배 발주 · 송장 스캔 ── */}
           <div style={{ background: "var(--sm-orange-light)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력</div>
-          <div className="b2b-field-label" style={{ fontWeight: 700 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력</div>
+          <div className="b2b-field-label" style={{ fontWeight: 600 }}>
             원가 상세
           </div>
           <div className="b2b-field-row">
@@ -829,7 +829,7 @@ function ProductModal({
           </Field>
 
           {/* 중량 3단(098) — 생산 요청서가 총중량·소포장 개수를 이 값으로 계산한다 */}
-          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
+          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 600 }}>
             중량
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
@@ -860,7 +860,7 @@ function ProductModal({
           </div>
           {weightHint && <p className="sm-faint" style={{ fontSize: 12, margin: "-2px 0 4px" }}>{weightHint}</p>}
 
-          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
+          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 600 }}>
             택배 발주(CNplus) 정보
           </div>
           <Field label="택배 상품명" hint="택배 발주서에 찍히는 품목명">

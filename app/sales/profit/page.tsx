@@ -142,7 +142,7 @@ export default function SalesProfitPage() {
                     ))}
                   </tr>
                 ))}
-                <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
+                <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                   {PROFIT_COLS.map((c) => (
                     <td key={c.key} style={{ textAlign: c.key === "channel" ? "left" : "right" }}>{fmt(res.totals, c.key, c.money, c.pct)}</td>
                   ))}

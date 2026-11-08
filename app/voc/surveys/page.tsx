@@ -184,7 +184,7 @@ export default function VocSurveysPage() {
               <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, overflow: "hidden" }}>
                 {(detail.answers || []).map((a, i) => (
                   <div key={i} style={{ display: "flex", borderBottom: "1px solid var(--sm-border)" }}>
-                    <div style={{ width: 150, flexShrink: 0, padding: "8px 10px", background: "var(--sm-bg-subtle)", fontWeight: 700, fontSize: 13 }}>{a.label || "-"}</div>
+                    <div style={{ width: 150, flexShrink: 0, padding: "8px 10px", background: "var(--sm-bg-subtle)", fontWeight: 600, fontSize: 13 }}>{a.label || "-"}</div>
                     <div style={{ flex: 1, padding: "8px 10px", fontSize: 13, whiteSpace: "pre-wrap" }}>{a.value || "-"}</div>
                   </div>
                 ))}

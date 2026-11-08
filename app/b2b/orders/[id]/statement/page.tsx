@@ -113,7 +113,7 @@ export default function StatementPage() {
         <section className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "30px 34px", maxWidth: 860, boxShadow: "var(--sm-shadow-card)" }}>
           {/* 제목 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 10, marginBottom: 14 }}>
-            <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: 10 }}>거래명세표</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 600, letterSpacing: 10 }}>거래명세표</h2>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>
               <div>(공급받는자 보관용)</div>
               <div style={{ marginTop: 4 }}>거래일자 <strong style={{ color: "var(--sm-black)" }}>{order.order_date}</strong> · No. <strong style={{ color: "var(--sm-black)" }}>{order.order_no}</strong></div>
@@ -123,7 +123,7 @@ export default function StatementPage() {
           {/* 공급자 / 공급받는자 2단 */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, marginBottom: 16 }}>
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
               <InfoRow label="등록번호" value={supplier?.biz_no} strong />
               {/* 직인은 상호와 대표 사이에 인라인 배치(행 높이를 늘리지 않게 음수 마진) */}
               <InfoRow label="상호" value={supplier?.name} stampSrc={stamp || undefined} extraLabel="대표" extra={supplier?.ceo || ""} />
@@ -132,7 +132,7 @@ export default function StatementPage() {
               <InfoRow label="이메일" value={supplier?.email} />
             </div>
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
               <InfoRow label="등록번호" value={c?.biz_no} strong />
               <InfoRow label="상호" value={c?.name} extraLabel="성명" extra={c?.ceo_name ?? ""} />
               <InfoRow label="주소" value={c?.address} />
@@ -180,7 +180,7 @@ export default function StatementPage() {
                   <td />
                 </tr>
               )}
-              <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
+              <tr style={{ fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                 <td colSpan={5}>합계</td>
                 <td className="num b2b-money">{won((Number(order.subtotal) || 0) - cancelled.supply)}</td>
                 <td className="num b2b-money">{won((Number(order.vat) || 0) - cancelled.vat)}</td>
@@ -198,8 +198,8 @@ export default function StatementPage() {
 
           {/* 입금 은행정보(설정에서 입력) */}
           <div style={{ display: "flex", gap: 10, alignItems: "center", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 14px", marginTop: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", flex: "0 0 auto" }}>입금계좌</span>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{supplier?.bank || "-"}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", flex: "0 0 auto" }}>입금계좌</span>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>{supplier?.bank || "-"}</span>
           </div>
 
           <p style={{ marginTop: 14, fontSize: 12, color: "var(--sm-text-mid)" }}>위와 같이 거래하였음을 확인합니다.</p>

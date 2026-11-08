@@ -73,7 +73,7 @@ export default function AsOfPage() {
                     <tr key={r.product_id}>
                       <td><ItemLabel name={r.name} spec={r.spec} /></td>
                       <td className="sm-faint">{r.sku || "-"}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(r.qty)}{r.unit && r.unit !== "개" ? <span className="sm-faint"> {r.unit}</span> : null}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 600 }}>{qty(r.qty)}{r.unit && r.unit !== "개" ? <span className="sm-faint"> {r.unit}</span> : null}</td>
                       <td className="num b2b-money">{won(r.value)}</td>
                     </tr>
                   ))}

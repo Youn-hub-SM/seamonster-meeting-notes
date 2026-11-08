@@ -353,11 +353,11 @@ export default function ScanPage() {
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitScan(); } }}
           aria-label="송장번호 스캔"
           autoFocus
-          style={{ fontSize: 18, padding: "12px 14px", fontWeight: 700, letterSpacing: 0.5 }}
+          style={{ fontSize: 18, padding: "12px 14px", fontWeight: 600, letterSpacing: 0.5 }}
         />
         <div className="b2b-field-hint is-below">바코드를 스캔하거나 송장번호를 입력하고 Enter. 하이픈 있어도/없어도 인식</div>
         {msg && (
-          <div className="sm-row" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700, gap: 10, flexWrap: "wrap", alignItems: "center",
+          <div className="sm-row" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600, gap: 10, flexWrap: "wrap", alignItems: "center",
             background: MSG_COLOR[msg.kind].bg, color: MSG_COLOR[msg.kind].fg }}>
             <span style={{ flex: "1 1 240px" }}>{msg.kind === "ok" ? "✓ " : msg.kind === "dup" ? "· " : ""}{msg.text}</span>
             {msg.kind === "prev" && (
@@ -392,11 +392,11 @@ export default function ScanPage() {
       {/* 인쇄 → 상품 가지러 → 초기화 → 다음 스캔. 두 버튼을 크고 눈에 띄게. */}
       <div className="sm-row" style={{ gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <button className="b2b-btn-primary" onClick={printTally} disabled={!st || st.tally.length === 0 || pending > 0}
-          style={{ flex: "1 1 200px", padding: "16px", fontSize: 15, fontWeight: 800 }}>인쇄 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F2)</span></button>
+          style={{ flex: "1 1 200px", padding: "16px", fontSize: 15, fontWeight: 600 }}>인쇄 <span style={{ opacity: 0.8, fontWeight: 500 }}>(F2)</span></button>
         <button onClick={reset} disabled={!st || st.scannedCount === 0 || pending > 0}
-          style={{ flex: "1 1 200px", padding: "16px", fontSize: 15, fontWeight: 800, cursor: "pointer",
+          style={{ flex: "1 1 200px", padding: "16px", fontSize: 15, fontWeight: 600, cursor: "pointer",
             background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
-            opacity: !st || st.scannedCount === 0 || pending > 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F4)</span></button>
+            opacity: !st || st.scannedCount === 0 || pending > 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 500 }}>(F4)</span></button>
         {(!st || st.tally.length === 0) && pending === 0 && <span className="b2b-btn-why is-block">송장을 스캔하면 켜집니다</span>}
       </div>
       {lastReset && lastReset.count > 0 && (
@@ -420,11 +420,11 @@ export default function ScanPage() {
                 {st.tally.map((t) => (
                   <tr key={t.key} style={{ background: t.unknown ? "var(--sm-danger-bg)" : undefined }}>
                     {st.tally.some((x) => x.zone) && (
-                      <td data-label="위치" style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t.unknown ? "-" : t.zone || <span className="sm-faint" style={{ fontWeight: 400 }}>미지정</span>}</td>
+                      <td data-label="위치" style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{t.unknown ? "-" : t.zone || <span className="sm-faint" style={{ fontWeight: 400 }}>미지정</span>}</td>
                     )}
                     <td data-label="품목명"><strong>{t.name}</strong></td>
                     <td data-label="SKU" className="sm-faint">{t.sku || "-"}</td>
-                    <td data-label="수량" className="num b2b-money" style={{ fontWeight: 800, fontSize: 13 }}>{qty(t.qty)}</td>
+                    <td data-label="수량" className="num b2b-money" style={{ fontWeight: 600, fontSize: 13 }}>{qty(t.qty)}</td>
                   </tr>
                 ))}
               </tbody>

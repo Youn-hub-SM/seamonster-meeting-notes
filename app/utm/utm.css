@@ -15,7 +15,7 @@
 /* 추천 매체·발송 수단 칩(선택됨 = 연주황 + 검정, 어포던스 1차) */
 .utm-chips { display: flex; flex-wrap: wrap; gap: var(--sm-space-2); }
 .utm-chip {
-  font: inherit; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); font-weight: 600;
+  font: inherit; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); font-weight: 500;
   padding: 7px 14px; min-height: 24px; border-radius: var(--sm-radius-pill);
   background: var(--sm-white); border: 1px solid var(--sm-border-strong); color: var(--sm-black); cursor: pointer;
 }
@@ -30,7 +30,7 @@
   min-height: 56px; color: var(--sm-black);
 }
 .utm-preview .k { color: var(--sm-text-mid); }
-.utm-preview .v { font-weight: 600; }
+.utm-preview .v { font-weight: 500; }
 .utm-preview .base { color: var(--sm-text-mid); }
 .utm-actions { display: flex; flex-wrap: wrap; gap: var(--sm-space-2); margin-top: var(--sm-space-3); align-items: center; }
 
@@ -39,7 +39,7 @@
 .utm-btn-row { display: grid; grid-template-columns: 150px 130px minmax(0, 1fr) auto; gap: var(--sm-space-2); align-items: start; }
 @media (max-width: 760px) { .utm-btn-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .utm-btn-row .utm-btn-url { grid-column: 1 / -1; } }
 .utm-btn-row .b2b-input { width: 100%; }
-.utm-btn-head { font-size: var(--sm-fs-xs); font-weight: 600; color: var(--sm-text-mid); }
+.utm-btn-head { font-size: var(--sm-fs-xs); font-weight: 500; color: var(--sm-text-mid); }
 .utm-btn-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); margin-top: 4px; }
 .utm-btn-add { margin-top: var(--sm-space-2); }
 .utm-seg { display: inline-flex; gap: var(--sm-space-2); }
@@ -52,13 +52,13 @@
 
 /* 설정 — 사전·소스·즐겨찾기 */
 .utm-kw-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: var(--sm-space-3); align-items: start; padding: 12px 0; border-bottom: 1px solid var(--sm-border); }
-.utm-kw-src { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); font-weight: 600; padding-top: 8px; }
+.utm-kw-src { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); font-weight: 500; padding-top: 8px; }
 .utm-kw-add { display: flex; gap: var(--sm-space-2); margin-top: var(--sm-space-2); }
 .utm-kw-add .b2b-input { max-width: 200px; }
 .utm-chip-x { margin-left: 6px; color: var(--sm-text-mid); font-weight: 400; }
 .utm-preset { display: flex; align-items: center; gap: var(--sm-space-3); padding: 10px 12px; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); margin-bottom: var(--sm-space-2); }
 .utm-preset-body { flex: 1 1 auto; min-width: 0; }
-.utm-preset-label { font-weight: 600; font-size: var(--sm-fs-base); }
+.utm-preset-label { font-weight: 500; font-size: var(--sm-fs-base); }
 .utm-preset-url { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .utm-dict-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--sm-space-2); align-items: center; margin-bottom: var(--sm-space-2); }
 .utm-settings-foot { display: flex; gap: var(--sm-space-2); margin-top: var(--sm-space-4); }

@@ -98,9 +98,9 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
   return (
     <div>
       <div className="sm-row-wrap" style={{ gap: 8, alignItems: "center", marginBottom: 12 }}>
-        <button className="b2b-btn-secondary" onClick={() => go(-1)} disabled={loading}>◀ 이전 주</button>
+        <button className="b2b-btn-secondary" onClick={() => go(-1)} disabled={loading}>이전 주</button>
         <strong style={{ fontSize: 15 }}>{data ? `${fmtDate(data.week)} ~ ${fmtDate(data.until)}` : week} 주</strong>
-        <button className="b2b-btn-secondary" onClick={() => go(1)} disabled={loading || week >= kstToday()}>다음 주 ▶</button>
+        <button className="b2b-btn-secondary" onClick={() => go(1)} disabled={loading || week >= kstToday()}>다음 주</button>
         <span className="crm-summary-spacer" />
         {data?.solapi ? <button className="b2b-btn-secondary" onClick={syncSolapi} disabled={!!busy}>{busy === "solapi" ? "가져오는 중..." : "솔라피 가져오기"}</button>
           : <span className="sm-faint" style={{ fontSize: 12 }}>솔라피 API 키 없음(Vercel 환경 변수 SOLAPI_API_KEY·SOLAPI_API_SECRET)</span>}

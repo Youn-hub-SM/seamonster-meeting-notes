@@ -152,8 +152,8 @@ export default function MetaLibraryPage() {
           {list.map((c) => (
             <div key={c.id} className="mlib-card">
               <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: "var(--sm-dark)" }}>{c.name}</div>
-                <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: c.format === "영상" ? "var(--sm-info-bg)" : "var(--sm-success-bg)", color: c.format === "영상" ? "var(--sm-info)" : "var(--sm-success)", whiteSpace: "nowrap" }}>{c.format}</span>
+                <div style={{ fontWeight: 600, fontSize: 13, color: "var(--sm-dark)" }}>{c.name}</div>
+                <span style={{ fontSize: 13, fontWeight: 600, padding: "2px 7px", borderRadius: 6, background: c.format === "영상" ? "var(--sm-info-bg)" : "var(--sm-success-bg)", color: c.format === "영상" ? "var(--sm-info)" : "var(--sm-success)", whiteSpace: "nowrap" }}>{c.format}</span>
               </div>
               {(c.roas || c.adLibraryUrl) && (
                 <div className="sm-row" style={{ gap: 8, marginTop: 5, fontSize: 13, flexWrap: "wrap", alignItems: "center" }}>

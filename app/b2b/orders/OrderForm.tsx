@@ -1030,7 +1030,7 @@ export default function OrderForm({
               체크하면 발송 재고를 ‘도매 대량’ 칸에서 뺍니다
             </span>
             {alreadyOut && (
-              <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>
+              <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--sm-danger)" }}>
                 {alreadyOut === "shipped"
                   ? "이 발주는 이미 발송완료돼 체크를 바꿔도 차감 칸이 바뀌지 않습니다 — 재고 이동을 하지 마세요"
                   : "발송예정일이 지나 체크를 바꿔도 차감 칸이 그대로입니다 — 아직 안 나갔다면 발주 목록의 발송일 칸을 눌러 오늘이나 그 뒤 날짜로 다시 잡으세요(그때 칸이 바뀝니다)"}
@@ -1186,7 +1186,7 @@ export default function OrderForm({
                             {r.box_count > 1 && <span style={{ fontSize: 12, color: "var(--sm-text-light)", width: 40, flexShrink: 0 }}>박스 {bi + 1}</span>}
                             {num ? (
                               <>
-                                <span style={{ fontFamily: "var(--sm-mono)", fontSize: 13, fontWeight: 600 }}>{num}</span>
+                                <span style={{ fontFamily: "var(--sm-mono)", fontSize: 13, fontWeight: 500 }}>{num}</span>
                                 <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }}
                                   onClick={() => copyTracking(`${r.key}-${bi}`, num)}>
                                   {copiedTrack === `${r.key}-${bi}` ? "복사됨" : "복사"}
@@ -1417,7 +1417,7 @@ export default function OrderForm({
           <div className="b2b-field-row" style={{ marginBottom: 12 }}>
             <div className="b2b-field" style={{ maxWidth: 220 }}>
               <label className="b2b-field-label">배송 박스 수</label>
-              <div style={{ fontSize: 13, fontWeight: 700, padding: "9px 0" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, padding: "9px 0" }}>
                 {realScheduleCount > 0 ? qtyText(effectiveBoxCount, "박스") : "미정"}
               </div>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
@@ -1428,7 +1428,7 @@ export default function OrderForm({
             </div>
             <div className="b2b-field" style={{ maxWidth: 220 }}>
               <label className="b2b-field-label">계절 (보냉비)</label>
-              <div style={{ fontSize: 13, fontWeight: 700, padding: "9px 0" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, padding: "9px 0" }}>
                 {orderMargin.season} <span style={{ fontWeight: 400, fontSize: 12, color: "var(--sm-text-mid)" }}>({SEASON_MONTHS[orderMargin.season]})</span>
               </div>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발송예정일 기준 자동</span>

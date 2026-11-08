@@ -231,7 +231,7 @@ function Bars({ title, rows }: { title: string; rows: Bd[] }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div>
-      <div className="b2b-field-label" style={{ fontWeight: 700, marginBottom: 4 }}>{title}</div>
+      <div className="b2b-field-label" style={{ fontWeight: 600, marginBottom: 4 }}>{title}</div>
       {rows.length === 0 ? <span className="sm-faint" style={{ fontSize: 12 }}>-</span> : rows.map((r) => (
         <div key={r.label} className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 2 }}>
           <span style={{ fontSize: 12, width: 76, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.label}>{r.label}</span>
@@ -264,7 +264,7 @@ function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
             <>
               {data.daily.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
-                  <div className="b2b-field-label" style={{ fontWeight: 700 }}>일자별</div>
+                  <div className="b2b-field-label" style={{ fontWeight: 600 }}>일자별</div>
                   <div className="sm-col" style={{ gap: 3, marginTop: 4 }}>
                     {data.daily.slice(-14).map((d) => (
                       <div key={d.date} className="sm-row" style={{ gap: 8, alignItems: "center" }}>
@@ -285,14 +285,14 @@ function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
                 <Bars title="국가" rows={data.breakdowns.country} />
               </div>
 
-              <div className="b2b-field-label" style={{ fontWeight: 700, marginBottom: 4 }}>시간대(시)</div>
+              <div className="b2b-field-label" style={{ fontWeight: 600, marginBottom: 4 }}>시간대(시)</div>
               <div className="sm-row" style={{ gap: 2, alignItems: "flex-end", height: 44, marginBottom: 14 }}>
                 {data.hourly.map((h) => (
                   <div key={h.hour} title={`${h.hour}시 ${qtyText(h.count, "회")}`} style={{ flex: 1, height: `${(h.count / hmax) * 100}%`, minHeight: h.count ? 3 : 0, background: "var(--sm-info)", borderRadius: 2 }} />
                 ))}
               </div>
 
-              <div className="b2b-field-label" style={{ fontWeight: 700 }}>최근 스캔</div>
+              <div className="b2b-field-label" style={{ fontWeight: 600 }}>최근 스캔</div>
               <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto", marginTop: 4 }}>
                 <table className="b2b-table"><thead><tr><th>시각</th><th>국가</th><th>유입</th></tr></thead>
                   <tbody>{data.recent.slice(0, 100).map((s, i) => (

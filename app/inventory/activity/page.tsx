@@ -169,7 +169,7 @@ export default function ActivityPage() {
                                   : t.txn_date > today ? <span className="b2b-status-pill" style={{ marginLeft: 4, background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>예정</span> : null}
                               </td>
                               <td>{t.channel ? (() => { const ch = INV_CHANNEL_COLOR[t.channel as InvChannel]; return <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span>; })() : <span className="sm-faint">-</span>}</td>
-                              <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{qty(t.qty)}</td>
+                              <td className="num b2b-money" style={{ color: c.fg, fontWeight: 600 }}>{t.qty > 0 ? "+" : ""}{qty(t.qty)}</td>
                               <td className="num b2b-money">{t.unit_amount ? won(t.unit_amount) : "-"}</td>
                               <td>{t.partner || "-"}</td>
                               <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.memo || ""}>{t.memo || "-"}</td>

@@ -373,7 +373,7 @@ export default function NaverAdPage() {
     const s = r.stat; if (!s || (s.salesAmt ?? 0) === 0) return undefined;
     const m = metric(r);
     if (m.conv === 0) return { color: "var(--sm-danger)" };
-    if (m.roas >= 300) return { color: "var(--sm-success)", fontWeight: 700 };
+    if (m.roas >= 300) return { color: "var(--sm-success)", fontWeight: 600 };
     return undefined;
   };
   const convLabel = convBasis === "purchase" ? "구매전환" : "전환";
@@ -406,7 +406,7 @@ export default function NaverAdPage() {
         <>
           {/* ① 광고유형 필터 (상단) */}
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginBottom: 8 }}>광고유형</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)", marginBottom: 8 }}>광고유형</div>
             <div className="sm-row" style={{ gap: 6, flexWrap: "wrap" }}>
               {presentTypes.map(({ t, n }) => (
                 <Chip key={t} on={adType === t} onClick={() => changeType(t)}>
@@ -419,7 +419,7 @@ export default function NaverAdPage() {
           {/* ② 캠페인 필터(다중) */}
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
             <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)" }}>{TYPE_LABEL[adType] || adType} 캠페인</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)" }}>{TYPE_LABEL[adType] || adType} 캠페인</span>
               {campsOfType.length > 0 && (
                 <div className="sm-row" style={{ gap: 10 }}>
                   <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => setSelCamp(campsOfType.map((c) => c.nccCampaignId))} disabled={selCamp.length === campsOfType.length}>전체 선택</button>
@@ -438,7 +438,7 @@ export default function NaverAdPage() {
           {mode === "keyword" && selCamp.length > 0 && (
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
               <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)" }}>광고그룹 {loadingGrp ? "..." : `(${adgroups.length})`}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)" }}>광고그룹 {loadingGrp ? "..." : `(${adgroups.length})`}</span>
                 <div className="sm-row" style={{ gap: 10 }}>
                   <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => setSelGrp(adgroups.map((g) => g.nccAdgroupId))}>전체 선택</button>
                   {selGrp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => setSelGrp([])}>선택 해제</button>}
@@ -454,7 +454,7 @@ export default function NaverAdPage() {
 
           {/* 기간 */}
           <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>기간</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)", marginRight: 2 }}>기간</span>
             {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key && (convBasis === "purchase" ? customMode : !customMode)} onClick={() => onPreset(p.key)}>{p.label}</Chip>)}
             <Chip on={customMode && !PRESETS.some((p) => p.key === preset && convBasis === "purchase")} onClick={enterCustom}>직접 설정</Chip>
             {!customMode && <span className="sm-faint" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{rangeLabel(preset)}</span>}
@@ -469,7 +469,7 @@ export default function NaverAdPage() {
 
           {/* 전환 기준 (전체 vs 구매) */}
           <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>전환 기준</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)", marginRight: 2 }}>전환 기준</span>
             <Chip on={convBasis === "all"} onClick={() => setBasis("all")}>전체 전환</Chip>
             <Chip on={convBasis === "purchase"} onClick={() => setBasis("purchase")}>구매 전환만</Chip>
             {convBasis === "purchase" && (
@@ -482,7 +482,7 @@ export default function NaverAdPage() {
 
           {/* 필터·검색 */}
           <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 500, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={costOnly} onChange={(e) => setCostOnly(e.target.checked)} />광고비 지출만
             </label>
             <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" aria-label={mode === "keyword" ? "키워드 검색" : "광고그룹 검색"} style={{ width: 180 }} />
@@ -531,7 +531,7 @@ export default function NaverAdPage() {
                             <td className="num b2b-money">{qty(st?.impCnt)}</td>
                             <td className="num b2b-money">{qty(st?.clkCnt)}</td>
                             <td className="num">{st?.ctr != null ? `${st.ctr.toFixed(2)}%` : "-"}</td>
-                            <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(st?.salesAmt)}</td>
+                            <td className="num b2b-money" style={{ fontWeight: 500 }}>{won(st?.salesAmt)}</td>
                             <td className="num b2b-money">{won(st?.cpc)}</td>
                             {(() => { const m = metric(r); const loadingP = convBasis === "purchase" && purchaseLoading; return (<>
                               <td className="num b2b-money">{loadingP ? "..." : qty(m.conv)}</td>
@@ -558,7 +558,7 @@ export default function NaverAdPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
+                      <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                         <td>합계</td><td style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{qtyText(shownRows.length)}</td>
                         <td className="num b2b-money">{qty(totals.imp)}</td>
                         <td className="num b2b-money">{qty(totals.clk)}</td>
@@ -589,7 +589,7 @@ export default function NaverAdPage() {
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--sm-white)", borderRadius: 12, width: "min(760px, 100%)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
             <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
               <div>
-                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>검색어별 비용 — {skGroup.name}</div>
+                <div style={{ fontWeight: 600, color: "var(--sm-dark)" }}>검색어별 비용 — {skGroup.name}</div>
                 <div className="sm-faint" style={{ fontSize: 13 }}>최근 30일</div>
               </div>
               <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setSkGroup(null)}>닫기</button>
@@ -599,7 +599,7 @@ export default function NaverAdPage() {
               {skLoading ? <div className="b2b-loading">불러오는 중...</div> : (
                 <>
                   <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
-                    <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+                    <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 500, color: "var(--sm-text-mid)" }}>
                       <input type="checkbox" checked={skCostOnly} onChange={(e) => setSkCostOnly(e.target.checked)} />광고비 지출만
                     </label>
                   </div>
@@ -619,14 +619,14 @@ export default function NaverAdPage() {
                                 <td className="num b2b-money">{qty(k.impCnt)}</td>
                                 <td className="num b2b-money">{qty(k.clkCnt)}</td>
                                 <td className="num">{ctr ? `${ctr.toFixed(2)}%` : "-"}</td>
-                                <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(k.salesAmt)}</td>
+                                <td className="num b2b-money" style={{ fontWeight: 500 }}>{won(k.salesAmt)}</td>
                                 <td className="num b2b-money">{k.clkCnt ? won(cpc) : "-"}</td>
                                 <td className="num">{k.drtCrto != null ? `${k.drtCrto.toFixed(1)}%` : "-"}</td>
                               </tr>
                             );
                           })}
                         </tbody>
-                        <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
+                        <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                           <td>합계 ({skShown.length})</td><td className="num b2b-money">{qty(skTot.imp)}</td><td className="num b2b-money">{qty(skTot.clk)}</td>
                           <td className="num">{skTot.imp ? `${(skTot.clk / skTot.imp * 100).toFixed(2)}%` : "-"}</td>
                           <td className="num b2b-money">{won(skTot.cost)}</td><td className="num b2b-money">{skTot.clk ? won(skTot.cost / skTot.clk) : "-"}</td><td className="num">-</td>
@@ -648,21 +648,21 @@ export default function NaverAdPage() {
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--sm-white)", borderRadius: 12, width: "min(880px, 100%)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
             <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
               <div>
-                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>성과 리포트 — {rpt.name}</div>
+                <div style={{ fontWeight: 600, color: "var(--sm-dark)" }}>성과 리포트 — {rpt.name}</div>
                 <div className="sm-faint" style={{ fontSize: 13 }}>어제까지 반영</div>
               </div>
               <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setRpt(null)}>닫기</button>
             </div>
             <div style={{ padding: "12px 16px", overflow: "auto" }}>
               <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>단위</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)", marginRight: 2 }}>단위</span>
                 {(([["day", "일별"], ["week", "주별"], ["month", "월별"]]) as [("day" | "week" | "month"), string][]).map(([g, l]) => <Chip key={g} on={rptGran === g} onClick={() => setRptGran(g)}>{l}</Chip>)}
                 <span style={{ width: 10 }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>조회</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)", marginRight: 2 }}>조회</span>
                 {[[30, "30일"], [90, "90일"], [180, "6개월"], [365, "1년"]].map(([b, l]) => <Chip key={b} on={rptBack === b} onClick={() => setRptBack(b as number)}>{l}</Chip>)}
               </div>
               <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>전환기준</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)", marginRight: 2 }}>전환기준</span>
                 <Chip on={rptConv === "all"} onClick={() => setRptConv("all")}>전체 전환</Chip>
                 <Chip on={rptConv === "purchase"} onClick={() => setRptConv("purchase")}>구매전환만</Chip>
                 <span className="sm-faint" style={{ fontSize: 13, marginLeft: 4 }}>{rptConv === "purchase" ? "실제 구매만 집계 (최근 62일)" : "구매+장바구니 등 전체 전환"}</span>
@@ -691,15 +691,15 @@ export default function NaverAdPage() {
                             <td className="num b2b-money">{qty(r.imp)}</td>
                             <td className="num b2b-money">{qty(r.clk)}</td>
                             <td className="num">{r.imp ? `${r.ctr.toFixed(2)}%` : "-"}</td>
-                            <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(r.cost)}</td>
+                            <td className="num b2b-money" style={{ fontWeight: 500 }}>{won(r.cost)}</td>
                             <td className="num b2b-money">{r.clk ? won(r.cpc) : "-"}</td>
                             <td className="num b2b-money">{qty(r.conv)}</td>
                             <td className="num b2b-money">{won(r.convAmt)}</td>
-                            <td className="num" style={r.cost && r.roas >= 300 ? { color: "var(--sm-success)", fontWeight: 700 } : r.cost && r.conv === 0 ? { color: "var(--sm-danger)" } : undefined}>{r.cost ? `${Math.round(r.roas)}%` : "-"}</td>
+                            <td className="num" style={r.cost && r.roas >= 300 ? { color: "var(--sm-success)", fontWeight: 600 } : r.cost && r.conv === 0 ? { color: "var(--sm-danger)" } : undefined}>{r.cost ? `${Math.round(r.roas)}%` : "-"}</td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
+                      <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                         <td>합계 {rptAgg.rows.length}</td>
                         <td className="num b2b-money">{qty(rptAgg.tot.imp)}</td><td className="num b2b-money">{qty(rptAgg.tot.clk)}</td>
                         <td className="num">{rptAgg.tot.imp ? `${rptAgg.tot.ctr.toFixed(2)}%` : "-"}</td>

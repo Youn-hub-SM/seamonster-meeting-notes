@@ -85,7 +85,7 @@ export default function MetaAdSettingsPage() {
         <div style={{ display: "grid", gap: 14, maxWidth: 620 }}>
           {GROUPS.map((g) => (
             <div key={g.title} className="b2b-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 12, color: "var(--sm-dark)" }}>{g.title}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "var(--sm-dark)" }}>{g.title}</div>
               <div style={{ display: "grid", gap: 12 }}>
                 {g.fields.map((f) => (
                   <label key={f.key} className="sm-row" style={{ justifyContent: "space-between", gap: 12, alignItems: "center" }}>

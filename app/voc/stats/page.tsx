@@ -220,7 +220,7 @@ export default function VocStatsPage() {
                   <div key={s.key} className="sm-stat-hero-metric">
                     <span className="sm-stat-hero-metric-label"><span className="sm-stat-hero-dot" style={{ background: s.color }} />{s.key}</span>
                     <span className="sm-stat-hero-metric-value" style={{ color: s.color }}>
-                      {s.n}건 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 600 }}>{kpi.total ? Math.round((s.n / kpi.total) * 100) : 0}%</span>
+                      {s.n}건 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 500 }}>{kpi.total ? Math.round((s.n / kpi.total) * 100) : 0}%</span>
                     </span>
                   </div>
                 ))}

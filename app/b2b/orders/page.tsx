@@ -1878,7 +1878,7 @@ export default function OrdersListPage() {
               <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
                 <strong>{returnPrompt.label}</strong>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>반품으로 실제 돌아왔나요?</div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>반품으로 실제 돌아왔나요?</div>
               <div className="sm-col" style={{ gap: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>
                 <span><strong>돌아왔음</strong> — 재고를 되돌립니다</span>
                 <span><strong>안 돌아옴</strong> — 출고는 그대로 두고 발주·매출만 취소합니다</span>
@@ -1962,7 +1962,7 @@ function CheckFilter<T extends string>({
             padding: 6,
           }}
         >
-          <label className="b2b-checkfilter-row" style={{ fontWeight: 700 }}>
+          <label className="b2b-checkfilter-row" style={{ fontWeight: 600 }}>
             <input
               type="checkbox"
               className="b2b-checkbox"
@@ -2061,7 +2061,7 @@ function ExportPickModal({
                   padding: "9px 12px",
                   background: "var(--sm-bg)",
                   fontSize: 12,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   display: "flex",
                   justifyContent: "space-between",
                   gap: 8,
@@ -2209,13 +2209,13 @@ function ShipDateField({ value, onChange, ariaLabel, disabled, title }: { value:
         }}
       >
         {d ? (
-          <span style={{ fontWeight: 700 }}>
+          <span style={{ fontWeight: 600 }}>
             {value} <span style={{ fontWeight: 400, color: "var(--sm-text-mid)" }}>({WEEKDAYS[d.getDay()]})</span>
           </span>
         ) : (
           <span style={{ color: "var(--sm-text-light)" }}>날짜 선택</span>
         )}
-        {!disabled && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>}
+        {!disabled && <span style={{ fontSize: 12, fontWeight: 500, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>}
       </div>
     </div>
   );

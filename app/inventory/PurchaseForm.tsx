@@ -173,7 +173,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
             </select>
           </label>
         )}
-        {type === "입고" && !customerReturn && reqWarn && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", flexBasis: "100%" }}>{reqWarn}</span>}
+        {type === "입고" && !customerReturn && reqWarn && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-danger)", flexBasis: "100%" }}>{reqWarn}</span>}
         {type === "출고" && (
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>사유
             <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: "auto" }}
@@ -229,7 +229,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
                   <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 12 }}>{l.sub}</div>}</td>
                   <td className="num"><input className="b2b-input" type="number" min={0.01} step={0.01} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 80, textAlign: "right", padding: "6px 8px" }} /></td>
                   <td className="num"><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, "price", e.target.value)} style={{ width: 120, textAlign: "right", padding: "6px 8px" }} /></td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(amountOf(l))}</td>
+                  <td className="num b2b-money" style={{ fontWeight: 600 }}>{qty(amountOf(l))}</td>
                   <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>
                 </tr>
               ))}
@@ -240,7 +240,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
 
         <div className="sm-between" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--sm-border)", flexWrap: "wrap", gap: 12 }}>
           <span className="sm-faint" style={{ fontSize: 13 }}>{qtyText(totals.items)} 품목, 총 {qtyText(totals.qty)}</span>
-          <span style={{ fontSize: 17, fontWeight: 800 }}>총액 {qty(totals.amount)}</span>
+          <span style={{ fontSize: 17, fontWeight: 600 }}>총액 {qty(totals.amount)}</span>
         </div>
       </section>
 

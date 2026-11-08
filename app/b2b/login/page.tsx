@@ -55,7 +55,7 @@ function LoginForm() {
     }}>
       <div style={{ width: "100%", maxWidth: 360 }}>
         {/* 브랜드 */}
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--sm-dark)", margin: "0 0 20px", textAlign: "center", letterSpacing: "-0.3px" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--sm-dark)", margin: "0 0 20px", textAlign: "center", letterSpacing: "-0.3px" }}>
           씨몬스터 업무 도우미
         </h1>
 
@@ -67,7 +67,7 @@ function LoginForm() {
           padding: "26px 24px",
           boxShadow: "var(--sm-shadow-float)",
         }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", display: "block", marginBottom: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", display: "block", marginBottom: 8 }}>
             비밀번호
           </label>
           <form onSubmit={handleSubmit}>

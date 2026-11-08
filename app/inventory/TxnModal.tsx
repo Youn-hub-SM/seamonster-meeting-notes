@@ -110,7 +110,7 @@ export function RequestSelect({ reqs, value, disabled, warn, onChange }: { reqs:
         <option value="">연결 안 함</option>
         {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` ${r.title}` : ""} — 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
       </select>
-      {warn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{warn}</span>}</label>
+      {warn && <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--sm-danger)", marginTop: 4 }}>{warn}</span>}</label>
   );
 }
 
@@ -545,7 +545,7 @@ export default function TxnModal({
               onChange={(c) => { if (c === channel) { if (type !== "입고" && picked !== c) setPicked(c); return; } dropInflight(); setChannel(c); if (type !== "입고") setPicked(c); setPreview(null); setError(""); setImporting(false); }}
               disabledChannels={type === "입고" ? MOVE_ONLY_CHANNELS : []}
               disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
-            {pickMissing && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>칸을 고르세요</span>}
+            {pickMissing && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-danger)" }}>칸을 고르세요</span>}
           </div>
           {checksOn && <CountCheckWarn c={shownChecks} err={checksErr} />}
 
@@ -710,11 +710,11 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                 <tbody>
                   {(preview.rows as AdjRow[]).slice(0, 300).map((r, i) => (
                     <tr key={i} style={{ color: r.delta === 0 ? "var(--sm-text-light)" : undefined }}>
-                      <td>{r.name}{r.spec ? <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{r.spec}</span> : null}{r.pending ? <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "var(--sm-warning)" }}>대기 {r.pending}</span> : null}</td>
+                      <td>{r.name}{r.spec ? <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{r.spec}</span> : null}{r.pending ? <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: "var(--sm-warning)" }}>대기 {r.pending}</span> : null}</td>
                       <td className="sm-faint">{r.sku || "-"}</td>
                       <td className="num b2b-money">{fmtQty(r.current)}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{fmtQty(r.target)}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{fmtQty(r.delta)}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 600 }}>{fmtQty(r.target)}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 600, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{fmtQty(r.delta)}</td>
                       <td className="sm-faint">{r.memo || "-"}</td>
                     </tr>
                   ))}
@@ -732,7 +732,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                       <td style={{ whiteSpace: "nowrap" }}>{r.txn_date?.slice(5)}</td>
                       <td><span className="b2b-status-pill" style={{ background: rc.bg, color: rc.fg }}>{r.type}</span></td>
                       <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
-                      <td className="num b2b-money" style={{ color: rc.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{fmtQty(r.qty)}</td>
+                      <td className="num b2b-money" style={{ color: rc.fg, fontWeight: 600 }}>{r.qty > 0 ? "+" : ""}{fmtQty(r.qty)}</td>
                       <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "-"}</td>
                       <td>{r.partner || "-"}</td>
                     </tr>
@@ -747,7 +747,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
 
         {preview.errors.length > 0 && (
           <section>
-            <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
+            <div className="b2b-field-label" style={{ fontWeight: 600, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
             <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 130, overflow: "auto" }}>
               {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
             </ul>

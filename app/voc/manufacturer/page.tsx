@@ -314,7 +314,7 @@ export default function VocManufacturerPage() {
 
   const ChartCard = ({ k }: { k: string }) => charts?.[k] ? (
     <div data-chart={k} style={{ marginTop: 12, padding: "10px 12px", border: "1px solid var(--sm-border)", borderRadius: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>{CHART_TITLE[k]}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-text-mid)", marginBottom: 6 }}>{CHART_TITLE[k]}</div>
       {charts[k]}
     </div>
   ) : null;
@@ -381,7 +381,7 @@ export default function VocManufacturerPage() {
       {draft ? (
         <section ref={printRef} className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "32px 34px", maxWidth: 860, boxShadow: "var(--sm-shadow-card)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
-            <div><div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{TITLE_OF(audience, y, mm)}</h2></div>
+            <div><div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 600 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 600, marginTop: 4 }}>{TITLE_OF(audience, y, mm)}</h2></div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>작성일 {TODAY()}{audience === "제조사" && recipient && <div>수신 {recipient}</div>}</div>
           </div>
 
@@ -405,8 +405,8 @@ export default function VocManufacturerPage() {
                 {s.lines.map((line, i) => {
                   const t = line.trim();
                   if (!t) return <div key={i} style={{ height: 8 }} />;
-                  if (/^\d+\.\s/.test(t)) return <div key={i} style={{ fontSize: 16, fontWeight: 800, marginTop: si === 0 && i === 0 ? 0 : 18, marginBottom: 4, borderBottom: "1px solid var(--sm-border)", paddingBottom: 4 }}>{t}</div>;
-                  if (/^[가-힣]\.\s/.test(t) || t === "한 줄 요약") return <div key={i} style={{ fontSize: 14, fontWeight: 700, marginTop: 10, marginBottom: 2 }}>{t}</div>;
+                  if (/^\d+\.\s/.test(t)) return <div key={i} style={{ fontSize: 16, fontWeight: 600, marginTop: si === 0 && i === 0 ? 0 : 18, marginBottom: 4, borderBottom: "1px solid var(--sm-border)", paddingBottom: 4 }}>{t}</div>;
+                  if (/^[가-힣]\.\s/.test(t) || t === "한 줄 요약") return <div key={i} style={{ fontSize: 14, fontWeight: 600, marginTop: 10, marginBottom: 2 }}>{t}</div>;
                   const m = t.match(/^-\s*([^:：]{1,24})\s*[:：]\s*(.*)$/);
                   if (m) return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>- <strong>{m[1].trim()}</strong> : {m[2]}</div>;
                   return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>{line.trimEnd()}</div>;
@@ -419,7 +419,7 @@ export default function VocManufacturerPage() {
           {/* 손해 청구 (제조사 귀책) — 개선요청서와 동일 기준 */}
           {showClaim && (
             <div style={{ marginTop: 26 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>{claimNo}. {audience === "제조사" ? "손해 청구 (제조사 귀책)" : "손해 현황 (제조사 귀책 청구분)"}</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 600, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>{claimNo}. {audience === "제조사" ? "손해 청구 (제조사 귀책)" : "손해 현황 (제조사 귀책 청구분)"}</h3>
               {mfg.summary.count === 0 ? (
                 <p style={{ fontSize: 13, marginTop: 8 }}>- 해당 없음</p>
               ) : (
@@ -442,10 +442,10 @@ export default function VocManufacturerPage() {
                         </tr>
                       ))}
                       <tr>
-                        <td style={{ ...cellTd, fontWeight: 800 }}>합계</td>
-                        <td style={{ ...cellTd, ...num, fontWeight: 800 }}>{mfg.summary.count}</td>
+                        <td style={{ ...cellTd, fontWeight: 600 }}>합계</td>
+                        <td style={{ ...cellTd, ...num, fontWeight: 600 }}>{mfg.summary.count}</td>
                         <td style={cellTd}></td>
-                        <td style={{ ...cellTd, ...num, fontWeight: 800 }}>{won(mfg.summary.claimable)}</td>
+                        <td style={{ ...cellTd, ...num, fontWeight: 600 }}>{won(mfg.summary.claimable)}</td>
                       </tr>
                     </tbody>
                   </table>

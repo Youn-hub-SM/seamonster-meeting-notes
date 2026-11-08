@@ -196,8 +196,8 @@ export default function AdjustPage() {
                           </td>
                           <td className="sm-faint">{r.sku || "-"}</td>
                           <td className="num b2b-money">{qty(r.current)}</td>
-                          <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(r.target)}</td>
-                          <td className="num b2b-money" style={{ fontWeight: 700, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{qty(r.delta)}</td>
+                          <td className="num b2b-money" style={{ fontWeight: 600 }}>{qty(r.target)}</td>
+                          <td className="num b2b-money" style={{ fontWeight: 600, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{qty(r.delta)}</td>
                           <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.memo || "-"}</td>
                         </tr>
                       ))}
@@ -208,7 +208,7 @@ export default function AdjustPage() {
               )}
               {preview.errors.length > 0 && (
                 <section>
-                  <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행 제외</div>
+                  <div className="b2b-field-label" style={{ fontWeight: 600, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행 제외</div>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 130, overflow: "auto" }}>
                     {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
                   </ul>

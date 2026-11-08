@@ -6,6 +6,16 @@
 > 한 줄 요약: **색은 시맨틱 토큰, 간격은 4px 스케일, 컴포넌트는 결정표에서, 차트는 프리미티브에서,
 > 같은 의미는 색 지도에서. 없으면 지어내지 말고 시스템에 추가한다.**
 
+## 방향 (2026-11-08 unslop 점검으로 신설 — 모든 화면이 이 다섯 줄 안에서 결정된다)
+
+- **제품**: 냉동 순살 생선을 파는 작은 팀이 하루 운영(발주·재고·고객 메시지·매출)을 보는 도구.
+- **캐릭터**: 차분하고, 정확하고, 조금 따뜻하다. ('깔끔·모던·미니멀'은 어떤 템플릿이든 하는 말이라 쓰지 않는다)
+- **세계**: 얼음 위의 생선과 종이 전표. 차갑고 흰 바탕, 따뜻한 손글씨 한 줄. 중립 램프는 흑백(그래파이트), 주황은 손이 닿는 한 곳에만.
+- **모먼트**: 숫자. KPI 와 추세 차트가 화면에서 유일하게 풍부해지는 곳. 크롬(네비·버튼·표)은 조용하다.
+- **시그니처**: 현재 위치를 가리키는 **주황 점 6px**(사이드바·탭·세그먼트). 주황 채움을 넓게 쓰지 않아 점 하나가 눈에 띈다.
+
+점검 기록: `docs/design-unslop-audit.md`(대표 결정 7건 전부 권장안).
+
 토큰 단일 소스: **`app/globals.css` 의 `:root`**. 이 문서의 값과 코드가 다르면 **코드가 정답**이고,
 그걸 발견한 세션이 이 문서를 고친다. (과거 이 문서의 낡은 값 #666/#999 가 코드 5곳에 박제된 적이 있다 —
 문서가 틀리면 문서 자체가 이탈의 발원지가 된다.)
@@ -107,7 +117,7 @@
 근거·배경: `docs/ux-affordance-plan.md`.
 
 **색 — 유채색 3개 + 회색만**
-- 주황 `--sm-orange` #F15A30 = **채움 전용**(1차 버튼·활성 탭·현재 위치 막대·로고). 글자로 쓰는 주황은 `--sm-orange-text` #C8431C(흰 바탕 4.9:1)뿐 — 호버 글자·필수 `*`. 링크·강조 숫자·아이콘·행 호버에 주황 금지.
+- 주황 `--sm-orange` #F15A30 = **현재 위치 점(6px)·로고·초점 링·캘린더 오늘 배지**에만(2026-11-08 unslop 점검으로 축소). **1차 버튼은 검정 채움 `--sm-black` + 흰 글자**(호버 `--sm-black-hover`), 활성 탭·현재 위치는 연주황 바탕 + 검정 600 + 주황 점. 글자로 쓰는 주황은 `--sm-orange-text` #C8431C(4.9:1)뿐 — 호버 글자·필수 `*`. 링크·강조 숫자·아이콘·행 호버에 주황 금지. 옛 '주황 채움 + 흰 글자'(3.4:1)는 폐지.
 - 빨강 `--sm-danger` = 오류·삭제·진짜 이상치(품절·재고 마이너스·실패). 초록 `--sm-success` = 완료·입금·발송완료.
 - **노랑(`--sm-warning*`)·파랑(`--sm-info*`)은 폐지** — 토큰 이름은 lib 색 지도·배너 호환용으로 남겼고 값은 회색 세트(`text-mid / bg-subtle / border`)의 별칭이다. 대기·진행 중·일부·부족·정보·베타·AI 는 **회색 배지 + 글자**로만 구분한다. 색 지도를 고칠 때 danger·success 만 유채색이라는 전제로 판단할 것.
 - 중립: `--sm-border` #E3E3E3(기본 경계) · `--sm-border-strong` #C9C9C9(입력·select·2차 버튼·칩 테두리) · `--sm-border-light` #EEEEEE(차트 격자·캘린더 칸). 12px 보조 글 색은 `--sm-text-mid`(`--sm-text-light` 는 15px 이상에서만).
@@ -115,14 +125,14 @@
 
 **글자 — Pretendard, 5단·3단·4값·3값**
 - 크기 `--sm-fs-xs` 12(보조) · `base` 13(본문) · `lg` 15(카드 제목·강조) · `xl` 17(섹션 제목) · `2xl` 24(페이지 제목). KPI 값만 예외(24, 압축 21). 2026-10-14 대표 지시 두 번: 상위 2단 -2(21→19·28→26) 뒤 다시 전체 -2(12 만 유지) — 리터럴 15px/17px 등과 인라인 fontSize 300곳도 같이 내렸다. 1차 버튼은 14/700. `--sm-fs-sm`·`--sm-fs-md` 는 base 의 별칭 — 새 코드에서 쓰지 않는다.
-- 굵기 400 본문 · 600 라벨·버튼·강조 · 700 제목. 800 은 KPI 값만.
-- 줄 간격 `--sm-lh-body` 1.6 · `ui` 1.5(표·버튼·목록·배지) · `heading` 1.3 · `kpi` 1.2. 자간 `--sm-ls-heading` -0.01em(17px 이상 제목) · `--sm-ls-label` 0.02em(12px 분류 라벨), 본문 0.
+- 굵기 **400 본문 · 500 라벨·버튼·탭·네비 · 600 제목·KPI·현재 위치. 700 이상 없음**(2026-11-08 unslop 점검 — 위계는 크기·색으로). 인라인 `fontWeight` 도 같은 세 값만.
+- 줄 간격 `--sm-lh-body` 1.6 · `ui` 1.5(표·버튼·목록·배지) · `heading` 1.3 · `kpi` 1.2. 자간 `--sm-ls-heading` 0(2026-11-08: 24px 이하에 음수 자간 없음, 이름만 호환) · `--sm-ls-label` 0.02em(12px 분류 라벨), 본문 0. `text-transform: uppercase` 금지(SKU 는 데이터 그대로).
 - `body` 는 `word-break: keep-all; overflow-wrap: anywhere`. 숫자는 `.num`·`.b2b-money`·`.b2b-stat-card-value`·`.b2b-status-pill` 에 `tabular-nums` 기본.
 - 표: 머리글 12px/600 `--sm-text-mid` · 셀 15/400 · 행 패딩 12(≈44px). 밀집 표(`.inv-table` 등)만 자체 패딩.
 
 **눌리는 것이 눌리게**
 - 공용 `:focus-visible` 링(주황 2px, offset 2px)이 button·a·input·select·textarea·[role=button]·.sm-tab·summary 에 붙는다. 입력칸에 `outline:none` 을 쓰지 않는다. 입력칸(input·select·textarea)은 테두리와 겹치지 않게 `outline-offset: -1px` — 주황 한 줄로 보인다(2026-10-18 대표: 두 줄 불편).
-- `.b2b-btn-primary` 글자 16px/700 · `.b2b-btn-secondary` 흰 + strong 테두리 · `.b2b-btn-danger` 흰 + 빨강 1px 테두리 + 빨강 글자(2차와 같은 틀). 화면당 1차 버튼 하나.
+- `.b2b-btn-primary` 검정 채움 + 흰 13px/500 · `.b2b-btn-secondary` 흰 + strong 테두리 · `.b2b-btn-danger` 흰 + 빨강 1px 테두리 + 빨강 글자(2차와 같은 틀). 버튼·입력 패딩 10/16·10/12(높이 40), 모서리 8. 화면당 1차 버튼 하나.
 - `.sm-link`·`.b2b-link-btn` = 검정 + 밑줄(offset 2px), 호버 `--sm-orange-text`.
 - `.b2b-status-select` = strong 테두리 + ▾ 화살표(공용이 `background-image !important` 로 지킴) — 배지(`.b2b-status-pill`)와 모양이 다르다. 인라인 `background` 단축을 써도 화살표는 남는다.
 - 행 클릭이 있는 표만 `.b2b-table.is-clickable`(손 커서 + 회색 호버). 전역 `tbody tr { cursor:pointer }` 는 없다 — 빠뜨리면 눌리는데 손 커서가 없다.
@@ -198,9 +208,9 @@
 브랜드: `--sm-orange` #F15A30 · `-hover` #D94E26 · `-light` rgba(241,90,48,.06) · `-border` rgba(241,90,48,.12)
 
 중립: `--sm-black` #1A1A1A(본문) · `--sm-dark` #37352F(짙은 웜그레이) · `--sm-text-mid` #555(보조) ·
-`--sm-text-light` #6B6B6B(흐림) · `--sm-text-faint` #C7C7C7(값 없음 "·" 플레이스홀더) · `--sm-white` ·
+`--sm-text-light` #737373(muted — 메타·캡션 전용, 2026-11-08) · `--sm-text-faint` #C7C7C7(값 없음 "·" 플레이스홀더) · `--sm-white` ·
 `--sm-bg` #FAFAFA(페이지) · `--sm-bg-warm` #FFF5F0 · `--sm-bg-subtle` #F7F8FA(표 헤더·합계행) ·
-`--sm-border` #EEE · `--sm-border-light` #F4F4F4(차트 격자)
+`--sm-border` #E3E3E3 · `--sm-border-light` #EEEEEE(차트 격자)
 
 ### 간격 (4px 베이스) / 타이포 / 반경 / 폰트
 
@@ -209,7 +219,7 @@
   - 본문 기본 13px(2026-10-14 대표 지시로 전체 2px 축소). 12px 미만 금지는 유지.
   - **보조 정보는 12px** — 발주번호·SKU·날짜 힌트·배지(pill)·차트 축 라벨처럼 곁들이는 글. 12 미만은 어디에도 금지.
   - 예외: 인쇄물(거래명세표 statement, 인쇄 팝업 fulfill/scan, `@media print` 블록)과 파도소리(factory)는 종이 밀도 기준이라 기존 크기 유지.
-- 반경: `--sm-radius`=8 · `-btn`=12 · `-card`=16 · `-pill`=50 / 그림자: `--sm-shadow-card` · `--sm-shadow-float`
+- 반경: `--sm-radius`=8(컨트롤 전부: 입력·버튼·탭·상태 select) · `-btn`=8(별칭) · `-card`=16 · 배지·태그 6 · `-pill`=50 은 캘린더 날짜 원처럼 진짜 원형에만 / 그림자: `--sm-shadow-float`(떠 있는 면), `--sm-shadow-card` 는 미사용
 - 폰트: `--sm-mono` (SKU·코드용 모노스페이스 스택)
 
 ### 유틸 클래스 (globals.css) — 반복 인라인 대체

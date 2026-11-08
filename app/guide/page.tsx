@@ -65,7 +65,7 @@ function GuideInner() {
 
       {view.map((cat) => (
         <section key={cat.category} style={{ marginTop: 18 }}>
-          <h2 style={{ fontSize: 13, fontWeight: 800, color: "var(--sm-text-mid)", margin: "0 0 8px 2px", letterSpacing: 0.3 }}>{cat.category}</h2>
+          <h2 style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-text-mid)", margin: "0 0 8px 2px", letterSpacing: 0.3 }}>{cat.category}</h2>
           {cat.tools.map((t) => (
             <div key={t.tool} className="b2b-card" style={{ marginBottom: 10 }}>
               <div className="b2b-card-head"><span className="b2b-card-title">{t.tool}</span></div>

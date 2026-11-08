@@ -197,7 +197,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                           {rows.map((r) => (
                             <tr key={r.id}>
                               <td data-label="적용일" style={{ whiteSpace: "nowrap" }}>{r.effective_date}</td>
-                              <td data-label="원가(원)" className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.cost_price)}</td>
+                              <td data-label="원가(원)" className="num b2b-money" style={{ fontWeight: 600 }}>{won(r.cost_price)}</td>
                               <td data-label="상태">
                                 {r.applied_at
                                   ? <span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>반영됨</span>

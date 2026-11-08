@@ -63,7 +63,7 @@ const TONE = {
 type Tone = (typeof TONE)[keyof typeof TONE];
 
 function Badge({ tone, children }: { tone: Tone; children: React.ReactNode }) {
-  return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: tone.bg, color: tone.fg, whiteSpace: "nowrap" }}>{children}</span>;
+  return <span style={{ fontSize: 13, fontWeight: 600, padding: "2px 7px", borderRadius: 6, background: tone.bg, color: tone.fg, whiteSpace: "nowrap" }}>{children}</span>;
 }
 
 // 본 캠페인 진입용 광고세트 이름 만들기: "yyyy-mm-dd 메시지"
@@ -73,7 +73,7 @@ function NameHelper({ today }: { today: string }) {
   const name = `${today} ${msg}`.trim();
   return (
     <div className="sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-text-mid)" }}>세트 이름 만들기</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-text-mid)" }}>세트 이름 만들기</span>
       <code style={{ fontSize: 13, background: "var(--sm-white)", padding: "3px 7px", borderRadius: 6, border: "1px solid var(--sm-border)" }}>{today}</code>
       <input value={msg} onChange={(e) => { setMsg(e.target.value); setCopied(false); }} placeholder="예: 무료배송 강조" aria-label="주요 메시지"
         className="b2b-input" style={{ width: 200, fontSize: 13, padding: "5px 9px" }} />
@@ -372,7 +372,7 @@ export default function MetaAdPage() {
           {/* 운영 규칙(플레이북) */}
           <div className="b2b-card" style={{ padding: 0, marginBottom: 12, borderColor: "var(--sm-orange-border)" }}>
             <button type="button" onClick={() => setShowPlaybook((v) => !v)}
-              style={{ width: "100%", textAlign: "left", background: "var(--sm-orange-light)", border: "none", cursor: "pointer", padding: "10px 14px", borderRadius: showPlaybook ? "10px 10px 0 0" : 10, fontSize: 13, fontWeight: 800, color: "var(--sm-orange-hover)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              style={{ width: "100%", textAlign: "left", background: "var(--sm-orange-light)", border: "none", cursor: "pointer", padding: "10px 14px", borderRadius: showPlaybook ? "10px 10px 0 0" : 10, fontSize: 13, fontWeight: 600, color: "var(--sm-orange-hover)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>운영 규칙 (플레이북)</span><span style={{ fontSize: 13 }}>{showPlaybook ? "접기 ▲" : "펼치기 ▼"}</span>
             </button>
             {showPlaybook && (
@@ -400,10 +400,10 @@ export default function MetaAdPage() {
             <Chip on={tab === "campaign"} onClick={() => { setTab("campaign"); setStageFilter(null); }}>본 캠페인 {visN(ov?.campaigns)}</Chip>
             <Chip on={tab === "ad"} onClick={() => { setTab("ad"); setStageFilter(null); }}>소재 {visN(ov?.ads)}</Chip>
             <div style={{ flex: 1 }} />
-            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 500, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} />라이브만 (게재 중)
             </label>
-            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 500, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={resultsOnly} onChange={(e) => setResultsOnly(e.target.checked)} />결과 있는 것만 (지출&gt;0)
             </label>
           </div>
@@ -411,7 +411,7 @@ export default function MetaAdPage() {
           {/* 단계 필터 */}
           {stageGroups.length > 0 && (
             <div className="sm-row" style={{ gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>단계</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--sm-dark)", marginRight: 2 }}>단계</span>
               <Chip on={stageFilter === null} onClick={() => setStageFilter(null)}>전체 {filtered.length}</Chip>
               {stageGroups.map((g) => <Chip key={g.key} on={stageFilter === g.key} onClick={() => setStageFilter(g.key)}>{STAGE_SHORT[g.key] || g.key} {g.n}</Chip>)}
             </div>
@@ -440,10 +440,10 @@ export default function MetaAdPage() {
                           {stage ? <Badge tone={stage.tone}>{stage.label}</Badge> : null}
                           {stage?.action ? <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 3, lineHeight: 1.4, whiteSpace: "normal" }}>{stage.action}</div> : null}
                         </td>
-                        <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.spend)}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 500 }}>{won(s.spend)}</td>
                         <td className="num b2b-money">{qty(s.purchases)}</td>
                         <td className="num b2b-money">{won(s.purchaseValue)}</td>
-                        <td className="num b2b-money" style={roasColor ? { color: roasColor, fontWeight: 700 } : undefined}>{s.purchases > 0 ? roasFmt(s.roas) : "-"}</td>
+                        <td className="num b2b-money" style={roasColor ? { color: roasColor, fontWeight: 600 } : undefined}>{s.purchases > 0 ? roasFmt(s.roas) : "-"}</td>
                         <td className="num b2b-money">{s.cpa > 0 ? won(s.cpa) : "-"}</td>
                         <td className="num">{pct(s.ctr)}</td>
                         {tab !== "ad" && <td className="num b2b-money">{budget ? won(Number(budget)) : "-"}</td>}
@@ -451,7 +451,7 @@ export default function MetaAdPage() {
                     );
                   })}
                 </tbody>
-                <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
+                <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                   <td></td><td>합계 {shown.length}</td><td></td>
                   <td className="num b2b-money">{won(totals.spend)}</td><td className="num b2b-money">{qty(totals.purch)}</td>
                   <td className="num b2b-money">{won(totals.val)}</td><td className="num b2b-money" style={{ color: "var(--sm-orange)" }}>{roasFmt(blendRoas)}</td>

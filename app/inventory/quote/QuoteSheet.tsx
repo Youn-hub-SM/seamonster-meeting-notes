@@ -25,11 +25,11 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
     <section className={`${printable ? "voc-print" : "no-print"} inv-quote-print`} style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "28px 30px", maxWidth: 900, boxShadow: "var(--sm-shadow-card)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {mm}월 매입 결산</h2>
+          <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 600 }}>씨몬스터</div>
+          <h2 style={{ fontSize: 22, fontWeight: 600, marginTop: 4 }}>{y}년 {mm}월 매입 결산</h2>
           {stamp && <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginTop: 4 }}>{stamp}</div>}
         </div>
-        <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>총 입금액<div style={{ fontSize: 24, fontWeight: 800, color: "var(--sm-black)", marginTop: 2 }}>{won(s.deposit)}원</div></div>
+        <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>총 입금액<div style={{ fontSize: 24, fontWeight: 600, color: "var(--sm-black)", marginTop: 2 }}>{won(s.deposit)}원</div></div>
       </div>
 
       {/* 요약 블록 */}
@@ -37,10 +37,10 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
         <table className="b2b-table is-responsive">
           <thead><tr><th>구분</th><th className="num">공급가액</th><th className="num">세액 / 기타</th><th className="num">총액</th></tr></thead>
           <tbody>
-            <tr><td data-label="구분" style={{ fontWeight: 700 }}>임대료</td><td data-label="공급가액" className="num b2b-money">{won(s.rentSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.rentVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.rentTotal)}</td></tr>
-            <tr><td data-label="구분" style={{ fontWeight: 700 }}>면세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.exemptSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.exemptEtc)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.exemptTotal)}</td></tr>
-            <tr><td data-label="구분" style={{ fontWeight: 700 }}>과세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.taxableSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.taxableVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.taxableTotal)}</td></tr>
-            <tr style={{ background: "var(--sm-bg-subtle)" }}><td data-label="구분" style={{ fontWeight: 800 }}>총 입금액</td><td className="num" /><td className="num" /><td data-label="총액" className="num b2b-money" style={{ fontWeight: 800, fontSize: 13 }}>{won(s.deposit)}</td></tr>
+            <tr><td data-label="구분" style={{ fontWeight: 600 }}>임대료</td><td data-label="공급가액" className="num b2b-money">{won(s.rentSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.rentVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.rentTotal)}</td></tr>
+            <tr><td data-label="구분" style={{ fontWeight: 600 }}>면세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.exemptSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.exemptEtc)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.exemptTotal)}</td></tr>
+            <tr><td data-label="구분" style={{ fontWeight: 600 }}>과세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.taxableSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.taxableVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.taxableTotal)}</td></tr>
+            <tr style={{ background: "var(--sm-bg-subtle)" }}><td data-label="구분" style={{ fontWeight: 600 }}>총 입금액</td><td className="num" /><td className="num" /><td data-label="총액" className="num b2b-money" style={{ fontWeight: 600, fontSize: 13 }}>{won(s.deposit)}</td></tr>
           </tbody>
         </table>
       </div>
@@ -77,13 +77,13 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
                   <td>{it.spec || "-"}</td>
                   <td>{it.origin || "-"}</td>
                   <td className="num b2b-money" title={np > 0 ? `단가 미입력 ${qtyText(np)}가 0원으로 섞여 평균이 낮습니다` : undefined}>
-                    {(it.unit_price ?? 0).toLocaleString()}{np > 0 && <span style={{ color: "var(--sm-danger)", fontWeight: 800 }}>*</span>}
+                    {(it.unit_price ?? 0).toLocaleString()}{np > 0 && <span style={{ color: "var(--sm-danger)", fontWeight: 600 }}>*</span>}
                   </td>
                   <td className="num b2b-money">{(it.qty ?? 0).toLocaleString()}</td>
                   <td className="num b2b-money" style={{ color: rq > 0 ? "var(--sm-danger)" : "var(--sm-text-light)", fontWeight: rq > 0 ? 700 : 400 }}>
                     {rq > 0 ? rq.toLocaleString() : "-"}
                   </td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}
+                  <td className="num b2b-money" style={{ fontWeight: 600 }}
                     title={[
                       rq > 0 ? `정산수량 ${(it.net_qty ?? 0).toLocaleString()} (반품 ${qty(rq)} 제외)` : "",
                       it.tax_type === "taxable" ? `공급가액 기준 — 부가세 포함 시 ${won((it.amount ?? 0) * 1.1)}원` : "",
@@ -92,7 +92,7 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
                 </tr>
               );
             })}
-            <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
+            <tr style={{ fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
               <td colSpan={4}>합계</td>
               <td className="num" />
               <td className="num">{(s.totalQty ?? 0).toLocaleString()}</td>

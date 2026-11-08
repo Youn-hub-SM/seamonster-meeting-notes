@@ -88,8 +88,8 @@ export default function CouponPage() {
         <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           {COUPON_CHANNELS.map((c) => (
             <button key={c.key} className="b2b-card" style={{ textAlign: "left", cursor: "pointer", padding: 18 }} onClick={() => pickChannel(c.key)}>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>{c.label}</div>
-              <div style={{ marginTop: 10, color: "var(--sm-orange-text)", fontWeight: 700, fontSize: 13 }}>시작하기</div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{c.label}</div>
+              <div style={{ marginTop: 10, color: "var(--sm-orange-text)", fontWeight: 600, fontSize: 13 }}>시작하기</div>
             </button>
           ))}
         </div>

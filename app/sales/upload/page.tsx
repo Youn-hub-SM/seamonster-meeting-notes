@@ -207,7 +207,7 @@ export default function SalesUploadPage() {
 
       {applied && (
         <div style={{ marginTop: 20 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 800, margin: "0 0 10px" }}>바로 리포트 만들어 발송</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 10px" }}>바로 리포트 만들어 발송</h2>
           <SalesReportPanel key={applyNonce} autoGenerate
             onSent={(type) => { if (type === "daily" && pendingReports) { setReportPrompt(pendingReports); setPendingReports(null); } }} />
         </div>
@@ -218,7 +218,7 @@ export default function SalesUploadPage() {
           <div className="b2b-card-head"><span className="b2b-card-title">미리보기 — 적용 전 확인</span></div>
           {previewStale && (
             <div className="sm-warn" style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700 }}>미리보기를 다시 하지 못했습니다 — 아래 숫자는 이전 옵션 기준이라 적용할 수 없습니다</div>
+              <div style={{ fontWeight: 600 }}>미리보기를 다시 하지 못했습니다 — 아래 숫자는 이전 옵션 기준이라 적용할 수 없습니다</div>
               <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                 <button className="b2b-btn-secondary" disabled={busy !== ""} onClick={() => doPreview()}>{busy === "preview" ? "분석 중..." : "다시 미리보기"}</button>
                 {canRestore && <button className="b2b-btn-secondary" disabled={busy !== ""} onClick={restorePreviewOpts}>이전 옵션으로</button>}
@@ -248,7 +248,7 @@ export default function SalesUploadPage() {
 
           {preview?.changed && preview.changed.count > 0 && (
             <div className="sm-warn" style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 700 }}>기존과 다른 행 {qtyText(preview.changed.count, "건")} — 그대로 적용하면 기존 행과 새 행이 둘 다 남습니다. 취소·정정이 반영된 그 기간 전체 파일이면 기간 교체로 올리세요</div>
+              <div style={{ fontWeight: 600 }}>기존과 다른 행 {qtyText(preview.changed.count, "건")} — 그대로 적용하면 기존 행과 새 행이 둘 다 남습니다. 취소·정정이 반영된 그 기간 전체 파일이면 기간 교체로 올리세요</div>
               <div className="b2b-table-wrap" style={{ marginTop: 6 }}>
                 <table className="b2b-table">
                   <thead><tr><th>채널</th><th>주문번호</th><th>상품</th><th className="num">기존 수량</th><th className="num">기존 금액 (원)</th><th className="num">새 수량</th><th className="num">새 금액 (원)</th></tr></thead>
@@ -265,7 +265,7 @@ export default function SalesUploadPage() {
           {dupGroupCount > 0 && (
             <div style={{ marginTop: 12 }}>
               <div className="sm-between" style={{ gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 700 }}>파일 안 동일 라인 {qtyText(dupGroupCount, "묶음")}</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>파일 안 동일 라인 {qtyText(dupGroupCount, "묶음")}</span>
                 <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>
                   <input type="checkbox" className="b2b-checkbox" checked={opts.dupMode === "separate"} disabled={busy !== ""}
                     onChange={(e) => changeOpts({ ...opts, dupMode: e.target.checked ? "separate" : "merge" })} />
@@ -288,7 +288,7 @@ export default function SalesUploadPage() {
           )}
 
           <div style={{ marginTop: 12 }}>
-            <label className="sm-row" style={{ gap: 6, fontSize: 13, fontWeight: 700 }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, fontWeight: 600 }}>
               {/* 오류 행이 있으면 켤 수 없다 — 빠진 행의 기존 원장 행이 '파일에 없음'으로 지워진다(서버도 거절) */}
               <input type="checkbox" className="b2b-checkbox" checked={opts.replace} disabled={busy !== "" || (s.invalid > 0 && !opts.replace)}
                 onChange={(e) => changeOpts({ ...opts, replace: e.target.checked, replaceFrom: "", replaceTo: "", widen: false })} />
@@ -363,7 +363,7 @@ export default function SalesUploadPage() {
             )}
             {preview?.replace && !preview.replace.blocked && uncoveredDays > 0 && (
               <div className="sm-warn" style={{ marginTop: 8 }}>
-                <div style={{ fontWeight: 700 }}>파일 행이 없거나 적은 날짜 {qtyText(uncoveredDays, "일")} — 기존 {qtyText(uncoveredRows, "행")}이 지워집니다</div>
+                <div style={{ fontWeight: 600 }}>파일 행이 없거나 적은 날짜 {qtyText(uncoveredDays, "일")} — 기존 {qtyText(uncoveredRows, "행")}이 지워집니다</div>
                 {uncoveredScopes.map((x) => (
                   <div key={x.channel} style={{ fontSize: 12, marginTop: 4 }}>{x.channel}: {(x.uncovered ?? []).map((u) => `${dateShort(u.date)} 파일 ${qtyText(u.file_rows ?? 0, "행")}, 지울 ${qtyText(u.rows, "행")}`).join(", ")}</div>
                 ))}
@@ -467,7 +467,7 @@ function Stat({ label, v, accent, danger }: { label: string; v: string; accent?:
   return (
     <div className="b2b-stat-card">
       <div className="b2b-stat-card-label">{label}</div>
-      <div className="b2b-stat-card-value b2b-money" style={danger ? { color: "var(--sm-danger)" } : accent ? { fontWeight: 800 } : undefined}>{v}</div>
+      <div className="b2b-stat-card-value b2b-money" style={danger ? { color: "var(--sm-danger)" } : accent ? { fontWeight: 600 } : undefined}>{v}</div>
     </div>
   );
 }

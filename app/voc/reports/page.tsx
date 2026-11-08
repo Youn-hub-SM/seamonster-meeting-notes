@@ -115,8 +115,8 @@ export default function VocRequestPage() {
           {/* 문서 헤더 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 20 }}>
             <div>
-              <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
-              <h2 style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>개선요청서</h2>
+              <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 600 }}>씨몬스터</div>
+              <h2 style={{ fontSize: 24, fontWeight: 600, marginTop: 4 }}>개선요청서</h2>
             </div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>
               <div>작성일 {TODAY()}</div>
@@ -159,7 +159,7 @@ export default function VocRequestPage() {
               </div>
 
               {/* 상세 내역 */}
-              <h3 style={{ fontSize: 13, fontWeight: 700, margin: "8px 0 8px" }}>접수 내역</h3>
+              <h3 style={{ fontSize: 13, fontWeight: 600, margin: "8px 0 8px" }}>접수 내역</h3>
               <div className="b2b-table-wrap" style={{ marginBottom: 8 }}>
               <table className="b2b-table">
                 <thead><tr><th>접수일</th><th>제품 생산일</th><th>CS 유형</th><th>내용</th><th className="num">손해(원)</th></tr></thead>
@@ -173,7 +173,7 @@ export default function VocRequestPage() {
                       <td className="num">{r.loss_amount ? r.loss_amount.toLocaleString() : "-"}</td>
                     </tr>
                   ))}
-                  <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
+                  <tr style={{ fontWeight: 600, background: "var(--sm-bg-subtle)" }}>
                     <td colSpan={4}>합계</td>
                     <td className="num">{summary.loss.toLocaleString()}</td>
                   </tr>
@@ -184,7 +184,7 @@ export default function VocRequestPage() {
               {/* 사진 — 문서 제일 뒤, A4 2컷/페이지 */}
               {photos.length > 0 && (
                 <div className="voc-photos" style={{ marginTop: 24 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 12px" }}>증빙 사진 ({photos.length}장)</h3>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 12px" }}>증빙 사진 ({photos.length}장)</h3>
                   {photos.map((p, i) => (
                     <figure key={i} className="voc-photo-fig" style={{ margin: "0 0 16px" }}>
                       <figcaption style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 4 }}>{p.label}</figcaption>
@@ -206,7 +206,7 @@ function Stat({ label, value, accent, small }: { label: string; value: string; a
   return (
     <div>
       <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: small ? 14 : 20, fontWeight: 800, color: accent || "var(--sm-black)" }}>{value}</div>
+      <div style={{ fontSize: small ? 14 : 20, fontWeight: 600, color: accent || "var(--sm-black)" }}>{value}</div>
     </div>
   );
 }

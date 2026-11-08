@@ -480,7 +480,7 @@ export default function InventoryPage() {
                       {r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>세트</span> : null}
                     </button>
                   </td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수" : "오늘까지 원장 기준"}>
+                  <td className="num b2b-money" style={{ fontWeight: 600 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수" : "오늘까지 원장 기준"}>
                     {qty(onHandOf(r))}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {/* 소매 숫자 '아래' 줄로 — 옆에 붙이면 현재고가 두 값처럼 읽힌다(대표 지시). 입고 예정 셀의 '마감' 줄과 같은 방식 */}
                     {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 12, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {qty(r.promo_pool)}</span>}
@@ -663,7 +663,7 @@ function ProductHistory({ productId }: { productId: string }) {
                   {t.pending && <span className="b2b-status-pill" style={{ marginLeft: 4, background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>대기</span>}
                 </td>
                 <td>{ch ? <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span> : <span className="sm-faint">-</span>}</td>
-                <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{qty(t.qty)}</td>
+                <td className="num b2b-money" style={{ color: c.fg, fontWeight: 600 }}>{t.qty > 0 ? "+" : ""}{qty(t.qty)}</td>
                 <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>
                   {complete && !t.pending
                     ? <><span className="sm-faint">{qty(t.before)}</span> → <strong>{qty(t.after)}</strong></>

@@ -175,13 +175,13 @@ export default function InventoryReconcilePage() {
                     <tr key={r.product_id}>
                       <td><strong>{r.name}</strong></td>
                       <td className="sm-faint" style={{ fontSize: 12 }}>{r.sku || "-"}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700, color: r.current_qty < 0 ? "var(--sm-danger)" : undefined }}>{won(r.current_qty)}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 600, color: r.current_qty < 0 ? "var(--sm-danger)" : undefined }}>{won(r.current_qty)}</td>
                       <td className="num b2b-money">{r.sold ? won(r.sold) : "-"}</td>
                       <td className="num b2b-money" style={{ color: r.ledger_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.ledger_in ? won(r.ledger_in) : "-"}</td>
                       <td className="num b2b-money" style={{ color: r.saleOut ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.saleOut ? won(r.saleOut) : "-"}</td>
                       <td className="num b2b-money" style={{ color: r.nonsale ? "var(--sm-text-mid)" : "var(--sm-text-light)" }}>{r.nonsale ? won(r.nonsale) : "-"}</td>
                       <td className="num b2b-money" style={{ color: r.ledger_adj ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{r.ledger_adj ? (r.ledger_adj > 0 ? "+" : "") + won(r.ledger_adj) : "-"}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700, color: r.notSubtracted > 0 ? "var(--sm-warning)" : r.notSubtracted < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.notSubtracted ? (r.notSubtracted > 0 ? "+" : "") + won(r.notSubtracted) : "0"}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 600, color: r.notSubtracted > 0 ? "var(--sm-warning)" : r.notSubtracted < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.notSubtracted ? (r.notSubtracted > 0 ? "+" : "") + won(r.notSubtracted) : "0"}</td>
                       <td>
                         <span className="sm-row" style={{ gap: 4, flexWrap: "wrap" }}>
                           {r.noBuy && <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>산 기록 없음</span>}
