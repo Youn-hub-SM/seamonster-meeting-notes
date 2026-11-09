@@ -75,3 +75,5 @@ _*.mjs
 
 # cafe24 admin api token (rotating refresh token)
 .cafe24-token.json
+!/scripts/detail-sources-import.mjs
+!/scripts/cafe24-detail-dump.mjs

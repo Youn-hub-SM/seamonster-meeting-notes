@@ -51,7 +51,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // 로그인 페이지·로그인 API + QR 숏링크(/q/*) + 아침 다이제스트 크론·일일 리포트 크론·은행입금 동기화 크론·입금문자 웹훅·인증번호 문자 웹훅(/api/sms/otp) + 인스타 댓글 웹훅·Tally 설문 웹훅(서명 검증) + GA MCP 서버(/api/mcp/*, Bearer MCP_API_KEY) — 자체 검증이 있어 보호 제외
-  if (pathname === "/b2b/login" || pathname === "/factory/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname === "/api/b2b/schedule-digest" || pathname === "/api/analyst/cron" || pathname === "/api/b2b/deposits/webhook" || pathname === "/api/sms/otp" || pathname === "/api/instagram/webhook" || pathname === "/api/naver/catalog/sync" || pathname === "/api/naver/catalog/upload" || pathname === "/api/channel-commands" || pathname === "/api/detail/applies" || pathname === "/api/claims/report" || pathname === "/api/subscription/sync" || pathname.startsWith("/api/mcp/") || pathname.startsWith("/q/")) {
+  if (pathname === "/b2b/login" || pathname === "/factory/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname === "/api/b2b/schedule-digest" || pathname === "/api/analyst/cron" || pathname === "/api/b2b/deposits/webhook" || pathname === "/api/sms/otp" || pathname === "/api/instagram/webhook" || pathname === "/api/naver/catalog/sync" || pathname === "/api/naver/catalog/upload" || pathname === "/api/channel-commands" || pathname === "/api/detail/applies" || pathname === "/api/detail/sources" || pathname === "/api/detail/sets" || pathname === "/api/claims/report" || pathname === "/api/subscription/sync" || pathname.startsWith("/api/mcp/") || pathname.startsWith("/q/")) {
     return NextResponse.next();
   }
 
@@ -141,5 +141,5 @@ export const config = {
   // 2026-10-28 호출 감축: 자체 검증이 있어 위에서 그냥 통과시키던 경로(웹훅·크론·채널 명령·MCP·QR)와 txt·xml·json 파일은(public 의 html 2개는 로그인 보호를 유지)
   //  matcher 에서 아예 빼 미들웨어가 실행되지 않게 한다 — 미들웨어 실행도 Vercel 호출 한도(100만)에 함께 센다(10월 61%).
   //  link.seamonster.kr/코드 리라이트는 단일 세그먼트 경로라 여전히 matcher 에 남는다. docs/vercel-invocation-plan.md
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|q/|api/mcp/|api/channel-commands(?:/|$)|api/detail/applies(?:/|$)|api/b2b/schedule-digest(?:/|$)|api/analyst/cron(?:/|$)|api/b2b/deposits/webhook(?:/|$)|api/sms/otp(?:/|$)|api/instagram/webhook(?:/|$)|api/voc/tally$|api/naver/catalog/(?:sync|upload)(?:/|$)|api/claims/report(?:/|$)|api/subscription/sync(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|map|txt|xml|json|webmanifest)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|q/|api/mcp/|api/channel-commands(?:/|$)|api/detail/applies(?:/|$)|api/detail/sources(?:/|$)|api/detail/sets(?:/|$)|api/b2b/schedule-digest(?:/|$)|api/analyst/cron(?:/|$)|api/b2b/deposits/webhook(?:/|$)|api/sms/otp(?:/|$)|api/instagram/webhook(?:/|$)|api/voc/tally$|api/naver/catalog/(?:sync|upload)(?:/|$)|api/claims/report(?:/|$)|api/subscription/sync(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|map|txt|xml|json|webmanifest)$).*)"],
 };

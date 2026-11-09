@@ -34,9 +34,16 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// 가져오기 스크립트용 Bearer(업로드 공용 시크릿) — sources 와 같은 규칙
+function bearerOk(req: NextRequest): boolean {
+  const authz = req.headers.get("authorization") || "";
+  const keys = [process.env.NAVER_COMMERCE_CLIENT_SECRET, process.env.CRON_SECRET, process.env.DIGEST_CRON_KEY];
+  return keys.some((k) => k && k.trim() && authz === `Bearer ${k.trim()}`);
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const name = await loginName(req);
+    const name = (await loginName(req)) || (bearerOk(req) ? "가져오기" : null);
     if (!name) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
     const body = (await req.json().catch(() => ({}))) as { id?: number; name?: string; members?: number[]; position?: string };
     const setName = String(body.name || "").trim();
