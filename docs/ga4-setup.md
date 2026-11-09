@@ -89,6 +89,27 @@ Poke 연동 화면: Name 은 자유(예: 씨몬스터 GA), Server URL 은 위 �
 curl -s -X POST https://meeting-notes-beryl.vercel.app/api/mcp/ga -H "Authorization: Bearer $(cat ~/.secrets/mcp-api-key.txt)" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
+### 5-1. ChatGPT(개인 비서)에 붙이기 — 주소 키 경로 (2026-11-09)
+
+ChatGPT 의 사용자 지정 MCP 커넥터(개발자 모드)는 인증을 **OAuth 또는 '인증 없음'** 둘만 받는다. Bearer 헤더를 못 보내므로 같은 서버를 **주소에 키를 넣은 경로**로 한 번 더 연다. 도구·응답은 5 의 `/api/mcp/ga` 와 같다(`app/lib/mcp-ga.ts` 공용).
+
+- 주소: `https://meeting-notes-beryl.vercel.app/api/mcp/ga/<MCP_URL_KEY>` (베타는 같은 경로를 베타 도메인에).
+- 키: Vercel 환경 변수 `MCP_URL_KEY`(Production·Preview). 헤더 키 `MCP_API_KEY` 와 **다른 값**이라 따로 바꿀 수 있다. 원문은 `C:\Users\younh\.secrets\mcp-url-key.txt` — 대화·문서에 적지 않는다. 미설정이면 이 경로만 503(헤더 경로는 그대로 동작).
+- 주소에 키가 있으니 공유 링크처럼 다룬다(브라우저 기록·로그에 남을 수 있음). 새어 나갔다고 보이면 `MCP_URL_KEY` 만 바꾸고 재배포한 뒤 ChatGPT 커넥터 주소를 고친다.
+- ChatGPT Pro 는 개발자 모드 커넥터를 **읽기 도구만** 허용한다 — 우리 도구 3개는 전부 읽기 전용이라 해당 없음.
+
+ChatGPT 등록 순서
+1. ChatGPT 설정 › 앱(또는 커넥터) › 고급 › **개발자 모드** 켜기.
+2. 커넥터 **만들기**: 이름 자유(예: 씨몬스터 GA), MCP 서버 URL 은 위 주소(키 포함), 인증 **인증 없음**, 신뢰 확인 체크 → 만들기. 만들어지면 도구 3개(ga_report·ga_funnel·ga_catalog)가 목록에 보여야 한다.
+3. 새 대화에서 [+] › 개발자 모드 › 이 커넥터를 켜고 "지난주 공식몰 유입 채널별 세션 보여줘" 같은 질문으로 확인.
+4. 맞춤 설정(또는 프로젝트 지침)에 한 줄: "GA 숫자는 '씨몬스터 GA' 커넥터로 조회한다. 공식몰 데이터만 있고 어제까지 확정값이다. 구매 금액은 매출 원장과 기준이 달라 'GA 기준'이라고 적는다."
+
+연결 확인(키는 파일에서 읽는다):
+
+```bash
+curl -s -X POST "https://meeting-notes-beryl.vercel.app/api/mcp/ga/$(cat ~/.secrets/mcp-url-key.txt)" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
 ## 4. 그다음 (클로드가 함)
 
 AI 비서·종합 리포트에 `ga_report` 도구 — 기간·측정항목(세션·사용자·구매·구매액·전환율)·차원(채널·소스/매체·캠페인·랜딩·기기) 조회. 2 가 끝나야 실데이터로 검증한다.
