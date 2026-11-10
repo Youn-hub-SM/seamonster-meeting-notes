@@ -173,6 +173,7 @@ export async function handle(msg: Rpc): Promise<unknown | null> {
     }
   }
   if (method === "resources/list") return ok(id, { resources: [] });
+  if (method === "resources/templates/list") return ok(id, { resourceTemplates: [] }); // Codex 앱이 시작할 때마다 묻는다 — 빈 목록으로 답해 경고를 없앤다
   if (method === "prompts/list") return ok(id, { prompts: [] });
   return fail(id, -32601, `지원하지 않는 메서드: ${method}`);
 }
