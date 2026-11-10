@@ -138,9 +138,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [contentedita
   cursor: pointer; transition: background .15s, border-color .15s, color .15s;
 }
 .sm-tab:hover:not(.is-active):not(:disabled) { border-color: var(--sm-border-strong); color: var(--sm-black); }
-/* 활성 = 현재 위치(2026-11-08 unslop 점검) — 연주황 바탕 + 검정 글자 600 + 왼쪽 주황 점(시그니처). 옛 '주황 채움 + 흰 글자'는 3.4:1 이라 폐지 */
-.sm-tab.is-active { background: var(--sm-orange-light); border-color: var(--sm-orange-border); color: var(--sm-black); font-weight: 500; padding-left: 24px; }
-.sm-tab.is-active::before { content: ""; position: absolute; left: 11px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--sm-orange); }
+/* 활성 = 현재 위치(2026-11-08 unslop 점검) — 연주황 바탕 + 검정 글자. 왼쪽 주황 점은 2026-11-10 삭제(대표: 바탕으로 이미 활성이 보여 점은 군더더기). 옛 '주황 채움 + 흰 글자'는 3.4:1 이라 폐지 */
+.sm-tab.is-active { background: var(--sm-orange-light); border-color: var(--sm-orange-border); color: var(--sm-black); font-weight: 500; }
 .sm-tab:disabled { opacity: .5; cursor: not-allowed; }
 .sm-tab-count {
   font-size: var(--sm-fs-xs); font-weight: 600; line-height: 1; min-width: 16px; text-align: center;
@@ -270,7 +269,7 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: var(--sm-black);   /* 2026-11-08: 1차 버튼 = 검정 채움 + 흰 글자(13:1). 주황은 현재 위치 점·로고에만 */
+  background: var(--sm-black);   /* 2026-11-08: 1차 버튼 = 검정 채움 + 흰 글자(13:1). 주황은 로고·초점 링에만 */
   color: var(--sm-white);
   border: 1px solid transparent;
   border-radius: var(--sm-radius-btn);
@@ -711,9 +710,8 @@ a {
   display: flex; align-items: center; border-radius: 8px; position: relative;
 }
 .app-sb-tool-row:hover { background: var(--sm-bg); }
-/* 현재 위치(2026-11-08 unslop 점검, 대표 결정 2번): 연주황 바탕 + 검정 600 글자 + 왼쪽 주황 점 6px(시그니처). 주황 글자(3.15:1)는 폐지 */
+/* 현재 위치(2026-11-08 unslop 점검, 대표 결정 2번): 연주황 바탕 + 검정 글자. 주황 점은 2026-11-10 삭제. 주황 글자(3.15:1)는 폐지 */
 .app-sb-tool-row.is-active { background: var(--sm-orange-light); }
-.app-sb-tool-row.is-active::before, .app-sb-menu-item.is-active::before { content: ""; position: absolute; left: 2px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--sm-orange); }
 /* 한 클래스를 <a>(단일 메뉴)와 <button>(하위메뉴 펼침)이 같이 쓴다. 폼 컨트롤은 부모의 글꼴을
    물려받지 않아 line-height 를 안 적으면 버튼만 다른 줄 높이가 되어 행 높이가 어긋났다 —
    본문과 같은 1.6 으로 못 박아 두 형태를 같은 높이로 맞춘다(단일형 기준, <a> 쪽은 값 변화 없음). */

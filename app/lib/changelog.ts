@@ -34,6 +34,13 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-11-10",
+    tag: "개선",
+    tool: "전체",
+    title: "현재 위치 표시에서 주황 점을 뺐습니다",
+    desc: "활성 탭과 사이드바의 현재 메뉴 왼쪽에 찍히던 주황 점을 없앴습니다. 연주황 바탕만으로 현재 위치가 보입니다. 기능 변화는 없습니다.",
+  },
+  {
     date: "2026-11-08",
     tag: "개선",
     tool: "정기배송 분석",
