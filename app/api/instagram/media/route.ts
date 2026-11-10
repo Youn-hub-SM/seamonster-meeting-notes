@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const igUserId = new URL(req.url).searchParams.get("account") || "";
     const acc = (await getIgAccounts()).find((a) => a.igUserId === igUserId);
     if (!acc) return NextResponse.json({ ok: false, error: "등록되지 않은 계정입니다." }, { status: 404 });
-    const media = await listIgMedia(acc.token, 25);
+    const media = await listIgMedia(acc, 25);
     return NextResponse.json({
       ok: true,
       media: media.map((m) => ({

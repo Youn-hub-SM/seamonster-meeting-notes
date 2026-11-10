@@ -10,8 +10,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 // 인스타 댓글 웹훅 — 미들웨어 공개 예외(메타가 호출). 보안은 로그인 대신 서명으로:
-//  POST 본문의 X-Hub-Signature-256 을 앱 시크릿(IG_APP_SECRET)으로 검증 — 불일치는 무시.
-//  env: IG_WEBHOOK_VERIFY_TOKEN(구독 검증 GET), IG_APP_SECRET(서명 검증).
+//  POST 본문의 X-Hub-Signature-256 을 앱 시크릿으로 검증 — 불일치는 무시.
+//  시크릿은 둘 중 하나와 맞으면 통과: IG_APP_SECRET(Instagram 로그인 방식 = Instagram 앱 시크릿) ·
+//  META_APP_SECRET(통합 로그인 방식 = 앱 설정 › 기본 설정의 앱 시크릿, 2026-11-11). 같은 주소로 두 방식의 알림이 다 온다.
+//  env: IG_WEBHOOK_VERIFY_TOKEN(구독 검증 GET), IG_APP_SECRET·META_APP_SECRET(서명 검증, 하나 이상).
 
 // GET — 메타 대시보드의 웹훅 구독 검증(hub.challenge 에코)
 export async function GET(req: NextRequest) {
@@ -48,11 +50,12 @@ function validSignature(raw: string, header: string | null, secret: string): boo
 
 // POST — 댓글 이벤트. 항상 200(메타 재시도 폭주 방지), 처리 결과는 로그 테이블로.
 export async function POST(req: NextRequest) {
-  const secret = (process.env.IG_APP_SECRET || "").trim();
-  if (!secret) return NextResponse.json({ ok: false, error: "IG_APP_SECRET 미설정" }, { status: 503 });
+  const secrets = [process.env.IG_APP_SECRET, process.env.META_APP_SECRET].map((s) => (s || "").trim()).filter(Boolean);
+  if (!secrets.length) return NextResponse.json({ ok: false, error: "IG_APP_SECRET 미설정" }, { status: 503 });
 
   const raw = await req.text();
-  if (!validSignature(raw, req.headers.get("x-hub-signature-256"), secret)) {
+  const sig = req.headers.get("x-hub-signature-256");
+  if (!secrets.some((s) => validSignature(raw, sig, s))) {
     return NextResponse.json({ ok: false, error: "서명 불일치" }, { status: 401 });
   }
 
@@ -76,7 +79,8 @@ export async function POST(req: NextRequest) {
         const commenterId = String(v.from?.id || "");
         const mediaId = String(v.media?.id || "");
         if (!commentId || !mediaId) continue;
-        if (commenterId === igUserId) continue; // 우리 계정이 단 댓글/답글엔 DM 금지(루프 방지)
+        // 우리 계정이 단 댓글/답글엔 DM 금지(루프 방지). 방식에 따라 작성자 ID 체계가 다를 수 있어 아이디(username)로도 거른다
+        if (commenterId === igUserId || (v.from?.username && v.from.username === account.username)) continue;
 
         // 이 게시물의 켜져 있는 규칙 중 키워드가 맞는 첫 번째(댓글당 DM 은 어차피 1회)
         const { data: rules } = await db.from("ig_dm_rules").select("*")
@@ -106,7 +110,7 @@ export async function POST(req: NextRequest) {
         }
 
         try {
-          await sendPrivateReply(account.token, igUserId, commentId, renderDm(rule.message, v.from?.username || ""));
+          await sendPrivateReply(account, commentId, renderDm(rule.message, v.from?.username || ""));
           await db.from("ig_dm_logs").update({ status: "sent" }).eq("comment_id", commentId);
         } catch (e) {
           await db.from("ig_dm_logs").update({ status: "failed", error: String(e instanceof Error ? e.message : e).slice(0, 300) })

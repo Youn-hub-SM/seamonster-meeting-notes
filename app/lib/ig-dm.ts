@@ -1,11 +1,13 @@
 // 인스타 자동 DM — 계정 저장(b2b_settings KV)·규칙 판정·클릭 링크 파싱. (서버 전용: KV 접근)
 import { getKv, setKv } from "./b2b-settings";
+import type { IgKind } from "./instagram";
 
 // ── 계정(3개 운영) ── 토큰은 env 가 아니라 KV: 계정이 여럿이고 60일마다 갱신되는 값이라 화면에서 관리.
 export type IgAccount = {
   igUserId: string;    // 웹훅 entry.id 와 매칭
   username: string;
-  token: string;       // Instagram Login 장기 토큰(60일, 갱신 가능)
+  token: string;       // ig = Instagram 로그인 장기 토큰(60일, 갱신) · fb = 통합 로그인 시스템 사용자 토큰(만료 없음)
+  kind?: IgKind;       // 없으면 ig(2026-11-11 이전 기록). instagram.ts 가 이 값으로 호스트를 고른다
   updatedAt: string;   // 토큰 저장/갱신 시각 — 오래되면 계정 목록 조회 때 기회적으로 갱신
 };
 

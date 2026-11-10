@@ -8,8 +8,8 @@ import { qty, dateFull, dateTime } from "@/app/lib/format";
 // 인스타 자동 DM — 특정 게시물에 댓글이 달리면(선택: 키워드) 그 작성자에게 1회 DM(Private Reply).
 //  계정 3개 운영 · 규칙별 켜고 끄는 일정(start/end) · 브랜드링크(link.seamonster.kr)면 클릭수 자동 집계.
 
-type Account = { igUserId: string; username: string; tokenMasked: string; updatedAt: string };
-type AccountsRes = { ok: boolean; configured: { appSecret: boolean; verifyToken: boolean }; webhookUrl: string; accounts: Account[]; error?: string };
+type Account = { igUserId: string; username: string; kind?: "ig" | "fb"; tokenMasked: string; updatedAt: string };
+type AccountsRes = { ok: boolean; configured: { appSecret: boolean; metaSecret?: boolean; verifyToken: boolean }; webhookUrl: string; accounts: Account[]; error?: string };
 type Rule = {
   id: string; ig_user_id: string; media_id: string; media_permalink: string; media_caption: string;
   keyword: string; message: string; link: string; active: boolean;
@@ -81,7 +81,7 @@ export default function InstagramDmPage() {
     try {
       const j = await (await fetch("/api/instagram/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: tokenInput.trim() }) })).json();
       if (!j.ok) throw new Error(j.error);
-      setNotice(`@${j.added} 계정을 연결했습니다 — [웹훅 구독]까지 눌러야 댓글 알림이 옵니다`);
+      setNotice(`@${j.added} 계정을 연결했습니다 — [웹훅 구독]까지 눌러야 댓글 알림이 옵니다${j.skipped?.length ? ` (이미 연결된 @${j.skipped.join(", @")} 은 그대로 두었습니다)` : ""}`);
       setTokenInput("");
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "계정을 연결하지 못했습니다. 토큰을 확인하세요"); }
@@ -189,8 +189,11 @@ export default function InstagramDmPage() {
       {/* 연결 상태 */}
       <section className="b2b-card ig-setup">
         <div className="b2b-card-head"><span className="b2b-card-title">계정 연결</span></div>
-        {info && (!info.configured.appSecret || !info.configured.verifyToken) && (
+        {info && (!(info.configured.appSecret || info.configured.metaSecret) || !info.configured.verifyToken) && (
           <p className="ig-warn">서버 연동 준비 중</p>
+        )}
+        {info && !info.configured.metaSecret && info.accounts.some((a) => a.kind === "fb") && (
+          <p className="ig-warn">통합 로그인 계정의 댓글 알림을 받으려면 서버에 META_APP_SECRET 을 넣어야 합니다</p>
         )}
         <div className="ig-webhook-row">
           <span className="ig-webhook-label">웹훅 URL</span>
@@ -201,17 +204,16 @@ export default function InstagramDmPage() {
           {(info?.accounts || []).map((a) => (
             <div key={a.igUserId} className="ig-account">
               <span className="ig-account-name">@{a.username}</span>
-              <span className="sm-faint ig-account-meta">{a.tokenMasked} · 토큰 {dateFull(a.updatedAt)}</span>
+              <span className="sm-faint ig-account-meta">{a.tokenMasked} · {a.kind === "fb" ? `통합 로그인 · 만료 없음 · 연결 ${dateFull(a.updatedAt)}` : `토큰 ${dateFull(a.updatedAt)}`}</span>
               <button className="b2b-btn-secondary ig-btn-sm" onClick={() => subscribe(a.igUserId)} disabled={busy}>웹훅 구독</button>
               <IconButton label="연결 해제" onClick={() => removeAccount(a)}>✕</IconButton>
             </div>
           ))}
           {(info?.accounts.length || 0) === 0 && <p className="sm-faint">연결된 계정이 없습니다. 아래에 토큰을 넣어 연결하세요</p>}
         </div>
-        <span className="b2b-field-hint">인스타그램 로그인 장기 토큰을 계정별로 붙여넣는다</span>
         <div className="ig-token-row">
           <input className="b2b-input ig-token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)}
-            aria-label="인스타그램 장기 토큰" placeholder="예: IGQVJ..." spellCheck={false} />
+            aria-label="인스타그램 액세스 토큰" placeholder="예: IGAA… 또는 EAA…" spellCheck={false} />
           <button className="b2b-btn-secondary" onClick={addToken} disabled={busy || !tokenInput.trim()}>{busy ? "..." : "계정 연결"}</button>
           {!busy && !tokenInput.trim() && <span className="b2b-btn-why">토큰을 넣으면 켜집니다</span>}
         </div>

@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-11-11",
+    tag: "개선",
+    tool: "인스타 자동 DM",
+    title: "메타의 새 연결 방식(통합 로그인) 계정도 연결됩니다",
+    desc: "메타 개발자 화면이 통합 로그인 방식으로 바뀌어 새 계정의 토큰 종류가 달라졌습니다. 계정 연결 칸에 새 토큰(EAA…)을 붙여넣어도 연결되고, 이 토큰은 만료가 없습니다. 기존 계정은 그대로 동작합니다.",
+    href: "/instagram",
+  },
+  {
     date: "2026-11-10",
     tag: "개선",
     tool: "전체",
