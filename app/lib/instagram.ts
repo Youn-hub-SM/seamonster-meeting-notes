@@ -15,7 +15,7 @@ const HOST: Record<IgKind, string> = { ig: "https://graph.instagram.com", fb: "h
 export type IgAuth = { token: string; igUserId: string; kind?: IgKind };
 const kindOf = (a: { kind?: IgKind }): IgKind => (a.kind === "fb" ? "fb" : "ig");
 
-type IgError = { error?: { message?: string; code?: number } };
+type IgError = { error?: { message?: string; code?: number; error_subcode?: number } };
 
 async function igFetch<T>(kind: IgKind, path: string, token: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${HOST[kind]}/${VERSION}${path}`, {
@@ -24,7 +24,11 @@ async function igFetch<T>(kind: IgKind, path: string, token: string, init?: Requ
     cache: "no-store",
   });
   const j = (await res.json().catch(() => ({}))) as T & IgError;
-  if (!res.ok) throw new Error(`인스타 API ${res.status}: ${j?.error?.message || "요청 실패"}`);
+  if (!res.ok) {
+    const e = j?.error;
+    const code = e?.code ? ` (코드 ${e.code}${e.error_subcode ? `/${e.error_subcode}` : ""})` : "";
+    throw new Error(`인스타 API ${res.status}: ${e?.message || "요청 실패"}${code}`);
+  }
   return j;
 }
 
@@ -39,18 +43,56 @@ async function getIgProfile(token: string): Promise<IgProfile> {
 // 통합 로그인 토큰에 배정된 인스타 계정들(메타 개발자 화면 '액세스 토큰 생성'에서 추가한 계정).
 async function listAssignedIgAccounts(token: string): Promise<IgProfile[]> {
   const j = await igFetch<{ data?: { id?: string | number; username?: string }[] }>("fb", `/me/assigned_instagram_accounts?fields=id,username&limit=50`, token);
-  const list = (j.data || []).filter((a) => a.id && a.username).map((a) => ({ user_id: String(a.id), username: String(a.username) }));
-  if (!list.length) throw new Error("이 토큰에 배정된 인스타그램 계정이 없습니다 — 메타 개발자 화면에서 계정을 추가하고 토큰을 다시 만드세요.");
-  return list;
+  return (j.data || []).filter((a) => a.id && a.username).map((a) => ({ user_id: String(a.id), username: String(a.username) }));
+}
+// 계정 ID 로 직접 읽기(통합 로그인) — 배정 목록이 비어 올 때의 다른 길.
+async function getIgAccountById(token: string, igUserId: string): Promise<IgProfile> {
+  const j = await igFetch<{ id?: string | number; username?: string }>("fb", `/${encodeURIComponent(igUserId)}?fields=id,username`, token);
+  if (!j.id || !j.username) throw new Error("그 ID 로 인스타그램 계정을 읽지 못했습니다.");
+  return { user_id: String(j.id), username: String(j.username) };
+}
+// 토큰이 스스로 밝히는 정보(최선 노력) — 종류·권한·권한이 걸린 대상 ID. 실패하면 null.
+type FbTokenInfo = { type: string; scopes: string[]; targetIds: string[] };
+async function inspectFbToken(token: string): Promise<FbTokenInfo | null> {
+  try {
+    const j = await igFetch<{ data?: { type?: string; scopes?: string[]; granular_scopes?: { scope?: string; target_ids?: string[] }[] } }>(
+      "fb", `/debug_token?input_token=${encodeURIComponent(token)}`, token);
+    const d = j.data || {};
+    const targetIds = [...new Set((d.granular_scopes || []).filter((g) => (g.scope || "").startsWith("instagram_")).flatMap((g) => g.target_ids || []).map(String))];
+    return { type: d.type || "", scopes: d.scopes || [], targetIds };
+  } catch { return null; }
+}
+// 통합 로그인 토큰의 계정 찾기: ① 배정 목록 ② 직접 준 계정 ID ③ 토큰 권한의 대상 ID. 다 안 되면 메타의 답을 담아 알린다.
+export class IgNeedAccountId extends Error {}
+async function resolveFbAccounts(token: string, igUserId?: string): Promise<IgProfile[]> {
+  const assigned = await listAssignedIgAccounts(token); // 토큰이 틀리면 여기서 던진다
+  if (assigned.length) return assigned;
+  if (igUserId) {
+    try { return [await getIgAccountById(token, igUserId)]; }
+    catch (e) {
+      const info = await inspectFbToken(token);
+      const scopes = info?.scopes.length ? ` 토큰 권한: ${info.scopes.join(", ")}.` : "";
+      throw new Error(`계정 ${igUserId} 을(를) 이 토큰으로 읽지 못했습니다 — ${e instanceof Error ? e.message : e}.${scopes} 메타 구성에 business_management 권한이 빠졌거나 계정이 이 토큰에 배정되지 않은 경우입니다.`);
+    }
+  }
+  const info = await inspectFbToken(token);
+  const found: IgProfile[] = [];
+  for (const id of info?.targetIds || []) { try { found.push(await getIgAccountById(token, id)); } catch { /* 다음 ID */ } }
+  if (found.length) return found;
+  const scopes = info?.scopes.length ? ` 토큰 권한: ${info.scopes.join(", ")}.` : "";
+  throw new IgNeedAccountId(`이 토큰에 배정된 인스타그램 계정이 없습니다.${scopes} 메타 개발자 화면의 계정 이름 아래 숫자(계정 ID)를 함께 넣어 다시 눌러 보세요.`);
 }
 // 붙여넣은 토큰이 어느 방식인지 가려 계정을 읽는다. IG… 로 시작하면 ig 먼저, 아니면(EAA…) fb 먼저 — 틀리면 다른 쪽도 해 본다.
-export async function resolveIgToken(token: string): Promise<{ kind: IgKind; profiles: IgProfile[] }> {
+export async function resolveIgToken(token: string, igUserId?: string): Promise<{ kind: IgKind; profiles: IgProfile[] }> {
   const order: IgKind[] = /^IG/i.test(token) ? ["ig", "fb"] : ["fb", "ig"];
   let first: Error | null = null;
   for (const kind of order) {
     try {
-      return { kind, profiles: kind === "ig" ? [await getIgProfile(token)] : await listAssignedIgAccounts(token) };
-    } catch (e) { first = first || (e instanceof Error ? e : new Error(String(e))); }
+      return { kind, profiles: kind === "ig" ? [await getIgProfile(token)] : await resolveFbAccounts(token, igUserId) };
+    } catch (e) {
+      if (e instanceof IgNeedAccountId) throw e; // 토큰은 맞다 — 다른 방식으로 넘어가지 않는다
+      first = first || (e instanceof Error ? e : new Error(String(e)));
+    }
   }
   throw first || new Error("토큰을 확인하지 못했습니다.");
 }

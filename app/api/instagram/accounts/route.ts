@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveIgToken, refreshIgToken, subscribeWebhook } from "@/app/lib/instagram";
+import { resolveIgToken, refreshIgToken, subscribeWebhook, IgNeedAccountId } from "@/app/lib/instagram";
 import { getIgAccounts, saveIgAccounts, removeIgAccount } from "@/app/lib/ig-dm";
 
 export const runtime = "nodejs";
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 //      { subscribe: igUserId } — 그 계정을 앱 웹훅 수신자로 구독(comments)
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { token?: string; subscribe?: string };
+    const body = (await req.json()) as { token?: string; subscribe?: string; igUserId?: string };
     if (body.subscribe) {
       const acc = (await getIgAccounts()).find((a) => a.igUserId === body.subscribe);
       if (!acc) return NextResponse.json({ ok: false, error: "등록되지 않은 계정입니다." }, { status: 404 });
@@ -49,7 +49,8 @@ export async function POST(req: NextRequest) {
     }
     const token = (body.token || "").trim();
     if (!token) return NextResponse.json({ ok: false, error: "토큰을 붙여넣으세요." }, { status: 400 });
-    const { kind, profiles } = await resolveIgToken(token);
+    const wantId = (body.igUserId || "").replace(/\D/g, "");
+    const { kind, profiles } = await resolveIgToken(token, wantId || undefined);
     const now = new Date().toISOString();
     const current = await getIgAccounts();
     // 통합 로그인 토큰은 배정된 계정을 전부 돌려준다 — 이미 Instagram 로그인(ig)으로 연결돼 잘 돌고 있는 계정은 건드리지 않는다.
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
     await saveIgAccounts(accounts);
     return NextResponse.json({ ok: true, added: fresh.map((p) => p.username).join(", @"), skipped, kind, count: accounts.length });
   } catch (err) {
+    if (err instanceof IgNeedAccountId) return NextResponse.json({ ok: false, needAccountId: true, error: err.message }, { status: 422 });
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : "저장 실패" }, { status: 500 });
   }
 }

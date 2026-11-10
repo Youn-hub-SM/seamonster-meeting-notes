@@ -2606,6 +2606,7 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-black); }
 .ig-account-meta { font-size: var(--sm-fs-xs); }
 .ig-token-row { display: flex; gap: var(--sm-space-2); flex-wrap: wrap; }
 .ig-token-input { flex: 1; min-width: 260px; }
+.ig-id-input { flex: 0 0 200px; min-width: 160px; }
 .ig-btn-sm { padding: 4px 10px; font-size: var(--sm-fs-sm); white-space: nowrap; }
 .ig-rules-card { margin-bottom: var(--sm-space-3); }
 .ig-state { font-size: var(--sm-fs-xs); font-weight: 600; line-height: var(--sm-lh-ui); padding: 2px 8px; border-radius: var(--sm-radius-pill); white-space: nowrap;

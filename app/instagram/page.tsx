@@ -45,6 +45,8 @@ export default function InstagramDmPage() {
   const [notice, setNotice] = useState("");
 
   const [tokenInput, setTokenInput] = useState("");
+  const [idInput, setIdInput] = useState("");      // 토큰만으로 계정을 못 찾을 때만 묻는다
+  const [needId, setNeedId] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [draft, setDraft] = useState<RuleDraft | null>(null);
@@ -79,10 +81,11 @@ export default function InstagramDmPage() {
     if (!tokenInput.trim()) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const j = await (await fetch("/api/instagram/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: tokenInput.trim() }) })).json();
+      const j = await (await fetch("/api/instagram/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: tokenInput.trim(), igUserId: idInput.trim() || undefined }) })).json();
+      if (j.needAccountId) setNeedId(true);
       if (!j.ok) throw new Error(j.error);
       setNotice(`@${j.added} 계정을 연결했습니다 — [웹훅 구독]까지 눌러야 댓글 알림이 옵니다${j.skipped?.length ? ` (이미 연결된 @${j.skipped.join(", @")} 은 그대로 두었습니다)` : ""}`);
-      setTokenInput("");
+      setTokenInput(""); setIdInput(""); setNeedId(false);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "계정을 연결하지 못했습니다. 토큰을 확인하세요"); }
     setBusy(false);
@@ -214,6 +217,10 @@ export default function InstagramDmPage() {
         <div className="ig-token-row">
           <input className="b2b-input ig-token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)}
             aria-label="인스타그램 액세스 토큰" placeholder="예: IGAA… 또는 EAA…" spellCheck={false} />
+          {needId && (
+            <input className="b2b-input ig-id-input" value={idInput} onChange={(e) => setIdInput(e.target.value)} inputMode="numeric"
+              aria-label="인스타그램 계정 ID" placeholder="계정 ID 예: 1784…" spellCheck={false} />
+          )}
           <button className="b2b-btn-secondary" onClick={addToken} disabled={busy || !tokenInput.trim()}>{busy ? "..." : "계정 연결"}</button>
           {!busy && !tokenInput.trim() && <span className="b2b-btn-why">토큰을 넣으면 켜집니다</span>}
         </div>
