@@ -1,16 +1,17 @@
 "use client";
 
 // AI 에이전트 — 에이전트마다 보고서가 쌓이는 화면.
-//  위 탭 = 에이전트, 실행 줄 = 버전 고르기 + 덧붙일 말 + [업무 요청], 아래 = 보고서 목록(최신순, 버전 탭으로 거르기).
+//  위 탭 = 에이전트, 실행 줄 = 버전 고르기 + 덧붙일 말 + [업무 요청], 예약 줄 = 매주 n요일 n시까지 초안 작성, 아래 = 보고서 목록(최신순).
+//  보고서 한 장의 흐름: 작성 중 → 결재 대기 → 담당자가 [결재](초안 그대로) 또는 [피드백 보내기](에이전트가 고친 수정본) → 실제 요청서 작성.
 //  에이전트·버전 목록은 app/lib/agents/registry.ts — 새 에이전트·새 버전은 거기 한 줄이면 이 화면에 나타난다.
-//  에이전트는 요청서를 만들지 못한다. 보고서의 제안 수량을 사람이 확인·수정해 [도매 생산 요청서 만들기]를 눌러야 요청서가 생긴다.
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
-import { AGENTS, agentOf, latestVersion, type AgentMeta, type AgentReport, type DraftItem } from "@/app/lib/agents/registry";
+import { AGENTS, agentOf, latestVersion, nextTargetLabel, DEFAULT_SCHEDULE, WEEKDAYS, type AgentMeta, type AgentReport, type AgentSchedule, type DraftItem } from "@/app/lib/agents/registry";
 import { qty, dateTime } from "@/app/lib/format";
 
-const POLL_MS = 5000; // '작성 중'인 보고서가 있을 때만 그 한 장을 다시 읽는다
+const POLL_MS = 5000;              // 에이전트가 일하는 중인 보고서가 있을 때만 그 한 장을 다시 읽는다
+const TICK_LATE_MS = 2 * 3600_000; // 예약 신호(매시 45분)가 이보다 오래 안 왔으면 알린다
 
 // 본문 마크다운 — 에이전트 지침이 '## 제목 · - 목록 · **굵게**' 만 쓰게 돼 있다
 const bold = (t: string, k: string): ReactNode[] => t.split(/\*\*(.+?)\*\*/g).map((seg, i) => (i % 2 ? <strong key={`${k}-${i}`}>{seg}</strong> : seg));
@@ -46,50 +47,46 @@ type CardProps = {
 function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: CardProps) {
   const toast = useToast();
   const confirm = useConfirm();
-  const [qtys, setQtys] = useState<Record<string, string>>(() => Object.fromEntries(r.draft.map((d) => [d.sku, String(d.qty)])));
-  const [due, setDue] = useState(r.facts?.due_date || "");
-  const [feedback, setFeedback] = useState(r.feedback || "");
-  const [busy, setBusy] = useState<"" | "apply" | "feedback" | "remove">("");
+  const [feedback, setFeedback] = useState("");
+  const [busy, setBusy] = useState<"" | "approve" | "feedback" | "remove">("");
   const [err, setErr] = useState("");
-  // 작성 중이던 보고서가 끝나 제안이 들어오면 입력값을 그 수량으로 맞춘다
-  const draftKey = r.draft.map((d) => `${d.sku}:${d.qty}`).join("|");
-  useEffect(() => {
-    setQtys(Object.fromEntries(r.draft.map((d) => [d.sku, String(d.qty)])));
-    setDue(r.facts?.due_date || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey]);
-  useEffect(() => { setFeedback(r.feedback || ""); }, [r.feedback]);
 
-  const picked = r.draft.filter((d) => d.product_id && (Number(qtys[d.sku]) || 0) > 0);
-  const appliedBySku = useMemo(() => new Map((r.applied || []).map((a) => [a.sku, a])), [r.applied]);
-  const kept = r.applied ? r.applied.filter((a) => a.draft_qty != null && a.draft_qty === a.qty).length : 0;
+  const running = r.status === "running";
+  const revising = running && !!r.facts?.revising;
+  const failed = r.status === "error";
+  const closed = r.status === "done" && r.applied != null;       // 요청서로 작성됐거나 요청 없이 닫힘
+  const waiting = r.status === "done" && r.applied == null;      // 결재 대기
+  const items = r.draft.filter((d) => d.product_id && d.qty > 0);
+  const firstBySku = useMemo(() => new Map((r.facts?.first_draft || []).map((d) => [d.sku, d.qty])), [r.facts?.first_draft]);
+  const revised = !!r.facts?.first_draft && !revising;           // 피드백을 반영한 수정본을 보고 있다
 
-  const apply = async () => {
+  const approve = async () => {
     setErr("");
-    if (!picked.length) { setErr("요청할 품목의 수량을 1개 이상 입력하세요."); return; }
-    if (!(await confirm({ title: `${agent.output} 만들기`, body: `품목 ${picked.length}종을 '확정 필요' 상태의 요청서로 만들고 팀즈에 알립니다.`, action: "요청서 만들기", danger: false }))) return;
-    setBusy("apply");
+    if (!(await confirm({ title: "초안 결재", body: `품목 ${items.length}종이 ${agent.output}로 작성되고 팀즈에 알립니다.`, action: "결재", danger: false }))) return;
+    setBusy("approve");
     try {
-      const j = await (await fetch(`/api/agents/reports/${r.id}/apply`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: picked.map((d) => ({ sku: d.sku, qty: Number(qtys[d.sku]) })), due_date: due || undefined }) })).json();
+      const j = await (await fetch(`/api/agents/reports/${r.id}/apply`, { method: "POST" })).json();
       if (!j.ok) throw new Error(j.error);
       onChange(j.report);
-      toast.success(`요청서 ${j.request_no || ""}를 만들었습니다`);
-    } catch (e) { setErr(e instanceof Error ? e.message : "요청서를 만들지 못했습니다."); }
+      toast.success(`요청서 ${j.request_no || ""}로 작성했습니다`);
+    } catch (e) { setErr(e instanceof Error ? e.message : "요청서를 작성하지 못했습니다."); }
     finally { setBusy(""); }
   };
-  const saveFeedback = async () => {
+  const sendFeedback = async () => {
+    setErr("");
+    if (!feedback.trim()) { setErr("피드백을 입력하세요."); return; }
+    if (!(await confirm({ title: "피드백 보내기", body: `에이전트가 피드백대로 고친 수정본이 바로 ${agent.output}로 작성됩니다.`, action: "피드백 보내기", danger: false }))) return;
     setBusy("feedback");
     try {
-      const j = await (await fetch(`/api/agents/reports/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feedback }) })).json();
+      const j = await (await fetch(`/api/agents/reports/${r.id}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feedback }) })).json();
       if (!j.ok) throw new Error(j.error);
+      setFeedback("");
       onChange(j.report);
-      toast.success("평가를 저장했습니다");
-    } catch (e) { toast.error(e instanceof Error ? e.message : "평가를 저장하지 못했습니다."); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "피드백을 보내지 못했습니다."); }
     finally { setBusy(""); }
   };
   const remove = async () => {
-    if (!(await confirm({ title: "보고서 삭제", body: "이 보고서와 평가가 지워집니다. 되돌릴 수 없습니다.", action: "보고서 삭제" }))) return;
+    if (!(await confirm({ title: "보고서 삭제", body: "이 보고서가 지워집니다. 되돌릴 수 없습니다.", action: "보고서 삭제" }))) return;
     setBusy("remove");
     try {
       const j = await (await fetch(`/api/agents/reports/${r.id}`, { method: "DELETE" })).json();
@@ -98,8 +95,6 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
     } catch (e) { toast.error(e instanceof Error ? e.message : "보고서를 지우지 못했습니다."); setBusy(""); }
   };
 
-  const running = r.status === "running";
-  const failed = r.status === "error";
   const canRemove = !running && !r.request_id && (failed || isAdmin);
   return (
     <article className="ag-card">
@@ -108,43 +103,42 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
           <span className="ag-meta-time">{dateTime(r.created_at)}</span>
           <Pill tone="muted">{r.version}</Pill>
           {r.created_by && <span>{r.created_by}</span>}
-          {running && <Pill tone="muted">작성 중</Pill>}
+          {running && <Pill tone="muted">{revising ? "피드백 반영 중" : "작성 중"}</Pill>}
           {failed && <Pill tone="danger">실패</Pill>}
-          {r.status === "done" && (r.request_id || r.request_no
-            ? <Pill tone="success">요청서 {r.request_no || "만듦"}</Pill>
-            : <Pill tone="muted">제안 {r.draft.length}종</Pill>)}
-          {r.feedback && <Pill tone="muted">평가 있음</Pill>}
+          {waiting && <Pill tone="muted">결재 대기</Pill>}
+          {closed && (r.request_no || r.request_id ? <Pill tone="success">요청서 {r.request_no || "작성"}</Pill> : <Pill tone="muted">요청 없음</Pill>)}
           <span className="ag-meta-fold">{open ? "접기" : "펼치기"}</span>
         </div>
         <div className={`ag-summary ${running || failed ? "is-muted" : ""}`}>
-          {running ? "보고서를 작성하고 있습니다. 보통 1~3분 걸립니다." : failed ? (r.error || "작성하지 못했습니다.") : (r.summary || "요약 없음")}
+          {revising ? "피드백을 반영해 요청서를 작성하고 있습니다. 보통 1~3분 걸립니다."
+            : running ? "초안을 작성하고 있습니다. 보통 1~3분 걸립니다."
+            : failed ? (r.error || "작성하지 못했습니다.") : (r.summary || "요약 없음")}
         </div>
       </button>
 
       {open && !running && (
         <div className="ag-body">
           {r.instruction && <div className="ag-note"><strong>덧붙인 말</strong> {r.instruction}</div>}
+          {r.feedback && <div className="ag-note"><strong>피드백{r.feedback_by ? ` ${r.feedback_by}` : ""}</strong> {r.feedback}</div>}
           {!!r.facts?.warnings?.length && <div className="sm-warn"><ul>{r.facts.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
 
           {r.status === "done" && (
             <section>
-              <div className="ag-sec-title">제안 품목</div>
-              {r.draft.length === 0 ? <div className="b2b-empty">제안한 품목이 없습니다.</div> : (
-                <>
-                  <div className="b2b-table-wrap">
-                    <table className="b2b-table ag-table">
-                      <thead>
-                        <tr>
-                          <th>품목</th><th className="num">도매 재고</th><th className="num">하루 출고</th><th className="num">버티는 날</th>
-                          <th className="num">이미 요청</th><th className="num">소매 여유</th><th className="num">수식 권장</th><th className="num">제안</th>
-                          <th className="num">{r.applied ? "확정" : "요청 수량"}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {r.draft.map((d: DraftItem) => {
-                          const a = appliedBySku.get(d.sku);
-                          return (
-                            <Fragment key={d.sku}>
+              <div className="ag-sec-title">{revised ? "수정본" : "초안"}</div>
+              {r.draft.length === 0 ? <div className="b2b-empty">요청할 품목이 없습니다.</div> : (
+                <div className="b2b-table-wrap">
+                  <table className="b2b-table ag-table">
+                    <thead>
+                      <tr>
+                        <th>품목</th><th className="num">도매 재고</th><th className="num">하루 출고</th><th className="num">버티는 날</th>
+                        <th className="num">이미 요청</th><th className="num">소매 여유</th><th className="num">수식 권장</th><th className="num">요청 수량</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.draft.map((d: DraftItem) => {
+                        const before = revised ? firstBySku.get(d.sku) : undefined;
+                        return (
+                          <Fragment key={d.sku}>
                             <tr className="ag-item-row">
                               <td className="ag-item">
                                 <span className="ag-item-name">{d.name}{d.spec ? ` · ${d.spec}` : ""}</span>{d.urgent && <> <Pill tone="danger">급함</Pill></>}
@@ -156,37 +150,40 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
                               <td className="num">{num(d.open_req)}</td>
                               <td className="num">{num(d.retail_spare)}</td>
                               <td className="num">{num(d.formula)}</td>
-                              <td className="num">{num(d.qty)}</td>
-                              <td className="num">
-                                {r.applied
-                                  ? (a ? <>{num(a.qty)}{a.qty !== d.qty && <span className="ag-changed">수정됨</span>}</> : <span className="sm-muted">제외</span>)
-                                  : <input className="b2b-input ag-qty" inputMode="decimal" value={qtys[d.sku] ?? ""} aria-label={`${d.name} 요청 수량`} disabled={!d.product_id}
-                                      onChange={(e) => setQtys((m) => ({ ...m, [d.sku]: e.target.value.replace(/[^0-9.]/g, "") }))} />}
+                              <td className="num ag-qty">
+                                {num(d.qty)}
+                                {revised && before !== d.qty && <span className="ag-changed">{before == null ? "추가" : `초안 ${num(before)}`}</span>}
                               </td>
                             </tr>
-                            <tr className="ag-reason-row"><td colSpan={9}>{d.reason}</td></tr>
-                            </Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            <tr className="ag-reason-row"><td colSpan={8}>{d.reason}</td></tr>
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {closed && (r.request_id || r.request_no ? (
+                <div className="sm-success" style={{ marginTop: "var(--sm-space-3)" }}>
+                  {r.feedback ? "피드백을 반영해 " : ""}요청서 {r.request_no || ""}로 작성했습니다{r.applied_by ? ` (${r.feedback ? "피드백" : "결재"} ${r.applied_by})` : ""}.{" "}
+                  <Link href="/production/request" className="sm-link">생산 요청 열기</Link>
+                </div>
+              ) : (
+                <div className="sm-warn" style={{ marginTop: "var(--sm-space-3)" }}>요청할 품목이 없어 요청서를 작성하지 않았습니다.</div>
+              ))}
+
+              {waiting && (
+                <div className="ag-review">
+                  {r.facts?.revise_error && <div className="b2b-error">{r.facts.revise_error}</div>}
+                  {err && <div className="b2b-error">{err}</div>}
+                  <textarea className="b2b-input" value={feedback} onChange={(e) => setFeedback(e.target.value)} aria-label="에이전트에게 보낼 피드백" maxLength={2000}
+                    placeholder="예: 대구순살은 200개로 줄이고 삼치순살 100개 추가" />
+                  <div className="ag-review-actions">
+                    <button type="button" className="b2b-btn-primary" onClick={approve} disabled={!!busy || items.length === 0}>{busy === "approve" ? "작성하는 중" : "결재"}</button>
+                    <button type="button" className="b2b-btn-secondary" onClick={sendFeedback} disabled={!!busy}>{busy === "feedback" ? "보내는 중" : "피드백 보내기"}</button>
                   </div>
-                  {r.applied ? (
-                    <div className="sm-success" style={{ marginTop: "var(--sm-space-3)" }}>
-                      요청서 {r.request_no || ""}로 만들었습니다. 제안 {r.draft.length}종 중 {kept}종을 그대로 확정했습니다.{" "}
-                      <Link href="/production/request" className="sm-link">생산 요청 열기</Link>
-                    </div>
-                  ) : (
-                    <>
-                      {err && <div className="b2b-error" style={{ marginTop: "var(--sm-space-3)" }}>{err}</div>}
-                      <div className="ag-apply">
-                        <label className="b2b-field-label" htmlFor={`due-${r.id}`}>생산마감일</label>
-                        <input id={`due-${r.id}`} type="date" className="b2b-input ag-apply-due" value={due} onChange={(e) => setDue(e.target.value)} />
-                        <button type="button" className="b2b-btn-primary" onClick={apply} disabled={busy === "apply"}>{busy === "apply" ? "만드는 중" : `${agent.output} 만들기`}</button>
-                      </div>
-                    </>
-                  )}
-                </>
+                </div>
               )}
             </section>
           )}
@@ -200,27 +197,74 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
             </details>
           )}
 
-          {r.status === "done" && (
-            <section>
-              <div className="ag-sec-title">평가</div>
-              <div className="ag-feedback">
-                <textarea className="b2b-input" value={feedback} onChange={(e) => setFeedback(e.target.value)} aria-label="보고서 평가" placeholder="예: 연어는 격주로만 요청. 대구순살 수량은 절반이 맞음" maxLength={2000} />
-                <button type="button" className="b2b-btn-secondary" onClick={saveFeedback} disabled={busy === "feedback" || feedback.trim() === (r.feedback || "")}>평가 저장</button>
-              </div>
-            </section>
-          )}
-
           <div className="ag-foot">
+            {r.facts?.scheduled && <span>예약 작성</span>}
             {r.model && <span>{r.model}</span>}
             {r.est_usd != null && <span>${r.est_usd.toFixed(2)}</span>}
             {r.usage?.elapsed_ms != null && <span>{secs(r.usage.elapsed_ms)}</span>}
             {r.usage?.tool_calls != null && <span>조회 {r.usage.tool_calls}회</span>}
-            {r.feedback_by && <span>평가 {r.feedback_by}</span>}
             {canRemove && <button type="button" className="b2b-link-btn ag-foot-right" onClick={remove} disabled={busy === "remove"}>보고서 삭제</button>}
           </div>
         </div>
       )}
     </article>
+  );
+}
+
+// 예약 줄 — 매주 n요일 n시까지 초안 작성. 저장해야 반영된다.
+function ScheduleRow({ agentId }: { agentId: string }) {
+  const toast = useToast();
+  const [saved, setSaved] = useState<AgentSchedule | null>(null);
+  const [draft, setDraft] = useState<AgentSchedule>(DEFAULT_SCHEDULE);
+  const [lastTick, setLastTick] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setSaved(null);
+    fetch(`/api/agents/schedule?agent=${encodeURIComponent(agentId)}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (!alive || !j.ok) return;
+      setSaved(j.schedule); setDraft(j.schedule); setLastTick(j.lastTick); setNow(Date.now());
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [agentId]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const j = await (await fetch("/api/agents/schedule", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent: agentId, ...draft }) })).json();
+      if (!j.ok) throw new Error(j.error);
+      setSaved(j.schedule); setDraft(j.schedule); setNow(Date.now());
+      toast.success("예약을 저장했습니다");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "예약을 저장하지 못했습니다."); }
+    finally { setSaving(false); }
+  };
+
+  if (!saved) return null;
+  const dirty = draft.on !== saved.on || draft.weekday !== saved.weekday || draft.hour !== saved.hour;
+  const tickLate = saved.on && (!lastTick || now - Date.parse(lastTick) > TICK_LATE_MS);
+  return (
+    <>
+      <div className="ag-sched">
+        <span className="ag-sched-label">예약</span>
+        <div className="sm-tabs" role="group" aria-label="예약 켜기">
+          <button type="button" className={`sm-tab ${draft.on ? "is-active" : ""}`} aria-pressed={draft.on} onClick={() => setDraft((d) => ({ ...d, on: true }))}>켜짐</button>
+          <button type="button" className={`sm-tab ${!draft.on ? "is-active" : ""}`} aria-pressed={!draft.on} onClick={() => setDraft((d) => ({ ...d, on: false }))}>꺼짐</button>
+        </div>
+        <span>매주</span>
+        <select className="b2b-input ag-sched-select" value={draft.weekday} aria-label="초안 작성 요일" onChange={(e) => setDraft((d) => ({ ...d, weekday: Number(e.target.value) }))}>
+          {WEEKDAYS.map((w, i) => <option key={i} value={i}>{w}요일</option>)}
+        </select>
+        <select className="b2b-input ag-sched-select" value={draft.hour} aria-label="초안 작성 시각" onChange={(e) => setDraft((d) => ({ ...d, hour: Number(e.target.value) }))}>
+          {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h}시</option>)}
+        </select>
+        <span>까지 초안 작성</span>
+        <button type="button" className="b2b-btn-secondary" onClick={save} disabled={saving || !dirty}>예약 저장</button>
+        {saved.on && !dirty && <span className="ag-sched-next">다음 초안 {nextTargetLabel(saved, now)}</span>}
+      </div>
+      {tickLate && <div className="sm-warn" style={{ marginTop: "var(--sm-space-3)" }}>예약 신호가 오지 않습니다. 운영 배포 뒤 supabase/migrations/165_agent_tick.sql 을 적용하세요.</div>}
+    </>
   );
 }
 
@@ -266,7 +310,7 @@ export default function AgentsPage() {
     load(agentId);
   }, [agentId, load]);
 
-  // '작성 중'인 보고서만 5초마다 다시 읽는다(끝나면 멈춘다)
+  // 에이전트가 일하는 중(작성·피드백 반영)인 보고서만 5초마다 다시 읽는다(끝나면 멈춘다)
   const runningIds = reports.filter((r) => r.status === "running").map((r) => r.id).join(",");
   useEffect(() => {
     if (!runningIds) return;
@@ -340,8 +384,9 @@ export default function AgentsPage() {
           </select>
           <input className="b2b-input ag-run-note" value={instruction} onChange={(e) => setInstruction(e.target.value)} maxLength={1000}
             aria-label="에이전트에게 덧붙일 말" placeholder="예: 다음 주 화요일 A마트 대구순살 300개 발주 예정" onKeyDown={(e) => { if (e.key === "Enter" && !busyRun && !pending) start(); }} />
-          <button type="button" className="b2b-btn-primary" onClick={start} disabled={busyRun || !!pending}>{runningIds ? "작성 중" : starting ? "요청하는 중" : "업무 요청"}</button>
+          <button type="button" className="b2b-btn-primary" onClick={start} disabled={busyRun || !!pending}>{runningIds ? "작업 중" : starting ? "요청하는 중" : "업무 요청"}</button>
         </div>
+        {!pending && <ScheduleRow agentId={agentId} />}
         <details className="ag-versions">
           <summary>버전 기록 {agent.versions.length}개</summary>
           {agent.versions.map((v) => (

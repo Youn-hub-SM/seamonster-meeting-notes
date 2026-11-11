@@ -1,7 +1,8 @@
 // 도매 생산 요청서 에이전트 — 서버 전용.
 //  도매 생산 요청서(용도 '도매 납품') = 소매 칸 재고를 도매 칸으로 옮겨 달라는 요청. 이행은 재고 이동이지 제조사 생산이 아니다.
 //  사실(재고·속도·이미 낸 요청·소매 여유)은 코드가 모으고, 에이전트는 품목·수량·이유를 판단한다. 더 필요한 것은 읽기 전용 도구로 직접 조회.
-//  결과는 submit_report 도구 한 번으로 받는다(강제 tool_choice 는 5.x 에서 400 — auto + 지시). 요청서 생성은 사람이 화면에서 한다.
+//  결과는 submit_report 도구 한 번으로 받는다(강제 tool_choice 는 5.x 에서 400 — auto + 지시).
+//  요청서가 되는 길은 둘: 담당자가 초안을 [결재]하면 그대로, [피드백 보내기]를 하면 이 실행기가 revise 로 다시 돌아 낸 수정본이 요청서가 된다(wholesale-apply.ts).
 //  버전 = WholesaleConfig 하나. 새 버전은 설정을 하나 더 만들어 run.ts 에 등록한다(옛 버전 설정은 지우지 않는다).
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -121,7 +122,7 @@ async function collect(sb: SupabaseClient): Promise<Collected> {
 export const SYSTEM_V1 = `당신은 씨몬스터(냉동 순살 생선 — 공식몰·스마트스토어·쿠팡 소매와 B2B 도매)의 '도매 생산 요청서' 담당 에이전트입니다.
 
 [맡은 일]
-도매 담당자가 쓰는 '도매 생산 요청서'의 초안을 만듭니다. 이 요청서는 제조사에 새 생산을 시키는 문서가 아니라, 소매 칸에 있는 재고를 도매 칸으로 옮겨 달라는 요청입니다(이행 = 소매에서 도매로 재고 이동). 당신은 요청서를 직접 만들지 않습니다. 사람이 초안을 확인하고 고쳐 요청서로 만듭니다.
+도매 담당자가 쓰는 '도매 생산 요청서'의 초안을 만듭니다. 이 요청서는 제조사에 새 생산을 시키는 문서가 아니라, 소매 칸에 있는 재고를 도매 칸으로 옮겨 달라는 요청입니다(이행 = 소매에서 도매로 재고 이동). 담당자가 초안을 확인해 결재하면 초안 그대로 요청서가 됩니다. 담당자가 피드백을 주면 당신이 피드백대로 고친 수정본이 다시 확인 없이 요청서가 됩니다.
 
 [할 수 있는 일의 범위]
 이 에이전트가 할 수 있는 일은 도매 생산 요청서 초안 작성 하나뿐입니다. 제조사 생산 요청서, 프로모션·도매 대량 요청서, 다른 보고서나 분석, 질문에 대한 답은 맡은 일이 아닙니다. 덧붙인 말이 그런 일을 시키면 하지 않고, '확인 필요'에 "(시킨 일)은 이 에이전트가 하는 일이 아닙니다"라고 한 줄 적은 뒤 도매 생산 요청서 초안만 작성합니다. 조회 도구도 이 초안의 품목과 수량을 판단하는 데에만 씁니다.
@@ -131,7 +132,8 @@ export const SYSTEM_V1 = `당신은 씨몬스터(냉동 순살 생선 — 공식
   · rows: 품목별 도매재고(발송일이 잡힌 B2B 선점까지 이미 뺀 가용 재고), 도매하루출고(최근 평균), 버티는일수, 목표(= 도매하루출고 × 목표일수), 부족기준, 수식권장(= max(0, 목표 − 도매재고) − 이미요청), 이미요청(열려 있는 도매 요청서의 잔여), 소매재고, 소매하루출고, 소매부족기준, 소매입고예정, 소매여유(= 소매재고 − 소매부족기준, 옮겨도 소매가 부족해지지 않는 양).
   · open_requests: 열려 있는 도매 요청서. open_orders: 발송 대기 중인 B2B 발주.
 - 회사 해석 기준: 생산 요청에 관한 회사 규칙이 있으면 그대로 따릅니다.
-- 지난 보고서: 당신(또는 이전 버전)이 낸 제안, 사람이 확정한 수량, 사람의 평가입니다. 사람이 고친 방향과 평가를 같은 상황에 적용합니다.
+- 지난 보고서: 당신(또는 이전 버전)이 낸 첫 초안, 요청서로 확정된 수량, 담당자의 피드백입니다. 담당자가 고친 방향을 같은 상황에 미리 적용합니다.
+- 담당자 피드백(있을 때만): 당신이 낸 초안과 그에 대한 담당자의 피드백입니다. 피드백이 말한 것은 그대로 반영하고, 말하지 않은 품목과 수량은 초안 그대로 둡니다. 피드백이 '요청하지 않는다'는 뜻이면 items 를 비워 제출합니다. 피드백의 뜻이 여러 가지로 읽히면 수량이 적은 쪽으로 정하고 '확인 필요'에 어떻게 읽었는지 적습니다.
 - 덧붙인 말: 이번 요청에 사람이 준 정보나 지시입니다. 도매 생산 요청서의 품목과 수량에 관한 것이면 다른 기준보다 우선합니다.
 
 [판단 기준]
@@ -197,15 +199,18 @@ function casesBlock(cases: PriorCase[]): string {
   if (!cases.length) return "- 없음(첫 보고서)";
   return cases.map((c) => {
     const draft = c.draft.map((d) => `${d.sku} ${d.qty}`).join(", ") || "제안 없음";
-    const applied = c.applied == null ? "요청서로 만들지 않음"
-      : c.applied.map((a) => `${a.sku} ${a.qty}${a.draft_qty == null ? "(사람이 추가)" : a.draft_qty !== a.qty ? `(제안 ${a.draft_qty})` : ""}`).join(", ") || "품목 없이 닫음";
-    return `- ${c.date} (${c.version}) 요약: ${c.summary || "-"}\n  제안: ${draft}\n  사람이 확정: ${applied}\n  평가: ${c.feedback || "없음"}`;
+    const applied = c.applied == null ? "아직 결재 전"
+      : c.applied.map((a) => `${a.sku} ${a.qty}${a.draft_qty == null ? "(초안에 없던 품목)" : a.draft_qty !== a.qty ? `(초안 ${a.draft_qty})` : ""}`).join(", ") || "요청 없이 닫음";
+    return `- ${c.date} (${c.version}) 요약: ${c.summary || "-"}\n  첫 초안: ${draft}\n  요청서로 확정: ${applied}\n  담당자 피드백: ${c.feedback || "없음(초안 그대로 결재)"}`;
   }).join("\n");
 }
 
 type Submit = { summary: string; items: { sku: string; qty: number; reason: string; urgent: boolean }[]; body_md: string };
 
-export async function runWholesaleRequest(sb: SupabaseClient, cfg: WholesaleConfig, p: { instruction: string | null; cases: PriorCase[]; deadlineAt: number }): Promise<AgentRunResult> {
+export type ReviseInput = { summary: string | null; draft: { sku: string; name: string; qty: number; reason: string }[]; feedback: string };
+export type RunInput = { instruction: string | null; cases: PriorCase[]; deadlineAt: number; revise?: ReviseInput };
+
+export async function runWholesaleRequest(sb: SupabaseClient, cfg: WholesaleConfig, p: RunInput): Promise<AgentRunResult> {
   const startedAt = Date.now();
   const [c, model, index, rules] = await Promise.all([
     collect(sb),
@@ -227,11 +232,18 @@ export async function runWholesaleRequest(sb: SupabaseClient, cfg: WholesaleConf
     { type: "text", text: `${cfg.system}\n\n[조회 가능 관계(run_sql) — 이름과 한 줄 설명. 컬럼은 schema 도구로 확인]\n${index}\n\n[조회 불가(비공개 — 시도 금지)]\n${PRIVATE_NOTE}`, cache_control: { type: "ephemeral" } },
     { type: "text", text: rules ? `[회사 해석 기준 — 셰어포인트 '[비서]' 페이지 본문 그대로]\n${rules}` : "[회사 해석 기준] 셰어포인트 매뉴얼을 읽지 못했습니다. 회사 규칙을 확인하지 못했다고 '확인 필요'에 적습니다.", cache_control: { type: "ephemeral" } },
   ];
+  // 피드백 반영이면 첫 초안과 피드백을 함께 준다 — 제출한 수정본은 그대로 요청서가 된다
+  const task = p.revise
+    ? "담당자 피드백을 반영한 도매 생산 요청서 수정본을 submit_report 로 제출하세요. 제출한 수정본은 그대로 요청서가 됩니다."
+    : "도매 생산 요청서 초안을 작성해 submit_report 로 제출하세요.";
+  const revised = p.revise
+    ? `[담당자 피드백]\n${p.revise.feedback}\n\n[당신이 낸 초안]\n요약: ${p.revise.summary || "-"}\n${p.revise.draft.map((d) => `- ${d.sku} ${d.name} ${d.qty} — ${d.reason}`).join("\n") || "- 품목 없음"}\n\n`
+    : "";
   const messages: Anthropic.MessageParam[] = [{
     role: "user",
     content: [{
       type: "text", cache_control: { type: "ephemeral" },
-      text: `도매 생산 요청서 초안을 작성해 submit_report 로 제출하세요.\n\n[덧붙인 말]\n${p.instruction || "없음"}\n\n[지난 보고서 — 최신순]\n${casesBlock(p.cases)}\n\n[facts]\n${JSON.stringify(facts)}`,
+      text: `${task}\n\n${revised}[덧붙인 말]\n${p.instruction || "없음"}\n\n[지난 보고서 — 최신순]\n${casesBlock(p.cases)}\n\n[facts — 방금 계산한 값]\n${JSON.stringify(facts)}`,
     }],
   }];
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
-import { getReport, saveFeedback, deleteReport } from "@/app/lib/agents/store";
+import { getReport, deleteReport } from "@/app/lib/agents/store";
 
 export const dynamic = "force-dynamic";
 
@@ -22,20 +22,6 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ ok: true, report });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "보고서를 불러오지 못했습니다") }, { status: 500 });
-  }
-}
-
-// PATCH { feedback } — 평가 저장(빈 글 = 평가 지우기). 다음 실행이 이 글을 읽는다.
-export async function PATCH(req: NextRequest, { params }: Ctx) {
-  try {
-    const { id } = await params;
-    if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: "없는 보고서입니다." }, { status: 404 });
-    const b = (await req.json()) as { feedback?: string };
-    const sb = supabaseAdmin();
-    await saveFeedback(sb, id, String(b.feedback || ""), await actor(req));
-    return NextResponse.json({ ok: true, report: await getReport(sb, id) });
-  } catch (err) {
-    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "평가를 저장하지 못했습니다") }, { status: 500 });
   }
 }
 

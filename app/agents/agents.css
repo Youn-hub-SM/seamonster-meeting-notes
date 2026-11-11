@@ -5,6 +5,12 @@
 .ag-run-version { flex: 0 0 auto; width: auto; min-width: 120px; }
 .ag-run-note { flex: 1 1 280px; min-width: 200px; }
 
+/* 예약 줄 — [켜짐|꺼짐] 매주 [요일] [시]까지 초안 작성 [예약 저장] */
+.ag-sched { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; margin-top: var(--sm-space-3); padding-top: var(--sm-space-3); border-top: 1px solid var(--sm-border-light); font-size: var(--sm-fs-base); }
+.ag-sched-label { font-size: var(--sm-fs-xs); font-weight: 600; color: var(--sm-text-mid); letter-spacing: var(--sm-ls-label); margin-right: var(--sm-space-1); }
+.ag-sched-select { width: auto; }
+.ag-sched-next { color: var(--sm-text-mid); font-size: var(--sm-fs-xs); font-variant-numeric: tabular-nums; }
+
 /* 버전 기록 */
 .ag-versions { margin-top: var(--sm-space-3); font-size: var(--sm-fs-base); }
 .ag-versions > summary { cursor: pointer; color: var(--sm-text-mid); font-size: var(--sm-fs-xs); font-weight: 500; width: fit-content; }
@@ -44,10 +50,12 @@
 /* 이유는 숫자 줄 아래 한 줄 — 열로 두면 표가 눌려 품목 칸이 세로로 접힌다 */
 .b2b-table.ag-table .ag-item-row td { border-bottom: 0; padding-bottom: 2px; }
 .b2b-table.ag-table .ag-reason-row td { padding-top: 0; white-space: normal; color: var(--sm-text-mid); line-height: var(--sm-lh-body); }
-.ag-qty { width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
+.b2b-table.ag-table td.ag-qty { font-weight: 600; }
 .ag-changed { color: var(--sm-text-mid); font-size: var(--sm-fs-xs); display: block; }
-.ag-apply { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; margin-top: var(--sm-space-3); }
-.ag-apply-due { width: auto; }
+/* 결재 대기 — 피드백 칸 + [결재] [피드백 보내기] */
+.ag-review { display: flex; flex-direction: column; gap: var(--sm-space-2); margin-top: var(--sm-space-4); }
+.ag-review textarea { min-height: 64px; resize: vertical; }
+.ag-review-actions { display: flex; gap: var(--sm-space-2); flex-wrap: wrap; }
 
 /* 보고서 본문(마크다운 — 제목·목록·굵게만) */
 .ag-md { line-height: var(--sm-lh-body); }
@@ -60,10 +68,6 @@
 .ag-tools > summary { cursor: pointer; font-size: var(--sm-fs-xs); font-weight: 500; color: var(--sm-text-mid); width: fit-content; }
 .ag-tools ol { margin: var(--sm-space-2) 0 0; padding-left: 20px; font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); }
 .ag-tools pre { margin: var(--sm-space-1) 0 var(--sm-space-2); padding: var(--sm-space-2) var(--sm-space-3); background: var(--sm-bg-subtle); border-radius: var(--sm-radius); font-family: var(--sm-mono); font-size: var(--sm-fs-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
-
-/* 평가 */
-.ag-feedback { display: flex; gap: var(--sm-space-2); align-items: flex-start; flex-wrap: wrap; }
-.ag-feedback textarea { flex: 1 1 320px; min-height: 64px; resize: vertical; }
 
 .ag-foot { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .ag-foot-right { margin-left: auto; }

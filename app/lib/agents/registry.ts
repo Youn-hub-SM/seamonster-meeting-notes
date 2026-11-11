@@ -29,7 +29,8 @@ export const AGENTS: AgentMeta[] = [
           "맡은 일은 도매 생산 요청서 초안 작성 하나 — 다른 일은 하지 않음",
           "도매 재고·출고 속도·이미 낸 요청·소매 여유를 읽고 품목과 수량을 제안",
           "판단에 더 필요한 것은 원장·발주를 직접 조회",
-          "지난 보고서의 확정 수량과 평가를 다음 작성에 반영",
+          "담당자가 결재하면 초안 그대로, 피드백을 보내면 고친 수정본이 요청서로 작성됨",
+          "지난 초안의 확정 수량과 피드백을 다음 작성에 반영",
         ],
       },
     ],
@@ -70,7 +71,14 @@ export type AgentReport = {
   summary: string | null;
   body_md: string | null;
   draft: DraftItem[];
-  facts: { today?: string; horizon_days?: number; lead_days?: number; due_date?: string | null; rows?: number; warnings?: string[] } | null;
+  facts: {
+    today?: string; horizon_days?: number; lead_days?: number; due_date?: string | null; rows?: number; warnings?: string[];
+    scheduled?: boolean;                                  // 예약 시각에 자동으로 작성된 초안
+    run_started?: string;                                 // 지금(또는 마지막) 실행이 시작된 시각 — 피드백 반영은 created_at 이 아니라 이 시각으로 멈춤을 가린다
+    revising?: boolean;                                   // 피드백을 반영해 다시 쓰는 중
+    first_draft?: { sku: string; name: string; qty: number }[]; // 피드백 전 첫 초안(수정본과 비교용)
+    revise_error?: string;                                // 피드백 반영 실패 사유(초안은 그대로 남는다)
+  } | null;
   tool_log: AgentToolLog[];
   model: string | null;
   usage: { input?: number; output?: number; rounds?: number; tool_calls?: number; elapsed_ms?: number } | null;
@@ -88,5 +96,27 @@ export type AgentReport = {
   feedback_by: string | null;
   feedback_at: string | null;
 };
+
+// ── 예약(초안을 매주 n요일 n시까지) ──
+//  Supabase pg_cron 이 매시 45분에 /api/agents/tick 을 두드리고(migration 165), 앱이 이 설정을 보고 작성 여부를 정한다.
+//  'n시까지' = 그 시각 15분 전에 시작(작성 1~4분). 요일·시각은 한국 시간.
+export type AgentSchedule = { on: boolean; weekday: number; hour: number }; // weekday 0=일 … 6=토
+export const DEFAULT_SCHEDULE: AgentSchedule = { on: false, weekday: 3, hour: 14 };
+export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+const KST = 9 * 3600_000, LEAD = 15 * 60_000;
+// 지금이 예약 실행 차례인가 — 맞으면 그 목표 시각의 키(YYYY-MM-DDTHH, 한국 시간), 아니면 null. 같은 키로는 한 번만 실행한다.
+export function dueTargetKey(s: AgentSchedule, nowMs: number): string | null {
+  if (!s.on) return null;
+  const t = new Date(nowMs + KST + LEAD);
+  return t.getUTCDay() === s.weekday && t.getUTCHours() === s.hour && t.getUTCMinutes() < 30 ? t.toISOString().slice(0, 13) : null;
+}
+// 다음 목표 시각(한국 시간) — 화면 표시용 'M/D(요일) H시'
+export function nextTargetLabel(s: AgentSchedule, nowMs: number): string {
+  const now = new Date(nowMs + KST);
+  const t = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), s.hour));
+  t.setUTCDate(t.getUTCDate() + ((s.weekday - t.getUTCDay() + 7) % 7));
+  if (t.getTime() - LEAD <= now.getTime()) t.setUTCDate(t.getUTCDate() + 7);
+  return `${t.getUTCMonth() + 1}/${t.getUTCDate()}(${WEEKDAYS[t.getUTCDay()]}) ${s.hour}시`;
+}
 
 export const PENDING_164 = "DB 준비 전입니다 — supabase/migrations/164_agent_reports.sql 을 적용하세요.";

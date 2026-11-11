@@ -85,6 +85,19 @@ export async function logProductionRequestCreated(reqNo: string, label: string, 
     detail,
   });
 }
+// AI 에이전트가 예약 시각에 초안을 올렸다 — 담당자에게 '결재 필요'를 알린다(생산 요청 알림과 같은 봇·같은 켜기 설정).
+export async function logAgentDraftReady(agentName: string, summary: string, detail?: string): Promise<void> {
+  await recordActivity({
+    event_type: "agent.draft_ready",
+    summary: `AI 에이전트 초안 · ${agentName} · 결재 필요${summary ? ` · ${summary}` : ""}`,
+    meta: { agent: agentName },
+    notify: true,
+    bot: "helper",
+    helperEvent: "prod_request",
+    actor: "AI 에이전트",
+    detail,
+  });
+}
 export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string, actor?: string | null, detail?: string): Promise<void> {
   if (fromStatus === toStatus) return;
   // 진행중·완료·취소는 Flow 알림(설정 체크리스트로 개별 제어), 다시열기 등은 변경기록만.
