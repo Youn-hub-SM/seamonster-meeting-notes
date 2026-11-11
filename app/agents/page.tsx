@@ -1,7 +1,7 @@
 "use client";
 
 // AI 에이전트 — 에이전트마다 보고서가 쌓이는 화면.
-//  위 탭 = 에이전트, 실행 줄 = 버전 고르기 + 덧붙일 말 + [업무 요청], 예약 줄 = 매주 n요일 n시까지 초안 작성, 아래 = 보고서 목록(최신순).
+//  위 탭 = 에이전트, 실행 줄 = 버전 고르기 + [업무 요청], 예약 줄 = 매주 n요일 n시까지 초안 작성, 아래 = 보고서 목록(최신순).
 //  보고서 한 장의 흐름: 작성 중 → 결재 대기 → 담당자가 [결재](초안 그대로) 또는 [피드백 보내기](에이전트가 고친 수정본) → 실제 요청서 작성.
 //  에이전트·버전 목록은 app/lib/agents/registry.ts — 새 에이전트·새 버전은 거기 한 줄이면 이 화면에 나타난다.
 import Link from "next/link";
@@ -273,7 +273,6 @@ export default function AgentsPage() {
   const [agentId, setAgentId] = useState(AGENTS[0].id);
   const agent = agentOf(agentId) ?? AGENTS[0];
   const [version, setVersion] = useState(latestVersion(agent).id);
-  const [instruction, setInstruction] = useState("");
   const [reports, setReports] = useState<AgentReport[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [more, setMore] = useState(false);
@@ -331,17 +330,17 @@ export default function AgentsPage() {
   const start = async () => {
     setStarting(true); setError("");
     try {
-      const j = await (await fetch("/api/agents/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent: agentId, version, instruction }) })).json();
+      const j = await (await fetch("/api/agents/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent: agentId, version }) })).json();
       if (!j.ok) throw new Error(j.error);
       const now = new Date().toISOString();
       const placeholder: AgentReport = {
-        id: j.id, agent: agentId, version, status: "running", instruction: instruction.trim() || null, summary: null, body_md: null, draft: [], facts: null, tool_log: [],
+        id: j.id, agent: agentId, version, status: "running", instruction: null, summary: null, body_md: null, draft: [], facts: null, tool_log: [],
         model: null, usage: null, est_usd: null, error: null, created_by: null, created_at: now, finished_at: null,
         request_id: null, request_no: null, applied: null, applied_by: null, applied_at: null, feedback: null, feedback_by: null, feedback_at: null,
       };
       setReports((list) => [placeholder, ...list]);
       setCounts((c) => ({ ...c, [version]: (c[version] || 0) + 1 }));
-      setInstruction(""); setFilter("전체");
+      setFilter("전체");
     } catch (e) { toast.error(e instanceof Error ? e.message : "업무를 요청하지 못했습니다."); }
     finally { setStarting(false); }
   };
@@ -382,8 +381,6 @@ export default function AgentsPage() {
           <select className="b2b-input ag-run-version" value={version} onChange={(e) => setVersion(e.target.value)} aria-label="에이전트 버전">
             {runnable.map((v) => <option key={v.id} value={v.id}>{v.id}{v.id === latest ? " (최신)" : ""}</option>)}
           </select>
-          <input className="b2b-input ag-run-note" value={instruction} onChange={(e) => setInstruction(e.target.value)} maxLength={1000}
-            aria-label="에이전트에게 덧붙일 말" placeholder="예: 다음 주 화요일 A마트 대구순살 300개 발주 예정" onKeyDown={(e) => { if (e.key === "Enter" && !busyRun && !pending) start(); }} />
           <button type="button" className="b2b-btn-primary" onClick={start} disabled={busyRun || !!pending}>{runningIds ? "작업 중" : starting ? "요청하는 중" : "업무 요청"}</button>
         </div>
         {!pending && <ScheduleRow agentId={agentId} />}

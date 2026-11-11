@@ -1,9 +1,8 @@
 /* AI 에이전트(/agents) 전용 — 접두사 .ag-*. 색·간격·글자는 globals.css :root 토큰만. */
 
-/* 실행 줄 — 버전 · 덧붙일 말 · [업무 요청] */
+/* 실행 줄 — 버전 · [업무 요청] */
 .ag-run { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; }
 .ag-run-version { flex: 0 0 auto; width: auto; min-width: 120px; }
-.ag-run-note { flex: 1 1 280px; min-width: 200px; }
 
 /* 예약 줄 — [켜짐|꺼짐] 매주 [요일] [시]까지 초안 작성 [예약 저장] */
 .ag-sched { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; margin-top: var(--sm-space-3); padding-top: var(--sm-space-3); border-top: 1px solid var(--sm-border-light); font-size: var(--sm-fs-base); }
