@@ -161,7 +161,7 @@ async function stageVoice(c: StageCtx): Promise<StageResult> {
     return { ...meterOut(m), counts, warnings, note: { key: "voice", text: "## 자료 한계\n- 읽을 고객 글이 없습니다(리뷰·문의·VOC 모두 비어 있음)." } };
   }
   const { text } = await converse(m, {
-    system: VOICE_SYSTEM, effort: "medium", maxTokens: 6000, deadlineAt: c.deadlineAt,
+    system: VOICE_SYSTEM, effort: "medium", maxTokens: 12000, deadlineAt: c.deadlineAt,
     content: [{ type: "text", text: `기준일 ${kstTodayLabel()}\n\n[공식몰 리뷰 — 최근 ${REVIEW_DAYS}일 ${reviews.total}건 중 ${reviews.items.length}건]\n${reviews.ok ? JSON.stringify(reviews.items) : reviews.note}\n\n[스마트스토어 문의·VOC — 최근 4주]\n${JSON.stringify(voiceForAi(voice))}` }],
   });
   if (!text) throw fail(m, "고객 목소리 정리가 비어 있습니다. [업무 요청]을 다시 누르세요.");
@@ -216,7 +216,7 @@ async function stageTrend(c: StageCtx): Promise<StageResult> {
   const m = await newMeter();
   const brief = await getAdBrief();
   const { submitted } = await converse<TrendSubmit>(m, {
-    system: TREND_SYSTEM, effort: "medium", maxTokens: 8000, deadlineAt: c.deadlineAt, webSearch: TREND_SEARCHES,
+    system: TREND_SYSTEM, effort: "medium", maxTokens: 12000, deadlineAt: c.deadlineAt, webSearch: TREND_SEARCHES,
     submit: { tool: trendTool, check: checkTrend },
     content: [{ type: "text", text: `기준일 ${kstTodayLabel()}\n\n[타깃 메모 — 담당자가 적은 것]\n${brief || "없음(고객 목소리의 타깃 단서로 판단)"}\n\n[고객 목소리 — 첫 단계 정리]\n${c.notes.voice || "없음"}\n\n[덧붙인 말]\n${c.report.instruction || "없음"}` }],
   });
@@ -415,8 +415,10 @@ async function stagePlan(c: StageCtx): Promise<StageResult> {
       ].join("\n\n"),
     },
   ];
+  // 생각(thinking)도 max_tokens 에 들어간다 — medium·8000 은 생각만으로 한도를 채워 잘렸다(2026-11-11 v2 첫 실행, 119초).
+  //  low 로 생각을 줄이고 한도는 넉넉히. 초당 약 65토큰이라 호출 제한 210초 안에 쓸 수 있는 양은 13,000토큰 안팎이다.
   const { submitted } = await converse<Plan>(m, {
-    system: PLAN_SYSTEM, effort: "medium", maxTokens: 8000, deadlineAt: c.deadlineAt,
+    system: PLAN_SYSTEM, effort: "low", maxTokens: 16000, deadlineAt: c.deadlineAt,
     submit: { tool: planTool, check: checkPlan }, content,
   });
   const s = submitted as Plan;
@@ -491,7 +493,7 @@ async function stageWrite(c: StageCtx): Promise<StageResult> {
   const others = (chunk: typeof todo) => plan.ideas.map((it, i) => ({ no: i + 1, title: it.title })).filter((x) => !chunk.some((y) => y.no === x.no)).map((x) => `${x.no} ${x.title}`).join(" · ");
   // 묶음마다 따로 부른다 — 한 묶음이 실패해도 나머지 문구는 살린다(실패한 소재는 문구 없이 목록에 남고 경고가 붙는다)
   const results = await Promise.allSettled(chunks.map((chunk) => converse<Copy[]>(m, {
-    system: WRITE_SYSTEM, effort: "medium", maxTokens: 6000, deadlineAt: c.deadlineAt,
+    system: WRITE_SYSTEM, effort: "low", maxTokens: 12000, deadlineAt: c.deadlineAt,
     submit: { tool: copiesTool, check: checkCopies },
     content: [{ type: "text", text: `아래 소재 ${chunk.length}건의 광고 문구를 써서 submit_copies 로 제출하세요.\n\n[쓸 소재]\n${JSON.stringify(chunk.map(({ no, it }) => ({ no, 이름: it.title, 구분: it.kind, 소구점: it.angle, 대상: it.target, 형식: it.format, 근거: it.basis })))}\n\n[같은 목록의 다른 소재 — 겹치지 않게 참고만]\n${others(chunk) || "없음"}\n\n${shared}` }],
   })));
