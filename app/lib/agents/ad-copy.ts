@@ -1,9 +1,10 @@
 // 광고 카피 에이전트 — 서버 전용. 매주 메타 광고 신규 소재 목록을 낸다(2026-11-11 대표 정의).
 //  하는 일: ① 공식몰 리뷰·스마트스토어 문의·VOC 에서 고객의 말을 뽑고 ② 타깃의 최근 경향을 웹에서 조사하고
 //   ③ 메타 광고 성과(효율 좋았던 것·해 보지 않은 것)와 담당자가 올린 타사 레퍼런스를 보고 ④ 신규 소재를 목록으로 낸다.
-//  세 단계로 나눠 돈다(staged.ts — 단계마다 함수 호출이 따로): voice → trend → compose.
-//   앞 두 단계는 조사 요약(facts.notes)만 남기고, 마지막 단계가 그 요약과 광고 성과·레퍼런스로 목록을 쓴다.
-//   피드백을 받으면 마지막 단계만 다시 돈다(조사 요약은 그대로).
+//  네 단계로 나눠 돈다(staged.ts — 단계마다 함수 호출이 따로): voice → trend → plan → write.
+//   앞 두 단계는 조사 요약(facts.notes)만 남긴다. plan 이 광고 성과·레퍼런스까지 보고 어떤 소재를 낼지 정하고(notes.plan),
+//   write 가 소재를 4건씩 나눠 동시에 문구를 쓴다. 피드백을 받으면 plan 부터 다시 돈다(조사 요약은 그대로).
+//   ※ v1 은 plan 과 write 가 한 번의 AI 호출이었는데, 첫 실행(2026-11-11)에서 210초 안에 못 끝나 시간 초과로 실패했다 — 그래서 v2 에서 갈랐다.
 //  개인정보: 고객 글은 가린 뒤(maskPii) AI 에만 보내고, 저장되는 요약에는 이름·연락처·주문 정보를 옮기지 않게 지침으로 막는다.
 //  이 에이전트는 읽기만 한다 — 광고를 켜거나 끄지 않고, 메타에 아무것도 쓰지 않는다.
 import Anthropic from "@anthropic-ai/sdk";
@@ -298,12 +299,14 @@ async function priorIdeas(sb: SupabaseClient, exceptId: string): Promise<string>
   }).join("\n");
 }
 
-// ── 3단계: 소재 작성 ──
+// ── 3단계: 소재 기획 — 어떤 소재를 낼지만 정한다(문구는 다음 단계) ──
 const IDEA_MIN = 8, IDEA_MAX = 12;
-const COMPOSE_SYSTEM = `당신은 ${COMPANY.replace("입니다.", "의 광고 카피 담당 에이전트입니다.")}
+const ROLE = COMPANY.replace("입니다.", "의 광고 카피 담당 에이전트입니다.");
+const PLAN_SYSTEM = `당신은 ${ROLE}
 
 [맡은 일]
 메타(인스타그램·페이스북) 광고의 신규 소재를 매주 목록으로 냅니다. 마케터가 이 목록에서 골라 제작합니다. 광고를 켜거나 끄는 일, 예산 조정, 다른 분석은 맡은 일이 아닙니다. 덧붙인 말이나 피드백이 그런 일을 시키면 하지 않고 '확인 필요'에 한 줄 적습니다.
+지금은 네 단계 중 셋째 단계입니다. 이번 주에 낼 소재를 정합니다. 광고 문구는 다음 단계에서 쓰므로 여기서는 쓰지 않습니다.
 
 [받는 자료]
 - 고객 목소리: 리뷰·문의·VOC 에서 당신이 앞 단계에 뽑은 정리.
@@ -317,23 +320,20 @@ const COMPOSE_SYSTEM = `당신은 ${COMPANY.replace("입니다.", "의 광고 �
 [소재를 정하는 법]
 1. 광고 성과에서 먼저 두 가지를 가립니다. (가) 효율이 좋았던 소구와 표현 — 광고비를 충분히 쓰고도 ROAS 가 계정 평균보다 높은 것. (나) 아직 해 보지 않은 소구 — 고객 목소리나 트렌드에는 있는데 광고 문구에는 없는 것. 광고비가 적은 광고의 ROAS 는 우연일 수 있으니 근거로 삼지 않습니다.
 2. 목록은 '새 시도'와 '변주'를 섞습니다. 새 시도 = (나)에서 나온 소재. 변주 = (가)를 형식·후킹·대상만 바꾼 소재. 새 시도가 절반을 넘게 합니다.
-3. 모든 소재는 후킹, 스토리, 제안 세 가지를 갖춥니다. 후킹은 첫 문장이나 영상 첫 1~3초, 스토리는 문제에서 공감을 거쳐 해결로 가는 전개, 제안은 혜택과 행동 유도입니다.
-4. 고객이 실제로 쓴 말을 살립니다. 고객 목소리에 없는 효능·수치·후기를 지어내지 않습니다.
-5. 타사 레퍼런스는 구조와 접근만 참고합니다. 문구를 그대로 옮기거나 타사 이름을 광고에 쓰지 않습니다.
-6. 지난 목록에 있던 소재를 이름만 바꿔 다시 내지 않습니다. 담당자 피드백이 있으면 그 방향을 미리 반영합니다.
-7. 식품 광고에서 문제가 되는 표현은 쓰지 않습니다: 질병 예방·치료 효과, 근거 없는 최상급('최고', '1위'), 확인되지 않은 원산지·인증·할인 조건. 가격·할인·증정은 자료에 있는 것만 쓰고, 없으면 제안을 일반적인 행동 유도로 쓰고 '확인 필요'에 적습니다.
-8. 소재는 ${IDEA_MIN}~${IDEA_MAX}건, 먼저 만들 만한 순서로 냅니다. 자료가 부족하면 건수를 줄이고 이유를 적습니다.
+3. 고객 목소리에 없는 효능·수치·후기를 근거로 삼지 않습니다.
+4. 타사 레퍼런스는 구조와 접근만 참고합니다. 타사 이름이나 문구를 소재에 쓰지 않습니다.
+5. 지난 목록에 있던 소재를 이름만 바꿔 다시 내지 않습니다. 담당자 피드백이 있으면 그 방향을 미리 반영합니다.
+6. 소재는 ${IDEA_MIN}~${IDEA_MAX}건, 먼저 만들 만한 순서로 냅니다. 자료가 부족하면 건수를 줄이고 이유를 적습니다.
 
 [피드백을 받았을 때]
-담당자 피드백과 당신이 냈던 목록을 함께 받습니다. 피드백이 말한 것은 그대로 반영하고, 말하지 않은 소재는 그대로 둡니다. 고친 목록 전체를 다시 제출합니다.
+담당자 피드백과 당신이 냈던 목록(번호 포함)을 함께 받습니다. 피드백이 말한 것은 그대로 반영합니다. 피드백이 말하지 않은 소재는 바꾸지 않고 keep_no 에 그 소재의 번호를 적습니다(문구까지 그대로 남습니다). 문구만 고치라는 피드백이면 keep_no 를 0 으로 하고 angle 에 무엇을 고칠지 적습니다.
 
-[제출 — submit_ideas 를 정확히 한 번 호출합니다. 글로만 답하고 끝내지 않습니다]
+[제출 — submit_plan 을 정확히 한 번 호출합니다. 글로만 답하고 끝내지 않습니다]
 - summary: 한 문장. 이번 주 목록의 방향.
 - ideas: 소재 배열. 항목마다
-  · title 소재 이름(15자 안쪽) · kind '새 시도' 또는 '변주' · angle 소구점 한 줄 · target 누구에게 한 줄
-  · format '이미지'·'영상'·'캐러셀' · hook · story · offer
-  · primary_text 광고 본문(바로 붙여 넣을 수 있게, 줄바꿈 포함 300자 안쪽) · headline 제목(25자 안쪽)
-  · visual 비주얼·촬영 안내 한두 문장 · basis 근거 한두 문장(어느 고객 목소리·트렌드·광고 성과·레퍼런스에서 나왔는지, 숫자가 있으면 숫자와 함께)
+  · title 소재 이름(15자 안쪽) · kind '새 시도' 또는 '변주' · angle 소구점 한 줄 · target 누구에게 한 줄 · format '이미지'·'영상'·'캐러셀'
+  · basis 근거 한두 문장(어느 고객 목소리·트렌드·광고 성과·레퍼런스에서 나왔는지, 숫자가 있으면 숫자와 함께)
+  · keep_no 피드백 반영 때 그대로 둘 지난 소재의 번호. 새로 쓰거나 고칠 소재, 그리고 피드백이 없을 때는 0.
 - body_md: 아래 틀. '##' 제목, '-' 목록, '**굵게**' 만 씁니다.
 
 ## 광고 성과에서 본 것
@@ -343,11 +343,12 @@ const COMPOSE_SYSTEM = `당신은 ${COMPANY.replace("입니다.", "의 광고 �
 ## 확인 필요
 - (사람이 확인할 것. 없으면 이 제목을 뺍니다)`;
 
-type IdeasSubmit = { summary: string; ideas: AdIdea[]; body_md: string };
+type PlanItem = { title: string; kind: AdIdea["kind"]; angle: string; target: string; format: AdIdea["format"]; basis: string; keep_no: number };
+type Plan = { summary: string; body_md: string; ideas: PlanItem[] };
 const str = { type: "string" as const };
-const ideasTool = (strict: boolean): Anthropic.Tool => ({
-  name: "submit_ideas", ...(strict ? { strict: true } : {}),
-  description: "신규 광고 소재 목록과 보고서를 제출합니다. 정확히 한 번 호출합니다.",
+const planTool = (strict: boolean): Anthropic.Tool => ({
+  name: "submit_plan", ...(strict ? { strict: true } : {}),
+  description: "이번 주에 낼 소재 기획과 보고서를 제출합니다. 정확히 한 번 호출합니다.",
   input_schema: {
     type: "object", additionalProperties: false, required: ["summary", "ideas", "body_md"],
     properties: {
@@ -355,12 +356,11 @@ const ideasTool = (strict: boolean): Anthropic.Tool => ({
       ideas: {
         type: "array",
         items: {
-          type: "object", additionalProperties: false,
-          required: ["title", "kind", "angle", "target", "format", "hook", "story", "offer", "primary_text", "headline", "visual", "basis"],
+          type: "object", additionalProperties: false, required: ["title", "kind", "angle", "target", "format", "basis", "keep_no"],
           properties: {
             title: str, kind: { type: "string", enum: ["새 시도", "변주"] }, angle: str, target: str,
-            format: { type: "string", enum: ["이미지", "영상", "캐러셀"] }, hook: str, story: str, offer: str,
-            primary_text: str, headline: str, visual: str, basis: str,
+            format: { type: "string", enum: ["이미지", "영상", "캐러셀"] }, basis: str,
+            keep_no: { type: "integer", description: "그대로 둘 지난 소재의 번호. 새로 쓰거나 고칠 소재는 0" },
           },
         },
       },
@@ -368,13 +368,14 @@ const ideasTool = (strict: boolean): Anthropic.Tool => ({
     },
   },
 });
-const checkIdeas = (input: unknown): IdeasSubmit | null => {
-  const s = input as Partial<IdeasSubmit> | null;
-  return s && typeof s.summary === "string" && Array.isArray(s.ideas) && typeof s.body_md === "string" ? (s as IdeasSubmit) : null;
+const checkPlan = (input: unknown): Plan | null => {
+  const s = input as Partial<Plan> | null;
+  return s && typeof s.summary === "string" && Array.isArray(s.ideas) && typeof s.body_md === "string" ? (s as Plan) : null;
 };
 const FORMATS = ["이미지", "영상", "캐러셀"];
+const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
 
-async function stageCompose(c: StageCtx): Promise<StageResult> {
+async function stagePlan(c: StageCtx): Promise<StageResult> {
   const today = kstTodayIso();
   const m = await newMeter();
   const warnings: string[] = [];
@@ -386,54 +387,138 @@ async function stageCompose(c: StageCtx): Promise<StageResult> {
     getAdBrief(),
   ]);
   if (!ads.ok) warnings.push(`${ads.note} — 광고 성과 없이 작성했습니다.`);
-  if (!refs.length) warnings.push("올라온 타사 레퍼런스가 없습니다.");
+  if (!refs.length && !warnings.some((w) => w.includes("레퍼런스"))) warnings.push("올라온 타사 레퍼런스가 없습니다.");
 
   const refText = refs.map((r, i) => ({ 번호: i + 1, 브랜드: r.brand, 채널: r.channel, 문구: cut(r.copy_text, 600) || null, 메모: cut(r.note, 300) || null, 이미지: r.images.length, 올린날: r.created_at.slice(0, 10) }));
   // 이미지는 최근 레퍼런스부터 8장까지 — 공개 주소 그대로 보낸다
   const images: { n: number; url: string }[] = [];
   refs.forEach((r, i) => { for (const url of r.images) if (images.length < REF_IMAGES && /^https:\/\//.test(url)) images.push({ n: i + 1, url }); });
+  const prev = c.revise?.ideas || [];
   const revised = c.revise
-    ? `[담당자 피드백]\n${c.revise.feedback}\n\n[당신이 낸 목록]\n${JSON.stringify(c.revise.ideas)}\n\n`
+    ? `[담당자 피드백]\n${c.revise.feedback}\n\n[당신이 낸 목록]\n${JSON.stringify(prev.map((d, i) => ({ 번호: i + 1, ...d })))}\n\n`
     : "";
   const content: Anthropic.ContentBlockParam[] = [
     ...images.flatMap(({ n, url }): Anthropic.ContentBlockParam[] => [{ type: "text", text: `타사 레퍼런스 ${n}번 이미지` }, { type: "image", source: { type: "url", url } }]),
     {
       type: "text",
       text: [
-        c.revise ? "담당자 피드백을 반영한 신규 소재 목록 전체를 submit_ideas 로 제출하세요." : "이번 주 신규 소재 목록을 작성해 submit_ideas 로 제출하세요.",
+        c.revise ? "담당자 피드백을 반영한 소재 기획 전체를 submit_plan 으로 제출하세요." : "이번 주에 낼 소재를 정해 submit_plan 으로 제출하세요.",
         `기준일 ${kstTodayLabel()}`,
         `${revised}[타깃 메모]\n${brief || "없음"}`,
         `[덧붙인 말]\n${c.report.instruction || "없음"}`,
         `[고객 목소리]\n${c.notes.voice || "없음"}`,
         `[타깃 트렌드]\n${c.notes.trend || "없음"}`,
         `[메타 광고 성과 — 최근 ${AD_DAYS}일, 집행 광고 ${ads.totalAds}개 중 광고비 상위 ${ads.rows.length}개, 계정평균ROAS ${ads.avgRoas}]\n${ads.ok ? JSON.stringify(ads.rows) : ads.note}`,
-        `[소재 보관함]\n${saved.length ? JSON.stringify(saved.slice(0, 20).map((s) => ({ 이름: s.name, 형식: s.format, 후킹: cut(s.hook, 150), 스토리: cut(s.story, 200), 제안: cut(s.offer, 150), ROAS: s.roas ?? null }))) : "없음"}`,
+        `[소재 보관함]\n${saved.length ? JSON.stringify(saved.slice(0, 20).map((x) => ({ 이름: x.name, 형식: x.format, 후킹: cut(x.hook, 150), 스토리: cut(x.story, 200), 제안: cut(x.offer, 150), ROAS: x.roas ?? null }))) : "없음"}`,
         `[타사 레퍼런스 — 담당자가 올린 ${refs.length}건]\n${refs.length ? JSON.stringify(refText) : "없음"}`,
         `[지난 목록 — 최신순]\n${prior}`,
       ].join("\n\n"),
     },
   ];
-  const { submitted } = await converse<IdeasSubmit>(m, {
-    system: COMPOSE_SYSTEM, effort: "high", maxTokens: 16000, deadlineAt: c.deadlineAt,
-    submit: { tool: ideasTool, check: checkIdeas }, content,
+  const { submitted } = await converse<Plan>(m, {
+    system: PLAN_SYSTEM, effort: "medium", maxTokens: 8000, deadlineAt: c.deadlineAt,
+    submit: { tool: planTool, check: checkPlan }, content,
   });
-  const s = submitted as IdeasSubmit;
+  const s = submitted as Plan;
   const seen = new Set<string>();
-  const draft: AdIdea[] = [];
+  const ideas: PlanItem[] = [];
   for (const it of s.ideas) {
     const title = cut(it?.title, 60);
-    if (!title || seen.has(title) || draft.length >= 15) continue;
+    if (!title || seen.has(title) || ideas.length >= 15) continue;
     seen.add(title);
-    const t = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
-    draft.push({
-      title, kind: it.kind === "변주" ? "변주" : "새 시도", angle: t(it.angle, 200), target: t(it.target, 200),
-      format: FORMATS.includes(it.format) ? it.format : "이미지", hook: t(it.hook, 400), story: t(it.story, 800), offer: t(it.offer, 400),
-      primary_text: t(it.primary_text, 1200), headline: t(it.headline, 120), visual: t(it.visual, 500), basis: t(it.basis, 600),
+    const keep = Number(it.keep_no);
+    ideas.push({
+      title, kind: it.kind === "변주" ? "변주" : "새 시도", angle: clip(it.angle, 300), target: clip(it.target, 200),
+      format: FORMATS.includes(it.format) ? it.format : "이미지", basis: clip(it.basis, 600),
+      keep_no: Number.isInteger(keep) && keep >= 1 && keep <= prev.length ? keep : 0,
     });
   }
-  const summary = s.summary.trim().slice(0, 300), body_md = s.body_md.trim().slice(0, 12000);
-  if (!draft.length && !body_md) throw fail(m, "AI 가 빈 목록을 돌려주었습니다. [업무 요청]을 다시 누르세요.");
-  return { ...meterOut(m), counts: { ads: ads.rows.length, references: refs.length }, warnings, final: { summary, body_md, draft } };
+  const plan: Plan = { summary: s.summary.trim().slice(0, 300), body_md: s.body_md.trim().slice(0, 12000), ideas };
+  if (!ideas.length && !plan.body_md) throw fail(m, "AI 가 빈 기획을 돌려주었습니다. [업무 요청]을 다시 누르세요.");
+  return { ...meterOut(m), counts: { ads: ads.rows.length, references: refs.length }, warnings, note: { key: "plan", text: JSON.stringify(plan) } };
 }
 
-export const AD_COPY_V1: StagedRunner = { stages: [stageVoice, stageTrend, stageCompose], reviseFrom: 2 };
+// ── 4단계: 카피 작성 — 기획한 소재를 4건씩 나눠 동시에 쓴다(한 번에 다 쓰면 한 호출이 210초를 넘긴다) ──
+const WRITE_CHUNK = 4;
+const WRITE_SYSTEM = `당신은 ${ROLE}
+지금은 마지막 단계입니다. 앞 단계에서 정한 소재마다 메타(인스타그램·페이스북) 광고 문구를 씁니다. 소재의 이름·소구점·대상·형식은 정해진 그대로 따릅니다.
+
+[쓰는 법]
+1. 모든 소재는 후킹, 스토리, 제안 세 가지를 갖춥니다. 후킹은 첫 문장이나 영상 첫 1~3초, 스토리는 문제에서 공감을 거쳐 해결로 가는 전개, 제안은 혜택과 행동 유도입니다.
+2. 고객이 실제로 쓴 말(고객 목소리)을 살립니다. 고객 목소리에 없는 효능·수치·후기를 지어내지 않습니다.
+3. 식품 광고에서 문제가 되는 표현은 쓰지 않습니다: 질병 예방·치료 효과, 근거 없는 최상급('최고', '1위'), 확인되지 않은 원산지·인증·할인 조건. 가격·할인·증정은 받은 자료에 있는 것만 쓰고, 없으면 제안을 일반적인 행동 유도로 씁니다.
+4. 타사 이름이나 타사 문구를 쓰지 않습니다.
+5. 소재끼리 첫 문장과 말투가 겹치지 않게 씁니다.
+
+[제출 — submit_copies 를 정확히 한 번 호출합니다. 글로만 답하고 끝내지 않습니다]
+받은 소재마다 한 항목씩, no 는 받은 번호 그대로.
+- hook 후킹 한두 문장 · story 스토리 두세 문장 · offer 제안 한 문장
+- primary_text 광고 본문(바로 붙여 넣을 수 있게, 줄바꿈 포함 300자 안쪽) · headline 제목(25자 안쪽)
+- visual 비주얼·촬영 안내 한두 문장`;
+
+type Copy = { no: number; hook: string; story: string; offer: string; primary_text: string; headline: string; visual: string };
+const copiesTool = (strict: boolean): Anthropic.Tool => ({
+  name: "submit_copies", ...(strict ? { strict: true } : {}),
+  description: "소재별 광고 문구를 제출합니다. 정확히 한 번 호출합니다.",
+  input_schema: {
+    type: "object", additionalProperties: false, required: ["copies"],
+    properties: {
+      copies: {
+        type: "array",
+        items: {
+          type: "object", additionalProperties: false, required: ["no", "hook", "story", "offer", "primary_text", "headline", "visual"],
+          properties: { no: { type: "integer", description: "받은 소재 번호 그대로" }, hook: str, story: str, offer: str, primary_text: str, headline: str, visual: str },
+        },
+      },
+    },
+  },
+});
+const checkCopies = (input: unknown): Copy[] | null => {
+  const s = input as { copies?: Copy[] } | null;
+  return s && Array.isArray(s.copies) && s.copies.length ? s.copies : null;
+};
+
+async function stageWrite(c: StageCtx): Promise<StageResult> {
+  const m = await newMeter();
+  let plan: Plan;
+  try { plan = JSON.parse(c.notes.plan || "") as Plan; } catch { throw fail(m, "소재 기획을 읽지 못했습니다. [업무 요청]을 다시 누르세요."); }
+  const prev = c.revise?.ideas || [];
+  const todo = plan.ideas.map((it, i) => ({ no: i + 1, it })).filter(({ it }) => !(it.keep_no && prev[it.keep_no - 1]));
+  const brief = await getAdBrief();
+  const shared = `[타깃 메모]\n${brief || "없음"}\n\n[덧붙인 말]\n${c.report.instruction || "없음"}\n\n${c.revise ? `[담당자 피드백]\n${c.revise.feedback}\n\n` : ""}[고객 목소리]\n${c.notes.voice || "없음"}\n\n[타깃 트렌드]\n${(c.notes.trend || "없음").split("\n## 출처")[0]}`;
+  const chunks: (typeof todo)[] = [];
+  for (let i = 0; i < todo.length; i += WRITE_CHUNK) chunks.push(todo.slice(i, i + WRITE_CHUNK));
+  const others = (chunk: typeof todo) => plan.ideas.map((it, i) => ({ no: i + 1, title: it.title })).filter((x) => !chunk.some((y) => y.no === x.no)).map((x) => `${x.no} ${x.title}`).join(" · ");
+  // 묶음마다 따로 부른다 — 한 묶음이 실패해도 나머지 문구는 살린다(실패한 소재는 문구 없이 목록에 남고 경고가 붙는다)
+  const results = await Promise.allSettled(chunks.map((chunk) => converse<Copy[]>(m, {
+    system: WRITE_SYSTEM, effort: "medium", maxTokens: 6000, deadlineAt: c.deadlineAt,
+    submit: { tool: copiesTool, check: checkCopies },
+    content: [{ type: "text", text: `아래 소재 ${chunk.length}건의 광고 문구를 써서 submit_copies 로 제출하세요.\n\n[쓸 소재]\n${JSON.stringify(chunk.map(({ no, it }) => ({ no, 이름: it.title, 구분: it.kind, 소구점: it.angle, 대상: it.target, 형식: it.format, 근거: it.basis })))}\n\n[같은 목록의 다른 소재 — 겹치지 않게 참고만]\n${others(chunk) || "없음"}\n\n${shared}` }],
+  })));
+  const byNo = new Map<number, Copy>();
+  let failed = "";
+  results.forEach((r) => {
+    if (r.status === "fulfilled") for (const cp of r.value.submitted || []) byNo.set(Number(cp.no), cp);
+    else failed = r.reason instanceof Error ? r.reason.message : "AI 호출 실패";
+  });
+  if (todo.length && !byNo.size) throw fail(m, failed || "문구를 하나도 쓰지 못했습니다. [업무 요청]을 다시 누르세요.");
+
+  const warnings: string[] = [];
+  const missing: number[] = [];
+  const draft: AdIdea[] = plan.ideas.map((it, i) => {
+    const kept = it.keep_no ? prev[it.keep_no - 1] : undefined;
+    if (kept) return kept;                                  // 피드백이 말하지 않은 소재 — 문구까지 그대로
+    const cp = byNo.get(i + 1);
+    if (!cp) missing.push(i + 1);
+    return {
+      title: it.title, kind: it.kind, angle: it.angle, target: it.target, format: it.format, basis: it.basis,
+      hook: clip(cp?.hook, 400), story: clip(cp?.story, 800), offer: clip(cp?.offer, 400),
+      primary_text: clip(cp?.primary_text, 1200), headline: clip(cp?.headline, 120), visual: clip(cp?.visual, 500),
+    };
+  });
+  if (missing.length) warnings.push(`${missing.join("·")}번 소재는 문구를 쓰지 못했습니다${failed ? `(${failed.slice(0, 80)})` : ""}. 피드백으로 다시 요청하세요.`);
+  return { ...meterOut(m), warnings, final: { summary: plan.summary, body_md: plan.body_md, draft } };
+}
+
+// v1(2026-11-11) = voice → trend → compose(기획+문구 한 번에). 첫 실행에서 compose 가 시간 초과로 실패해 종료 — 실행기는 남기지 않는다.
+export const AD_COPY_V2: StagedRunner = { stages: [stageVoice, stageTrend, stagePlan, stageWrite], reviseFrom: 2 };
