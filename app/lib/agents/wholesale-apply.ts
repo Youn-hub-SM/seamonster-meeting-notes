@@ -23,6 +23,7 @@ export async function applyWholesaleDraft(sb: SupabaseClient, report: AgentRepor
   const reasonOf = new Map(report.draft.map((d) => [d.sku, d.reason]));
   const { request } = await createProductionRequest(sb, {
     purpose: "도매 납품",
+    due_date: report.facts?.due_date || null,
     memo: `AI 에이전트 초안(${report.version}) · ${via}${report.summary ? ` — ${report.summary}` : ""}`.slice(0, 500),
     items: applied.map((a) => ({ product_id: a.product_id, requested_qty: a.qty, memo: (reasonOf.get(a.sku) || "").slice(0, 200) || null })),
     status: "요청",

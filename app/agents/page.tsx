@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { AGENTS, agentOf, latestVersion, nextTargetLabel, DEFAULT_SCHEDULE, WEEKDAYS, type AgentMeta, type AgentReport, type AgentSchedule, type DraftItem } from "@/app/lib/agents/registry";
-import { qty, dateTime } from "@/app/lib/format";
+import { qty, dateTime, dateShort } from "@/app/lib/format";
 
 const POLL_MS = 5000;              // 에이전트가 일하는 중인 보고서가 있을 때만 그 한 장을 다시 읽는다
 const TICK_LATE_MS = 2 * 3600_000; // 예약 신호(매시 45분)가 이보다 오래 안 왔으면 알린다
@@ -59,6 +59,8 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
   const items = r.draft.filter((d) => d.product_id && d.qty > 0);
   const firstBySku = useMemo(() => new Map((r.facts?.first_draft || []).map((d) => [d.sku, d.qty])), [r.facts?.first_draft]);
   const revised = !!r.facts?.first_draft && !revising;           // 피드백을 반영한 수정본을 보고 있다
+  const hasTrend = r.draft.some((d) => d.out7 !== undefined);    // v3~ 순수 도매 출고 추이
+  const hasRetail = r.draft.some((d) => d.retail_spare != null); // v1·v2 보고서에만 있던 소매 여유
 
   const approve = async () => {
     setErr("");
@@ -125,13 +127,17 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
           {r.status === "done" && (
             <section>
               <div className="ag-sec-title">{revised ? "수정본" : "초안"}</div>
+              {r.facts?.next_arrival && r.facts.due_date && (
+                <div className="ag-note" style={{ marginBottom: "var(--sm-space-2)" }}>입고 예정 {dateShort(r.facts.due_date)} · 다음 요청분 입고 {dateShort(r.facts.next_arrival)}까지 {qty(r.facts.horizon_days ?? 0)}일분 기준</div>
+              )}
               {r.draft.length === 0 ? <div className="b2b-empty">요청할 품목이 없습니다.</div> : (
                 <div className="b2b-table-wrap">
                   <table className="b2b-table ag-table">
                     <thead>
                       <tr>
                         <th>품목</th><th className="num">도매 재고</th><th className="num">하루 출고</th><th className="num">버티는 날</th>
-                        <th className="num">이미 요청</th><th className="num">소매 여유</th><th className="num">수식 권장</th><th className="num">요청 수량</th>
+                        {hasTrend && <><th className="num">최근 7일</th><th className="num">최근 30일</th></>}
+                        <th className="num">이미 요청</th>{hasRetail && <th className="num">소매 여유</th>}<th className="num">수식 권장</th><th className="num">요청 수량</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -147,15 +153,16 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
                               <td className="num">{num(d.wholesale_stock)}</td>
                               <td className="num">{num(d.daily_out)}</td>
                               <td className="num">{d.days_left == null ? "-" : `${qty(d.days_left)}일`}</td>
+                              {hasTrend && <><td className="num">{num(d.out7)}</td><td className="num">{num(d.out30)}</td></>}
                               <td className="num">{num(d.open_req)}</td>
-                              <td className="num">{num(d.retail_spare)}</td>
+                              {hasRetail && <td className="num">{num(d.retail_spare)}</td>}
                               <td className="num">{num(d.formula)}</td>
                               <td className="num ag-qty">
                                 {num(d.qty)}
                                 {revised && before !== d.qty && <span className="ag-changed">{before == null ? "추가" : `초안 ${num(before)}`}</span>}
                               </td>
                             </tr>
-                            <tr className="ag-reason-row"><td colSpan={8}>{d.reason}</td></tr>
+                            <tr className="ag-reason-row"><td colSpan={7 + (hasTrend ? 2 : 0) + (hasRetail ? 1 : 0)}>{d.reason}</td></tr>
                           </Fragment>
                         );
                       })}

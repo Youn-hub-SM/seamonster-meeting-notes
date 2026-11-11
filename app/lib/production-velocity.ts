@@ -14,6 +14,8 @@ export interface VelocitySnapshot {
   txCount: number;        // 집계에 쓴 출고 라인 수
   capped: boolean;        // 원장 전수 집계라 항상 false(이전 인터페이스 호환 유지)
   perSku: Record<string, number>; // SKU(대문자) → 일평균 출고량
+  // 도매 채널로 불렀을 때만 — perSku 를 만든 같은 행(칸 이동·대량 발송·제조사 반품 제외)의 창별 출고 합계. AI 에이전트가 추이를 본다.
+  windowTotals?: { d7: Record<string, number>; short: Record<string, number>; long: Record<string, number>; shortDays: number; longDays: number };
 }
 
 const kstToday = (): string => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -122,6 +124,8 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
 
   const totals = new Map<string, number>();       // 소매·레거시: 단일 창 / 도매: 장기(90일) 창
   const totalsShort = new Map<string, number>();  // 도매 전용: 단기(windowDays) 창
+  const totals7 = new Map<string, number>();      // 도매 전용: 최근 7일(추이 표시용 — 속도 계산에는 쓰지 않는다)
+  const weekFrom = dateAt(today, -7);
   const shortFrom = dateAt(today, -windowDays);
   let oldest = today;
   let txCount = 0;
@@ -144,11 +148,13 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
     if (!q) continue;
     totals.set(sku, (totals.get(sku) || 0) + q);
     if (isWholesale && r.txn_date && r.txn_date >= shortFrom) totalsShort.set(sku, (totalsShort.get(sku) || 0) + q);
+    if (isWholesale && r.txn_date && r.txn_date >= weekFrom) totals7.set(sku, (totals7.get(sku) || 0) + q);
     if (r.txn_date && r.txn_date < oldest) oldest = r.txn_date;
     txCount++;
   }
   const perSku: Record<string, number> = {};
   let spanDays: number;
+  let windowTotals: VelocitySnapshot["windowTotals"];
   if (isWholesale) {
     // 분모 고정(기획 6절) — 원장이 창보다 짧으면 최초 거래일부터. '창 안의 최초 행'으로 근사하면
     //  창 첫머리가 조용했을 때 분모가 줄어 평균이 부풀므로, 실제 최초 도매 출고일을 1행 조회로 확인한다.
@@ -167,10 +173,11 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
       perSku[sku] = Math.max(short, long);
     }
     spanDays = denShort;
+    windowTotals = { d7: Object.fromEntries(totals7), short: Object.fromEntries(totalsShort), long: Object.fromEntries(totals), shortDays: denShort, longDays: denLong };
   } else {
     spanDays = Math.min(windowDays, Math.max(1, daysBetween(oldest, today) || 1));
     for (const [sku, total] of totals) perSku[sku] = total / spanDays;
   }
 
-  return { computedAt: new Date().toISOString(), spanDays, txCount, capped: false, perSku };
+  return { computedAt: new Date().toISOString(), spanDays, txCount, capped: false, perSku, ...(windowTotals ? { windowTotals } : {}) };
 }

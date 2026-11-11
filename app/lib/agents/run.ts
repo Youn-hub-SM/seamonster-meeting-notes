@@ -6,7 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { agentOf, versionOf, type AgentReport } from "./registry";
 import { startReport, finishReport, failReport, priorCases, runningReportId, beginRevision, finishRevision, failRevision, getReport } from "./store";
-import { runWholesaleRequest, WHOLESALE_V1, WHOLESALE_V2, AgentRunError, type AgentRunResult, type RunInput } from "./wholesale-request";
+import { runWholesaleRequest, WHOLESALE_V1, WHOLESALE_V2, WHOLESALE_V3, AgentRunError, type AgentRunResult, type RunInput } from "./wholesale-request";
 import { applyWholesaleDraft } from "./wholesale-apply";
 import { getAssistantSettings, getAssistantMonthUsage, addAssistantUsage } from "../assistant";
 import { logAgentDraftReady } from "../b2b-activity";
@@ -20,6 +20,7 @@ const RUNNERS: Record<string, Record<string, Runner>> = {
   "wholesale-request": {
     v1: (sb, p) => runWholesaleRequest(sb, WHOLESALE_V1, p),
     v2: (sb, p) => runWholesaleRequest(sb, WHOLESALE_V2, p),
+    v3: (sb, p) => runWholesaleRequest(sb, WHOLESALE_V3, p),
   },
 };
 

@@ -24,7 +24,16 @@ export const AGENTS: AgentMeta[] = [
     output: "도매 생산 요청서",
     versions: [
       {
-        id: "v2", date: "2026-11-11",
+        id: "v3", date: "2026-11-11",
+        changes: [
+          "판단 재료를 순수 도매 출고량과 도매 재고 둘로 한정 — 소매 재고·소매 판매는 보지 않음, 도매 대량 제외",
+          "주 1회 요청·리드타임 7~10일 기준: 요청한 주의 다음 주 금요일 입고, 다음 요청분이 입고될 때까지 버틸 양만 요청",
+          "최근 7일·30일·90일 도매 출고를 함께 보고 일회성 발주는 걸러 냄",
+          "아직 확정하지 않은 도매 요청서의 잔여도 이미 요청한 양으로 뺌",
+        ],
+      },
+      {
+        id: "v2", date: "2026-11-11", retired: true,
         changes: [
           "도매 수요를 도매 칸의 일반 B2B 발송으로만 한정 — 소매·도매 대량·프로모션으로 옮긴 양과 대량 발주는 수요로 세지 않음",
           "발송 대기 발주 자료에서 대량 발주를 뺌",
@@ -32,7 +41,7 @@ export const AGENTS: AgentMeta[] = [
         ],
       },
       {
-        id: "v1", date: "2026-11-11",
+        id: "v1", date: "2026-11-11", retired: true,
         changes: [
           "맡은 일은 도매 생산 요청서 초안 작성 하나 — 다른 일은 하지 않음",
           "도매 재고·출고 속도·이미 낸 요청·소매 여유를 읽고 품목과 수량을 제안",
@@ -66,7 +75,10 @@ export type DraftItem = {
   days_left: number | null;    // 지금 재고로 버티는 일수(출고 0 이면 null)
   formula: number;             // 수식 권장(이미 낸 요청을 뺀 값)
   open_req: number;            // 이미 낸 도매 요청 잔여
-  retail_spare: number | null; // 소매에서 옮겨도 소매가 부족해지지 않는 양. null = 소매 원장 없음
+  retail_spare: number | null; // (v1·v2 보고서만) 소매에서 옮겨도 소매가 부족해지지 않는 양. v3 부터는 소매를 보지 않아 늘 null
+  out7?: number;               // (v3~) 최근 7일 순수 도매 출고
+  out30?: number;              // (v3~) 최근 30일 순수 도매 출고
+  need?: number;               // (v3~) 다음 요청분이 입고될 때까지 필요한 양 = 하루 출고 × 버틸 일수
 };
 export type AppliedItem = { sku: string; product_id: string; qty: number; draft_qty: number | null };
 export type AgentToolLog = { name: string; title: string; sql?: string; ok: boolean };
@@ -81,6 +93,7 @@ export type AgentReport = {
   draft: DraftItem[];
   facts: {
     today?: string; horizon_days?: number; lead_days?: number; due_date?: string | null; rows?: number; warnings?: string[];
+    next_arrival?: string;                                // (v3~) 다음 요청분 입고 예정일 — 이번 요청이 버텨야 하는 날
     scheduled?: boolean;                                  // 예약 시각에 자동으로 작성된 초안
     run_started?: string;                                 // 지금(또는 마지막) 실행이 시작된 시각 — 피드백 반영은 created_at 이 아니라 이 시각으로 멈춤을 가린다
     revising?: boolean;                                   // 피드백을 반영해 다시 쓰는 중
@@ -109,7 +122,7 @@ export type AgentReport = {
 //  Supabase pg_cron 이 매시 45분에 /api/agents/tick 을 두드리고(migration 165), 앱이 이 설정을 보고 작성 여부를 정한다.
 //  'n시까지' = 그 시각 15분 전에 시작(작성 1~4분). 요일·시각은 한국 시간.
 export type AgentSchedule = { on: boolean; weekday: number; hour: number }; // weekday 0=일 … 6=토
-export const DEFAULT_SCHEDULE: AgentSchedule = { on: false, weekday: 3, hour: 14 };
+export const DEFAULT_SCHEDULE: AgentSchedule = { on: false, weekday: 2, hour: 10 }; // 요청서는 보통 화요일에 쓴다(2026-11-11 대표)
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const KST = 9 * 3600_000, LEAD = 15 * 60_000;
 // 지금이 예약 실행 차례인가 — 맞으면 그 목표 시각의 키(YYYY-MM-DDTHH, 한국 시간), 아니면 null. 같은 키로는 한 번만 실행한다.
