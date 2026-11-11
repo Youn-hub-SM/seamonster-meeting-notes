@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getReport } from "@/app/lib/agents/store";
+import { agentOf } from "@/app/lib/agents/registry";
 import { startRevision, AgentStartError } from "@/app/lib/agents/run";
 
 export const dynamic = "force-dynamic";
@@ -23,13 +24,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const sb = supabaseAdmin();
     const report = await getReport(sb, id);
     if (!report) return NextResponse.json({ ok: false, error: "없는 보고서입니다." }, { status: 404 });
-    if (report.agent !== "wholesale-request") return NextResponse.json({ ok: false, error: "피드백을 받을 수 없는 보고서입니다." }, { status: 400 });
-    if (report.status !== "done") return NextResponse.json({ ok: false, error: "작성이 끝난 초안에만 피드백을 보낼 수 있습니다." }, { status: 409 });
+    const ideas = agentOf(report.agent)?.kind === "ideas"; // 소재 목록 — 요청서가 없어 닫히지 않는다. 피드백마다 목록을 다시 쓴다
+    if (report.agent !== "wholesale-request" && !ideas) return NextResponse.json({ ok: false, error: "피드백을 받을 수 없는 보고서입니다." }, { status: 400 });
+    if (report.status !== "done") return NextResponse.json({ ok: false, error: "작성이 끝난 보고서에만 피드백을 보낼 수 있습니다." }, { status: 409 });
     if (report.applied) return NextResponse.json({ ok: false, error: "이미 요청서로 작성한 보고서입니다. 요청서는 생산 요청 화면에서 고치세요." }, { status: 409 });
 
     const token = req.cookies.get("b2b_auth")?.value;
     const who = (await verifySession(token)) || resolveUserName(token);
-    const { run } = await startRevision(sb, report, feedback, who);
+    const { run } = await startRevision(sb, report, feedback, who, req.nextUrl.origin);
     after(run);
     return NextResponse.json({ ok: true, report: await getReport(sb, id) });
   } catch (err) {

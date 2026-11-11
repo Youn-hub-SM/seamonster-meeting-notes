@@ -14,6 +14,9 @@ export type AgentMeta = {
   id: string;          // agent_reports.agent
   name: string;        // 화면 이름
   output: string;      // 보고서로 만들 수 있는 것(버튼·문구용 명사)
+  kind?: "ideas";      // 보고서 모양. 없으면 요청서 초안(품목·수량 → 결재). "ideas" = 소재 목록(결재 없음, 피드백으로 다시 쓰기)
+  stages?: string[];   // 단계로 나눠 실행하는 에이전트의 단계 이름(순서대로) — 단계마다 함수 호출이 따로라 한 단계가 270초 안에만 끝나면 된다
+  schedule?: AgentSchedule; // 예약 기본값(없으면 DEFAULT_SCHEDULE)
   versions: AgentVersionMeta[]; // 최신이 맨 앞
 };
 
@@ -52,6 +55,28 @@ export const AGENTS: AgentMeta[] = [
       },
     ],
   },
+  {
+    id: "ad-copy",
+    name: "광고 카피",
+    output: "신규 소재 목록",
+    kind: "ideas",
+    stages: ["고객 목소리 분석", "타깃 트렌드 조사", "소재 작성"],
+    schedule: { on: false, weekday: 1, hour: 9 },
+    versions: [
+      {
+        id: "v1", date: "2026-11-11",
+        changes: [
+          "맡은 일은 메타 광고 신규 소재 목록 작성 하나 — 광고를 켜거나 끄지 않음",
+          "공식몰 리뷰·스마트스토어 문의·VOC 에서 고객이 쓰는 말과 구매 이유를 뽑음",
+          "타깃의 최근 경향을 웹에서 조사하고 출처를 남김",
+          "메타 광고 성과에서 효율이 좋았던 소구와 아직 해 보지 않은 소구를 가림",
+          "담당자가 올린 타사 광고 레퍼런스를 참고(문구를 베끼지 않음)",
+          "소재마다 후킹·스토리·제안과 광고 본문, 근거를 적음",
+          "지난 목록과 피드백을 읽어 같은 소재를 되풀이하지 않음",
+        ],
+      },
+    ],
+  },
 ];
 
 export const agentOf = (id: string): AgentMeta | undefined => AGENTS.find((a) => a.id === id);
@@ -81,6 +106,21 @@ export type DraftItem = {
   need?: number;               // (v3~) 다음 요청분이 입고될 때까지 필요한 양 = 하루 출고 × 버틸 일수
 };
 export type AppliedItem = { sku: string; product_id: string; qty: number; draft_qty: number | null };
+// 광고 소재 한 건(ad-copy 의 draft 원소) — 소재 기획 규칙: 후킹+스토리+제안 3요소(meta-creatives.ts 와 같은 틀)
+export type AdIdea = {
+  title: string;         // 소재 이름(컨셉)
+  kind: "새 시도" | "변주"; // 변주 = 효율이 좋았던 소재를 바꿔 본 것
+  angle: string;         // 소구점
+  target: string;        // 누구에게
+  format: "이미지" | "영상" | "캐러셀";
+  hook: string;          // ① 후킹(첫 문장·첫 1~3초)
+  story: string;         // ② 스토리(문제→공감→해결)
+  offer: string;         // ③ 제안(혜택·행동 유도)
+  primary_text: string;  // 광고 본문
+  headline: string;      // 제목
+  visual: string;        // 비주얼·촬영 안내
+  basis: string;         // 근거(어느 고객 목소리·트렌드·성과·레퍼런스에서 나왔나)
+};
 export type AgentToolLog = { name: string; title: string; sql?: string; ok: boolean };
 export type AgentReport = {
   id: string;
@@ -91,6 +131,7 @@ export type AgentReport = {
   summary: string | null;
   body_md: string | null;
   draft: DraftItem[];
+  ideas: AdIdea[];       // kind "ideas" 에이전트의 결과(DB 에서는 draft 칸에 들어 있다)
   facts: {
     today?: string; horizon_days?: number; lead_days?: number; due_date?: string | null; rows?: number; warnings?: string[];
     next_arrival?: string;                                // (v3~) 다음 요청분 입고 예정일 — 이번 요청이 버텨야 하는 날
@@ -99,6 +140,9 @@ export type AgentReport = {
     revising?: boolean;                                   // 피드백을 반영해 다시 쓰는 중
     first_draft?: { sku: string; name: string; qty: number }[]; // 피드백 전 첫 초안(수정본과 비교용)
     revise_error?: string;                                // 피드백 반영 실패 사유(초안은 그대로 남는다)
+    stage?: { done: number; total: number };              // (단계 실행) 끝낸 단계 수 / 전체 — done 번째 단계가 지금 도는 중
+    notes?: Record<string, string>;                       // (단계 실행) 단계가 남긴 조사 요약 — 다음 단계와 피드백 반영이 읽는다
+    counts?: Record<string, number>;                      // (ad-copy) 읽은 자료 수: reviews·inquiries·voc·ads·references·searches
   } | null;
   tool_log: AgentToolLog[];
   model: string | null;
@@ -123,6 +167,7 @@ export type AgentReport = {
 //  'n시까지' = 그 시각 15분 전에 시작(작성 1~4분). 요일·시각은 한국 시간.
 export type AgentSchedule = { on: boolean; weekday: number; hour: number }; // weekday 0=일 … 6=토
 export const DEFAULT_SCHEDULE: AgentSchedule = { on: false, weekday: 2, hour: 10 }; // 요청서는 보통 화요일에 쓴다(2026-11-11 대표)
+export const defaultScheduleOf = (agent: string): AgentSchedule => ({ ...(AGENTS.find((a) => a.id === agent)?.schedule ?? DEFAULT_SCHEDULE) });
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const KST = 9 * 3600_000, LEAD = 15 * 60_000;
 // 지금이 예약 실행 차례인가 — 맞으면 그 목표 시각의 키(YYYY-MM-DDTHH, 한국 시간), 아니면 null. 같은 키로는 한 번만 실행한다.
@@ -140,4 +185,5 @@ export function nextTargetLabel(s: AgentSchedule, nowMs: number): string {
   return `${t.getUTCMonth() + 1}/${t.getUTCDate()}(${WEEKDAYS[t.getUTCDay()]}) ${s.hour}시`;
 }
 
+export const PENDING_166 = "자료 표가 없습니다 — supabase/migrations/166_ad_copy_agent.sql 을 적용하세요.";
 export const PENDING_164 = "DB 준비 전입니다 — supabase/migrations/164_agent_reports.sql 을 적용하세요.";

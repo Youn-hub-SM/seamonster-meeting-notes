@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       const target = dueTargetKey(await getSchedule(a.id), now);
       if (!target) continue;
       if ((await getLastTarget(a.id)) === target) { skipped.push(`${a.id}: 이미 실행`); continue; }
-      const { run } = await startAgentRun(sb, { agent: a.id, version: latestVersion(a).id, instruction: null, who: "예약", scheduled: true });
+      const { run } = await startAgentRun(sb, { agent: a.id, version: latestVersion(a).id, instruction: null, who: "예약", scheduled: true, origin: req.nextUrl.origin });
       await setLastTarget(a.id, target); // 시작에 성공한 뒤에만 기록(상한·겹침으로 못 시작한 주는 건너뛴다 — 신호는 그 시각대에 한 번뿐)
       after(run);
       started.push(a.id);

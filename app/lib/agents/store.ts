@@ -3,7 +3,7 @@
 //   · 결재 = 초안 그대로 요청서 작성(request_id·applied)
 //   · 피드백 = 같은 보고서를 다시 running 으로(facts.revising) → 수정본으로 요청서 작성. 실패하면 초안을 남긴 채 결재 대기로 돌아온다.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AgentReport, AgentReportStatus, AppliedItem, DraftItem, AgentToolLog } from "./registry";
+import { agentOf, type AgentReport, type AgentReportStatus, type AppliedItem, type DraftItem, type AgentToolLog, type AdIdea } from "./registry";
 
 export function isPending164(err: unknown): boolean {
   const m = String((err as { message?: string })?.message ?? err ?? "");
@@ -25,12 +25,14 @@ function toReport(r: Row): AgentReport {
     if (facts?.revising) { status = "done"; facts = { ...facts, revising: false, revise_error: "피드백 반영이 끝나지 않고 멈췄습니다. 피드백을 다시 보내거나 결재하세요." }; }
     else { status = "error"; error = "작성이 끝나지 않고 멈췄습니다. [업무 요청]을 다시 누르세요."; }
   }
+  const ideas = agentOf(String(r.agent))?.kind === "ideas"; // 소재 목록 에이전트는 draft 칸에 소재 배열이 들어 있다
   return {
     id: String(r.id), agent: String(r.agent), version: String(r.version), status,
     instruction: (r.instruction as string | null) ?? null,
     summary: (r.summary as string | null) ?? null,
     body_md: (r.body_md as string | null) ?? null,
-    draft: arr<DraftItem>(r.draft),
+    draft: ideas ? [] : arr<DraftItem>(r.draft),
+    ideas: ideas ? arr<AdIdea>(r.draft) : [],
     facts,
     tool_log: arr<AgentToolLog>(r.tool_log),
     model: (r.model as string | null) ?? null,
@@ -103,12 +105,31 @@ export async function failReport(sb: SupabaseClient, id: string, message: string
   await sb.from("agent_reports").update({ ...(extra || {}), status: "error", error: message.slice(0, 1000), finished_at: new Date().toISOString() }).eq("id", id);
 }
 
+// ── 단계 실행(staged.ts) — 단계가 끝날 때마다 진행·조사 요약·비용을 같은 행에 적는다 ──
+export type StagePatch = {
+  facts: AgentReport["facts"]; tool_log: AgentToolLog[]; usage: AgentReport["usage"]; est_usd: number; model: string | null;
+  done?: { summary: string; body_md: string; draft: AdIdea[] }; // 마지막 단계 — 보고서를 닫는다
+};
+export async function saveStage(sb: SupabaseClient, id: string, p: StagePatch): Promise<void> {
+  const { done, ...rest } = p;
+  const { error } = await sb.from("agent_reports").update({
+    ...rest, ...(done ? { ...done, status: "done", error: null, finished_at: new Date().toISOString() } : {}),
+  }).eq("id", id);
+  if (error) throw error;
+}
+// 단계 실패 — 새 작성이면 실패로 닫고, 피드백 반영 중이면 목록을 남긴 채 완료로 되돌린다(사유는 facts.revise_error)
+export async function failStage(sb: SupabaseClient, id: string, message: string, p: Omit<StagePatch, "done">, revising: boolean): Promise<void> {
+  await sb.from("agent_reports").update(revising
+    ? { ...p, status: "done", facts: { ...(p.facts || {}), revising: false, revise_error: message.slice(0, 500) } }
+    : { ...p, status: "error", error: message.slice(0, 1000), finished_at: new Date().toISOString() }).eq("id", id);
+}
+
 // ── 피드백 반영(같은 보고서를 다시 쓴다) ──
 // 시작: 피드백을 적고 다시 '작성 중'으로. 첫 초안은 facts.first_draft 에 한 번만 남긴다(수정본과 비교·다음 실행의 사례).
 export async function beginRevision(sb: SupabaseClient, r: AgentReport, feedback: string, who: string | null): Promise<void> {
   const facts: Facts = {
     ...(r.facts || {}), revising: true, run_started: new Date().toISOString(), revise_error: undefined,
-    first_draft: r.facts?.first_draft ?? r.draft.map((d) => ({ sku: d.sku, name: d.name, qty: d.qty })),
+    ...(agentOf(r.agent)?.kind === "ideas" ? {} : { first_draft: r.facts?.first_draft ?? r.draft.map((d) => ({ sku: d.sku, name: d.name, qty: d.qty })) }),
   };
   const { error } = await sb.from("agent_reports").update({ status: "running", feedback: feedback.slice(0, 2000), feedback_by: who, feedback_at: new Date().toISOString(), facts }).eq("id", r.id);
   if (error) throw error;

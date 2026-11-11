@@ -11,6 +11,8 @@ import { applyWholesaleDraft } from "./wholesale-apply";
 import { getAssistantSettings, getAssistantMonthUsage, addAssistantUsage } from "../assistant";
 import { logAgentDraftReady } from "../b2b-activity";
 import { getAppBaseUrl } from "../b2b-settings";
+import { runStages, type StagedRunner } from "./staged";
+import { AD_COPY_V1 } from "./ad-copy";
 
 export const AGENT_DEADLINE_MS = 270_000; // 라우트 maxDuration 300
 
@@ -24,6 +26,13 @@ const RUNNERS: Record<string, Record<string, Runner>> = {
   },
 };
 
+// 단계로 나눠 도는 에이전트(staged.ts) — 단계마다 함수 호출이 따로라 전체 길이에 제한이 없다
+const STAGED: Record<string, Record<string, StagedRunner>> = {
+  "ad-copy": { v1: AD_COPY_V1 },
+};
+// 이 함수 호출이 끝나야 하는 시각 — Vercel 밖(로컬 개발)에는 300초 제한이 없어 단계를 한 호출에서 이어 돈다
+const fnDeadline = () => Date.now() + (process.env.VERCEL ? AGENT_DEADLINE_MS : 15 * 60_000);
+
 export class AgentStartError extends Error { status: number; constructor(m: string, status = 400) { super(m); this.status = status; } }
 
 async function guard(sb: SupabaseClient, agent: string): Promise<void> {
@@ -35,15 +44,19 @@ async function guard(sb: SupabaseClient, agent: string): Promise<void> {
 
 // 실행 준비 — 검증·상한 확인·'작성 중' 행 생성까지. 돌려준 run() 을 after() 에 넘겨 끝까지 돌린다.
 //  scheduled = 예약 틱이 시작한 실행(작성자 '예약', 끝나면 팀즈 알림).
-export async function startAgentRun(sb: SupabaseClient, p: { agent: string; version: string; instruction: string | null; who: string | null; scheduled?: boolean }): Promise<{ id: string; run: () => Promise<void> }> {
+//  origin = 이 요청이 들어온 주소 — 단계형 에이전트가 다음 단계를 같은 배포의 새 함수 호출로 넘길 때 쓴다.
+export async function startAgentRun(sb: SupabaseClient, p: { agent: string; version: string; instruction: string | null; who: string | null; scheduled?: boolean; origin?: string }): Promise<{ id: string; run: () => Promise<void> }> {
   const meta = agentOf(p.agent);
   const ver = meta && versionOf(meta, p.version);
   const runner = RUNNERS[p.agent]?.[p.version];
-  if (!meta || !ver || !runner) throw new AgentStartError("없는 에이전트 또는 버전입니다.");
+  const staged = STAGED[p.agent]?.[p.version];
+  if (!meta || !ver || (!runner && !staged)) throw new AgentStartError("없는 에이전트 또는 버전입니다.");
   if (ver.retired) throw new AgentStartError("더 실행하지 않는 버전입니다. 다른 버전을 고르세요.");
   await guard(sb, p.agent);
 
   const id = await startReport(sb, { agent: p.agent, version: p.version, instruction: p.instruction, created_by: p.who });
+  if (staged) return { id, run: () => runStages(sb, staged, id, { origin: p.origin, fnDeadlineAt: fnDeadline(), scheduled: p.scheduled }) };
+  if (!runner) throw new AgentStartError("없는 에이전트 또는 버전입니다.");
   const deadlineAt = Date.now() + AGENT_DEADLINE_MS;
   const run = async () => {
     try {
@@ -66,9 +79,23 @@ export async function startAgentRun(sb: SupabaseClient, p: { agent: string; vers
   return { id, run };
 }
 
+// 멈춘 단계 이어 돌기 — /api/agents/tick/resume 이 부른다(앞 단계가 넘긴 다음 단계).
+export function resumeAgentRun(sb: SupabaseClient, report: AgentReport, origin?: string): (() => Promise<void>) | null {
+  const staged = STAGED[report.agent]?.[report.version];
+  if (!staged || report.status !== "running") return null;
+  return () => runStages(sb, staged, report.id, { origin, fnDeadlineAt: fnDeadline() });
+}
+
 // 피드백 반영 준비 — 보고서를 다시 '작성 중'으로 돌리고, run() 이 수정본을 받아 요청서까지 작성한다.
 //  실패하면 초안은 그대로 두고 결재 대기로 돌아온다(사유는 facts.revise_error).
-export async function startRevision(sb: SupabaseClient, report: AgentReport, feedback: string, who: string | null): Promise<{ run: () => Promise<void> }> {
+export async function startRevision(sb: SupabaseClient, report: AgentReport, feedback: string, who: string | null, origin?: string): Promise<{ run: () => Promise<void> }> {
+  const staged = STAGED[report.agent]?.[report.version];
+  if (staged) {
+    // 단계형 — 조사 요약은 그대로 두고 reviseFrom 단계부터 다시 돈다. 실패하면 목록은 남고 사유만 적힌다(staged.ts failStage).
+    await guard(sb, report.agent);
+    await beginRevision(sb, { ...report, facts: { ...(report.facts || {}), stage: { done: staged.reviseFrom, total: staged.stages.length } } }, feedback, who);
+    return { run: () => runStages(sb, staged, report.id, { origin, fnDeadlineAt: fnDeadline() }) };
+  }
   const runner = RUNNERS[report.agent]?.[report.version];
   if (!runner) throw new AgentStartError("이 버전은 더 실행할 수 없습니다. [결재]하거나 새로 [업무 요청]하세요.");
   await guard(sb, report.agent);

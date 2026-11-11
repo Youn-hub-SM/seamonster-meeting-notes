@@ -9,27 +9,11 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { AGENTS, agentOf, latestVersion, nextTargetLabel, DEFAULT_SCHEDULE, WEEKDAYS, type AgentMeta, type AgentReport, type AgentSchedule, type DraftItem } from "@/app/lib/agents/registry";
 import { qty, dateTime, dateShort } from "@/app/lib/format";
+import { Md } from "./Md";
+import { IdeasSection, AdMaterials } from "./AdCopy";
 
 const POLL_MS = 5000;              // 에이전트가 일하는 중인 보고서가 있을 때만 그 한 장을 다시 읽는다
 const TICK_LATE_MS = 2 * 3600_000; // 예약 신호(매시 45분)가 이보다 오래 안 왔으면 알린다
-
-// 본문 마크다운 — 에이전트 지침이 '## 제목 · - 목록 · **굵게**' 만 쓰게 돼 있다
-const bold = (t: string, k: string): ReactNode[] => t.split(/\*\*(.+?)\*\*/g).map((seg, i) => (i % 2 ? <strong key={`${k}-${i}`}>{seg}</strong> : seg));
-function Md({ text }: { text: string }) {
-  const out: ReactNode[] = [];
-  let list: string[] = [];
-  const flush = (k: number) => { if (list.length) { out.push(<ul key={`u${k}`}>{list.map((l, i) => <li key={i}>{bold(l, `l${k}-${i}`)}</li>)}</ul>); list = []; } };
-  text.split(/\r?\n/).forEach((raw, i) => {
-    const line = raw.trim();
-    if (/^[-*]\s+/.test(line)) { list.push(line.replace(/^[-*]\s+/, "")); return; }
-    flush(i);
-    if (!line) return;
-    if (/^#{1,4}\s+/.test(line)) out.push(<h3 key={i}>{line.replace(/^#{1,4}\s+/, "")}</h3>);
-    else out.push(<p key={i}>{bold(line, `p${i}`)}</p>);
-  });
-  flush(-1);
-  return <div className="ag-md">{out}</div>;
-}
 
 const Pill = ({ tone, children }: { tone: "muted" | "danger" | "success"; children: ReactNode }) => {
   const c = tone === "danger" ? { background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }
@@ -51,11 +35,14 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
   const [busy, setBusy] = useState<"" | "approve" | "feedback" | "remove">("");
   const [err, setErr] = useState("");
 
+  const isIdeas = agent.kind === "ideas";                        // 소재 목록 — 결재·요청서 없음
   const running = r.status === "running";
   const revising = running && !!r.facts?.revising;
   const failed = r.status === "error";
-  const closed = r.status === "done" && r.applied != null;       // 요청서로 작성됐거나 요청 없이 닫힘
-  const waiting = r.status === "done" && r.applied == null;      // 결재 대기
+  const closed = !isIdeas && r.status === "done" && r.applied != null;  // 요청서로 작성됐거나 요청 없이 닫힘
+  const waiting = !isIdeas && r.status === "done" && r.applied == null; // 결재 대기
+  const stage = r.facts?.stage;                                   // 단계형 에이전트의 진행
+  const stageText = running && agent.stages && stage ? `${Math.min(stage.done + 1, stage.total)}/${stage.total} 단계 · ${agent.stages[Math.min(stage.done, agent.stages.length - 1)]} 중입니다.` : "";
   const items = r.draft.filter((d) => d.product_id && d.qty > 0);
   const firstBySku = useMemo(() => new Map((r.facts?.first_draft || []).map((d) => [d.sku, d.qty])), [r.facts?.first_draft]);
   const revised = !!r.facts?.first_draft && !revising;           // 피드백을 반영한 수정본을 보고 있다
@@ -108,11 +95,14 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
           {running && <Pill tone="muted">{revising ? "피드백 반영 중" : "작성 중"}</Pill>}
           {failed && <Pill tone="danger">실패</Pill>}
           {waiting && <Pill tone="muted">결재 대기</Pill>}
+          {isIdeas && r.status === "done" && <Pill tone="success">소재 {qty(r.ideas.length)}건</Pill>}
           {closed && (r.request_no || r.request_id ? <Pill tone="success">요청서 {r.request_no || "작성"}</Pill> : <Pill tone="muted">요청 없음</Pill>)}
           <span className="ag-meta-fold">{open ? "접기" : "펼치기"}</span>
         </div>
         <div className={`ag-summary ${running || failed ? "is-muted" : ""}`}>
-          {revising ? "피드백을 반영해 요청서를 작성하고 있습니다. 보통 1~3분 걸립니다."
+          {isIdeas && revising ? "피드백을 반영해 목록을 다시 쓰고 있습니다. 보통 1~3분 걸립니다."
+            : isIdeas && running ? `${stageText || "작성을 시작했습니다."} 전체 4~8분 걸립니다.`
+            : revising ? "피드백을 반영해 요청서를 작성하고 있습니다. 보통 1~3분 걸립니다."
             : running ? "초안을 작성하고 있습니다. 보통 1~3분 걸립니다."
             : failed ? (r.error || "작성하지 못했습니다.") : (r.summary || "요약 없음")}
         </div>
@@ -124,7 +114,9 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
           {r.feedback && <div className="ag-note"><strong>피드백{r.feedback_by ? ` ${r.feedback_by}` : ""}</strong> {r.feedback}</div>}
           {!!r.facts?.warnings?.length && <div className="sm-warn"><ul>{r.facts.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
 
-          {r.status === "done" && (
+          {isIdeas && r.status === "done" && <IdeasSection r={r} onChange={onChange} />}
+
+          {!isIdeas && r.status === "done" && (
             <section>
               <div className="ag-sec-title">{revised ? "수정본" : "초안"}</div>
               {r.facts?.next_arrival && r.facts.due_date && (
@@ -219,7 +211,7 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
 }
 
 // 예약 줄 — 매주 n요일 n시까지 초안 작성. 저장해야 반영된다.
-function ScheduleRow({ agentId }: { agentId: string }) {
+function ScheduleRow({ agentId, noun }: { agentId: string; noun: string }) {
   const toast = useToast();
   const [saved, setSaved] = useState<AgentSchedule | null>(null);
   const [draft, setDraft] = useState<AgentSchedule>(DEFAULT_SCHEDULE);
@@ -260,15 +252,15 @@ function ScheduleRow({ agentId }: { agentId: string }) {
           <button type="button" className={`sm-tab ${!draft.on ? "is-active" : ""}`} aria-pressed={!draft.on} onClick={() => setDraft((d) => ({ ...d, on: false }))}>꺼짐</button>
         </div>
         <span>매주</span>
-        <select className="b2b-input ag-sched-select" value={draft.weekday} aria-label="초안 작성 요일" onChange={(e) => setDraft((d) => ({ ...d, weekday: Number(e.target.value) }))}>
+        <select className="b2b-input ag-sched-select" value={draft.weekday} aria-label="작성 요일" onChange={(e) => setDraft((d) => ({ ...d, weekday: Number(e.target.value) }))}>
           {WEEKDAYS.map((w, i) => <option key={i} value={i}>{w}요일</option>)}
         </select>
-        <select className="b2b-input ag-sched-select" value={draft.hour} aria-label="초안 작성 시각" onChange={(e) => setDraft((d) => ({ ...d, hour: Number(e.target.value) }))}>
+        <select className="b2b-input ag-sched-select" value={draft.hour} aria-label="작성 시각" onChange={(e) => setDraft((d) => ({ ...d, hour: Number(e.target.value) }))}>
           {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h}시</option>)}
         </select>
-        <span>까지 초안 작성</span>
+        <span>까지 {noun} 작성</span>
         <button type="button" className="b2b-btn-secondary" onClick={save} disabled={saving || !dirty}>예약 저장</button>
-        {saved.on && !dirty && <span className="ag-sched-next">다음 초안 {nextTargetLabel(saved, now)}</span>}
+        {saved.on && !dirty && <span className="ag-sched-next">다음 {noun} {nextTargetLabel(saved, now)}</span>}
       </div>
       {tickLate && <div className="sm-warn" style={{ marginTop: "var(--sm-space-3)" }}>예약 신호가 오지 않습니다. 운영 배포 뒤 supabase/migrations/165_agent_tick.sql 을 적용하세요.</div>}
     </>
@@ -324,9 +316,13 @@ export default function AgentsPage() {
       for (const id of runningIds.split(",")) {
         try {
           const j = await (await fetch(`/api/agents/reports/${id}`, { cache: "no-store" })).json();
-          if (j.ok && j.report.status !== "running") {
+          if (!j.ok) continue;
+          if (j.report.status !== "running") {
             setReports((list) => list.map((x) => (x.id === id ? j.report : x)));
             if (j.report.status === "done") setOpenId(id);
+          } else {
+            // 단계형 에이전트 — 단계가 넘어가면 '작성 중' 문구를 바꾼다
+            setReports((list) => list.map((x) => (x.id === id && x.facts?.stage?.done !== j.report.facts?.stage?.done ? j.report : x)));
           }
         } catch { /* 다음 차례에 다시 */ }
       }
@@ -341,7 +337,7 @@ export default function AgentsPage() {
       if (!j.ok) throw new Error(j.error);
       const now = new Date().toISOString();
       const placeholder: AgentReport = {
-        id: j.id, agent: agentId, version, status: "running", instruction: null, summary: null, body_md: null, draft: [], facts: null, tool_log: [],
+        id: j.id, agent: agentId, version, status: "running", instruction: null, summary: null, body_md: null, draft: [], ideas: [], facts: null, tool_log: [],
         model: null, usage: null, est_usd: null, error: null, created_by: null, created_at: now, finished_at: null,
         request_id: null, request_no: null, applied: null, applied_by: null, applied_at: null, feedback: null, feedback_by: null, feedback_at: null,
       };
@@ -390,7 +386,7 @@ export default function AgentsPage() {
           </select>
           <button type="button" className="b2b-btn-primary" onClick={start} disabled={busyRun || !!pending}>{runningIds ? "작업 중" : starting ? "요청하는 중" : "업무 요청"}</button>
         </div>
-        {!pending && <ScheduleRow agentId={agentId} />}
+        {!pending && <ScheduleRow agentId={agentId} noun={agent.kind === "ideas" ? "목록" : "초안"} />}
         <details className="ag-versions">
           <summary>버전 기록 {agent.versions.length}개</summary>
           {agent.versions.map((v) => (
@@ -401,6 +397,8 @@ export default function AgentsPage() {
           ))}
         </details>
       </section>
+
+      {agent.kind === "ideas" && <AdMaterials key={agentId} />}
 
       {agent.versions.length > 1 && (
         <div className="sm-tabs ag-filter" role="tablist" aria-label="버전으로 거르기">

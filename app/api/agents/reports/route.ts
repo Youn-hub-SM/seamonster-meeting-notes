@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as { agent?: string; version?: string; instruction?: string };
     const instruction = String(b.instruction || "").trim().slice(0, 1000) || null;
-    const { id, run } = await startAgentRun(supabaseAdmin(), { agent: String(b.agent || ""), version: String(b.version || ""), instruction, who: await actor(req) });
+    const { id, run } = await startAgentRun(supabaseAdmin(), { agent: String(b.agent || ""), version: String(b.version || ""), instruction, who: await actor(req), origin: req.nextUrl.origin });
     after(run);
     return NextResponse.json({ ok: true, id });
   } catch (err) {

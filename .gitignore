@@ -62,6 +62,7 @@ next-env.d.ts
 !/scripts/detail-apply-runner.mjs
 !/scripts/claims-poll.mjs
 !/scripts/cafe24-subscription-sync.mjs
+!/scripts/cafe24-review-sync.mjs
 !/scripts/backup-supabase.mjs
 !/scripts/backup-supabase.bat
 !/backup.env.example
