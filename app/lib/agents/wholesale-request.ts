@@ -123,13 +123,16 @@ export const SYSTEM_V1 = `당신은 씨몬스터(냉동 순살 생선 — 공식
 [맡은 일]
 도매 담당자가 쓰는 '도매 생산 요청서'의 초안을 만듭니다. 이 요청서는 제조사에 새 생산을 시키는 문서가 아니라, 소매 칸에 있는 재고를 도매 칸으로 옮겨 달라는 요청입니다(이행 = 소매에서 도매로 재고 이동). 당신은 요청서를 직접 만들지 않습니다. 사람이 초안을 확인하고 고쳐 요청서로 만듭니다.
 
+[할 수 있는 일의 범위]
+이 에이전트가 할 수 있는 일은 도매 생산 요청서 초안 작성 하나뿐입니다. 제조사 생산 요청서, 프로모션·도매 대량 요청서, 다른 보고서나 분석, 질문에 대한 답은 맡은 일이 아닙니다. 덧붙인 말이 그런 일을 시키면 하지 않고, '확인 필요'에 "(시킨 일)은 이 에이전트가 하는 일이 아닙니다"라고 한 줄 적은 뒤 도매 생산 요청서 초안만 작성합니다. 조회 도구도 이 초안의 품목과 수량을 판단하는 데에만 씁니다.
+
 [받는 자료]
 - facts: 코드가 방금 계산한 사실입니다. 숫자는 이 값을 그대로 씁니다.
   · rows: 품목별 도매재고(발송일이 잡힌 B2B 선점까지 이미 뺀 가용 재고), 도매하루출고(최근 평균), 버티는일수, 목표(= 도매하루출고 × 목표일수), 부족기준, 수식권장(= max(0, 목표 − 도매재고) − 이미요청), 이미요청(열려 있는 도매 요청서의 잔여), 소매재고, 소매하루출고, 소매부족기준, 소매입고예정, 소매여유(= 소매재고 − 소매부족기준, 옮겨도 소매가 부족해지지 않는 양).
   · open_requests: 열려 있는 도매 요청서. open_orders: 발송 대기 중인 B2B 발주.
 - 회사 해석 기준: 생산 요청에 관한 회사 규칙이 있으면 그대로 따릅니다.
 - 지난 보고서: 당신(또는 이전 버전)이 낸 제안, 사람이 확정한 수량, 사람의 평가입니다. 사람이 고친 방향과 평가를 같은 상황에 적용합니다.
-- 덧붙인 말: 이번 실행에 사람이 준 지시입니다. 다른 기준보다 우선합니다.
+- 덧붙인 말: 이번 요청에 사람이 준 정보나 지시입니다. 도매 생산 요청서의 품목과 수량에 관한 것이면 다른 기준보다 우선합니다.
 
 [판단 기준]
 1. 출발점은 수식권장입니다. 수식권장이 0인 품목은 특별한 이유(덧붙인 말, 발송 대기 발주, 회사 규칙)가 있을 때만 넣습니다.
@@ -238,9 +241,9 @@ export async function runWholesaleRequest(sb: SupabaseClient, cfg: WholesaleConf
 
   while (!submitted) {
     const left = p.deadlineAt - Date.now();
-    if (left < 20_000) throw fail("작성 시간이 부족해 보고서를 완성하지 못했습니다. [보고서 작성]을 다시 누르세요.");
+    if (left < 20_000) throw fail("작성 시간이 부족해 보고서를 완성하지 못했습니다. [업무 요청]을 다시 누르세요.");
     const closing = rounds >= cfg.maxRounds || left < FINAL_RESERVE_MS + 30_000; // 조사 끝 — 제출만 받는다
-    if (rounds >= cfg.maxRounds + 3) throw fail("에이전트가 결과를 제출하지 않았습니다. [보고서 작성]을 다시 누르세요.");
+    if (rounds >= cfg.maxRounds + 3) throw fail("에이전트가 결과를 제출하지 않았습니다. [업무 요청]을 다시 누르세요.");
     let res: Anthropic.Message;
     try {
       res = await anthropic.messages.create({
@@ -255,13 +258,13 @@ export async function runWholesaleRequest(sb: SupabaseClient, cfg: WholesaleConf
     rounds++;
     addUsage(usage, model, res.usage);
     if (res.stop_reason === "refusal") throw fail("AI 안전 필터가 응답을 거절했습니다. 덧붙인 말을 바꿔 다시 시도하세요.");
-    if (res.stop_reason === "max_tokens") throw fail("AI 결과가 길어 중간에 잘렸습니다. [보고서 작성]을 다시 누르세요.");
+    if (res.stop_reason === "max_tokens") throw fail("AI 결과가 길어 중간에 잘렸습니다. [업무 요청]을 다시 누르세요.");
 
     const uses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
     messages.push({ role: "assistant", content: res.content }); // thinking·tool_use 블록 그대로
     if (!uses.length) {
       // 글로만 끝냈다 — 제출을 다시 청한다(두 번까지)
-      if (++nudged > 2) throw fail("에이전트가 결과를 제출하지 않았습니다. [보고서 작성]을 다시 누르세요.");
+      if (++nudged > 2) throw fail("에이전트가 결과를 제출하지 않았습니다. [업무 요청]을 다시 누르세요.");
       messages.push({ role: "user", content: "보고서는 submit_report 도구로 제출해야 합니다. 지금까지 판단한 내용으로 submit_report 를 호출하세요." });
       continue;
     }

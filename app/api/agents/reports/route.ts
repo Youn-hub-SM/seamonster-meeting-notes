@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { agent, version, instruction? } — 보고서 작성 시작. '작성 중' 행의 id 를 바로 돌려주고, 작성은 after() 로 끝까지 돈다(창을 닫아도 계속).
+// POST { agent, version, instruction? } — 업무 요청([업무 요청] 버튼) = 보고서 작성 시작. '작성 중' 행의 id 를 바로 돌려주고, 작성은 after() 로 끝까지 돈다(창을 닫아도 계속).
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as { agent?: string; version?: string; instruction?: string };
@@ -41,6 +41,6 @@ export async function POST(req: NextRequest) {
     if (err instanceof AgentStartError) return NextResponse.json({ ok: false, error: err.message }, { status: err.status });
     if (isPending164(err)) return NextResponse.json({ ok: false, error: PENDING_164 }, { status: 503 });
     console.error("[agents/reports POST]", err);
-    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "보고서 작성을 시작하지 못했습니다") }, { status: 500 });
+    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "업무를 요청하지 못했습니다") }, { status: 500 });
   }
 }

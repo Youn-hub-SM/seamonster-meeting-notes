@@ -1,7 +1,7 @@
 "use client";
 
 // AI 에이전트 — 에이전트마다 보고서가 쌓이는 화면.
-//  위 탭 = 에이전트, 실행 줄 = 버전 고르기 + 덧붙일 말 + [보고서 작성], 아래 = 보고서 목록(최신순, 버전 탭으로 거르기).
+//  위 탭 = 에이전트, 실행 줄 = 버전 고르기 + 덧붙일 말 + [업무 요청], 아래 = 보고서 목록(최신순, 버전 탭으로 거르기).
 //  에이전트·버전 목록은 app/lib/agents/registry.ts — 새 에이전트·새 버전은 거기 한 줄이면 이 화면에 나타난다.
 //  에이전트는 요청서를 만들지 못한다. 보고서의 제안 수량을 사람이 확인·수정해 [도매 생산 요청서 만들기]를 눌러야 요청서가 생긴다.
 import Link from "next/link";
@@ -298,7 +298,7 @@ export default function AgentsPage() {
       setReports((list) => [placeholder, ...list]);
       setCounts((c) => ({ ...c, [version]: (c[version] || 0) + 1 }));
       setInstruction(""); setFilter("전체");
-    } catch (e) { toast.error(e instanceof Error ? e.message : "보고서 작성을 시작하지 못했습니다."); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : "업무를 요청하지 못했습니다."); }
     finally { setStarting(false); }
   };
 
@@ -340,7 +340,7 @@ export default function AgentsPage() {
           </select>
           <input className="b2b-input ag-run-note" value={instruction} onChange={(e) => setInstruction(e.target.value)} maxLength={1000}
             aria-label="에이전트에게 덧붙일 말" placeholder="예: 다음 주 화요일 A마트 대구순살 300개 발주 예정" onKeyDown={(e) => { if (e.key === "Enter" && !busyRun && !pending) start(); }} />
-          <button type="button" className="b2b-btn-primary" onClick={start} disabled={busyRun || !!pending}>{runningIds ? "작성 중" : starting ? "시작하는 중" : "보고서 작성"}</button>
+          <button type="button" className="b2b-btn-primary" onClick={start} disabled={busyRun || !!pending}>{runningIds ? "작성 중" : starting ? "요청하는 중" : "업무 요청"}</button>
         </div>
         <details className="ag-versions">
           <summary>버전 기록 {agent.versions.length}개</summary>

@@ -16,7 +16,7 @@ function toReport(r: Row): AgentReport {
   let status = String(r.status || "running") as AgentReportStatus;
   let error = (r.error as string | null) ?? null;
   if (status === "running" && Date.now() - Date.parse(String(r.created_at)) > RUN_STALE_MS) {
-    status = "error"; error = "작성이 끝나지 않고 멈췄습니다. [보고서 작성]을 다시 누르세요.";
+    status = "error"; error = "작성이 끝나지 않고 멈췄습니다. [업무 요청]을 다시 누르세요.";
   }
   return {
     id: String(r.id), agent: String(r.agent), version: String(r.version), status,
