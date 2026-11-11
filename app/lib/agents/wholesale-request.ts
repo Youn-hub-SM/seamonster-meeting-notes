@@ -24,6 +24,7 @@ export type WholesaleConfig = {
   system: string;                       // 버전의 지침
   effort: "low" | "medium" | "high";
   maxRounds: number;                    // 조사 차례 상한(그 뒤엔 제출만)
+  excludeBulkOrders?: boolean;          // v2~: 발송 대기 발주에서 대량 발주(is_bulk)를 뺀다 — 대량은 '도매 대량' 칸에서 나가므로 이 요청서의 수요가 아니다
 };
 export type AgentRunResult = {
   summary: string; body_md: string; draft: DraftItem[]; facts: AgentReport["facts"]; tool_log: AgentToolLog[];
@@ -52,7 +53,7 @@ type Collected = {
   openRequests: unknown[]; openOrders: unknown[]; warnings: string[];
 };
 
-async function collect(sb: SupabaseClient): Promise<Collected> {
+async function collect(sb: SupabaseClient, cfg: WholesaleConfig): Promise<Collected> {
   const today = kstTodayIso();
   const warnings: string[] = [];
   const [wh, rt, prodRows, bundles, reqA, reqB, orders] = await Promise.all([
@@ -106,7 +107,7 @@ async function collect(sb: SupabaseClient): Promise<Collected> {
 
   if (orders.error) warnings.push("발송 대기 B2B 발주를 읽지 못했습니다.");
   type O = { order_no: string; order_date: string; ship_date: string | null; is_bulk: boolean | null; companies: { name?: string } | { name?: string }[] | null; order_items: { product_id: string | null; product_name: string; qty: number }[] };
-  const openOrders = ((orders.data ?? []) as unknown as O[]).map((o) => ({
+  const openOrders = ((orders.data ?? []) as unknown as O[]).filter((o) => !(cfg.excludeBulkOrders && o.is_bulk)).map((o) => ({
     발주번호: o.order_no, 발주일: o.order_date, 발송예정일: o.ship_date, 대량: !!o.is_bulk,
     거래처: (Array.isArray(o.companies) ? o.companies[0]?.name : o.companies?.name) ?? null,
     품목: (o.order_items ?? []).map((it) => ({ sku: it.product_id ? idToSku.get(it.product_id) ?? null : null, 품목: it.product_name, 수량: Number(it.qty) || 0 })),
@@ -164,6 +165,21 @@ export const SYSTEM_V1 = `당신은 씨몬스터(냉동 순살 생선 — 공식
 
 export const WHOLESALE_V1: WholesaleConfig = { system: SYSTEM_V1, effort: "medium", maxRounds: 8 };
 
+// v2(2026-11-11) — 대표: "도매 권장생산에서 왜 소매나 도매대량으로 빠진 것들이 나오는지".
+//  v1 은 ① 발송 대기 발주에 대량 발주가 섞여 들어갔고 ② 에이전트가 원장을 직접 조회할 때 칸 이동(도매→소매·도매 대량)과
+//  대량 발송을 '도매에서 나간 양'으로 세어 이유·수량에 썼다. v2 는 무엇이 도매 수요인지 못박고, 대량 발주를 자료에서 뺀다.
+const DEMAND_RULES_V2 = `[재고 칸과 도매 수요 — 가장 먼저 지킬 것]
+- 재고는 네 칸으로 나뉩니다: 소매, 도매, 프로모션, 도매 대량. 이 요청서가 채우는 것은 '도매' 칸 하나입니다.
+- 도매 수요는 '도매 칸에서 일반 B2B 발주로 발송된 출고'뿐입니다. facts 의 도매하루출고는 이미 그렇게 계산된 값입니다(칸 이동·프로모션 합류·대량 발주 발송·제조사 반품을 뺀, 최근 30일 평균과 90일 평균 중 큰 값).
+- 다음은 도매 수요가 아닙니다. 수량에 더하지 않고 이유로도 들지 않습니다.
+  · 칸 이동: 도매에서 소매·도매 대량·프로모션으로 옮긴 양(inventory_txns.source 가 'move'·'promo_close', 또는 주문번호 없는 partner '채널이동'). 팔린 것이 아니라 자리를 옮긴 것입니다.
+  · 대량 발주: orders.is_bulk 인 발주와 그 발송, '도매 대량' 칸의 재고와 출고. 대량은 도매 대량 요청서가 따로 맡습니다.
+  · 소매 판매: 소매 칸의 출고. 소매 숫자(소매재고·소매여유)는 '얼마까지 옮길 수 있는가'의 한도로만 씁니다.
+- 원장(inventory_txns)을 직접 조회할 때도 같은 조건으로 거릅니다: channel = '도매', type = '출고', status = '완료', txn_date 는 오늘까지, 위의 칸 이동 행 제외, shipment_id 가 대량 발주(orders.is_bulk)의 발송인 행 제외. 이 조건을 못 맞추겠으면 조회 결과를 쓰지 말고 facts 의 도매하루출고를 씁니다.
+- 도매 재고가 판매가 아니라 칸 이동으로 줄어든 품목은 수식권장이 나와도 실제로 더 필요한지 알 수 없습니다. 수량은 도매하루출고로 설명되는 만큼만 정하고, 이동으로 줄었다는 사실을 '확인 필요'에 적습니다.`;
+export const SYSTEM_V2 = SYSTEM_V1.replace("[판단 기준]", `${DEMAND_RULES_V2}\n\n[판단 기준]`);
+export const WHOLESALE_V2: WholesaleConfig = { system: SYSTEM_V2, effort: "medium", maxRounds: 8, excludeBulkOrders: true };
+
 const READ_TOOLS = new Set(["run_sql", "schema", "search_text", "read_report"]);
 function agentTools(strict: boolean): Anthropic.Tool[] {
   const s = strict ? { strict: true } : {};
@@ -213,7 +229,7 @@ export type RunInput = { instruction: string | null; cases: PriorCase[]; deadlin
 export async function runWholesaleRequest(sb: SupabaseClient, cfg: WholesaleConfig, p: RunInput): Promise<AgentRunResult> {
   const startedAt = Date.now();
   const [c, model, index, rules] = await Promise.all([
-    collect(sb),
+    collect(sb, cfg),
     getFeatureModel("agent"),
     catalogIndex(sb),
     manualCoreText(/데이터 해석 기준|용어 정의/).catch(() => ""),
