@@ -98,10 +98,11 @@ export function AdMaterials() {
   const [savedBrief, setSavedBrief] = useState("");
   const [brief, setBrief] = useState("");
   const [refs, setRefs] = useState<Ref[]>([]);
-  const [reviews, setReviews] = useState<{ count: number; synced_at: string | null }>({ count: 0, synced_at: null });
+  const [reviews, setReviews] = useState<{ count: number; synced_at: string | null; naver: number; naver_at: string | null }>({ count: 0, synced_at: null, naver: 0, naver_at: null });
+  const xlsRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(EMPTY);
   const [images, setImages] = useState<string[]>([]);
-  const [busy, setBusy] = useState<"" | "brief" | "upload" | "add">("");
+  const [busy, setBusy] = useState<"" | "brief" | "upload" | "add" | "naver">("");
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -136,6 +137,21 @@ export function AdMaterials() {
       setImages((cur) => [...cur, ...urls].slice(0, 4));
     } catch (e) { setErr(e instanceof Error ? e.message : "이미지를 올리지 못했습니다."); }
     finally { setBusy(""); if (fileRef.current) fileRef.current.value = ""; }
+  };
+  const uploadNaver = async (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f) return;
+    setBusy("naver");
+    try {
+      if (f.size > 4 * 1024 * 1024) throw new Error("4MB 이하 파일만 올릴 수 있습니다. 기간을 나눠 내려받으세요.");
+      const fd = new FormData(); fd.append("file", f);
+      const j = await (await fetch("/api/agents/ad-copy/reviews", { method: "POST", body: fd })).json();
+      if (!j.ok) throw new Error(j.error);
+      toast.success(`스마트스토어 리뷰 ${qty(j.saved)}건을 저장했습니다`);
+      const m = await (await fetch("/api/agents/ad-copy/materials", { cache: "no-store" })).json();
+      if (m.ok) setReviews(m.reviews);
+    } catch (e) { toast.error(e instanceof Error ? e.message : "리뷰를 올리지 못했습니다."); }
+    finally { setBusy(""); if (xlsRef.current) xlsRef.current.value = ""; }
   };
   const add = async () => {
     setErr("");
@@ -172,7 +188,13 @@ export function AdMaterials() {
       </label>
       <div className="ag-mat-actions">
         <button type="button" className="b2b-btn-secondary" onClick={saveBrief} disabled={busy === "brief" || brief === savedBrief}>타깃 메모 저장</button>
-        <span className="ag-mat-status">{reviews.count > 0 ? `공식몰 리뷰 ${qty(reviews.count)}건${reviews.synced_at ? ` · 마지막 수집 ${dateTime(reviews.synced_at)}` : ""}` : "공식몰 리뷰 수집 전"}</span>
+        <input ref={xlsRef} type="file" accept=".xlsx" hidden onChange={(e) => uploadNaver(e.target.files)} />
+        <button type="button" className="b2b-btn-secondary" onClick={() => xlsRef.current?.click()} disabled={busy === "naver" || !!pending}>{busy === "naver" ? "올리는 중" : "스마트스토어 리뷰 엑셀 올리기"}</button>
+        <span className="ag-mat-status">
+          {reviews.count > 0 ? `공식몰 리뷰 ${qty(reviews.count)}건${reviews.synced_at ? ` · 마지막 수집 ${dateTime(reviews.synced_at)}` : ""}` : "공식몰 리뷰 수집 전"}
+          {" · "}
+          {reviews.naver > 0 ? `스마트스토어 리뷰 ${qty(reviews.naver)}건${reviews.naver_at ? ` · 마지막 업로드 ${dateTime(reviews.naver_at)}` : ""}` : "스마트스토어 리뷰 없음"}
+        </span>
       </div>
 
       <details className="ag-versions" open={refs.length === 0}>

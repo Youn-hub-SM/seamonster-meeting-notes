@@ -103,31 +103,47 @@ const newMeter = async (): Promise<Meter> => ({
 const COMPANY = "씨몬스터는 냉동 순살 생선(가시를 발라낸 생선)을 공식몰·스마트스토어·쿠팡에서 파는 브랜드입니다.";
 
 // ── 1단계: 고객 목소리 ──
-type ReviewRow = { product_name: string | null; rating: number | null; title: string | null; content: string | null; written_at: string | null };
-const REVIEW_DAYS = 90, REVIEW_MAX = 120, REVIEW_BUDGET = 26_000;
-async function loadReviews(sb: SupabaseClient, today: string): Promise<{ ok: boolean; note?: string; total: number; items: { d: string; product: string; star: number | null; text: string }[] }> {
-  const { data, error } = await sb.from("shop_reviews").select("product_name, rating, title, content, written_at")
-    .gte("written_at", `${shift(today, -REVIEW_DAYS)}T00:00:00+09:00`).order("written_at", { ascending: false }).limit(600);
-  if (error) return { ok: false, total: 0, items: [], note: missingTable(error, "shop_reviews") ? "공식몰 리뷰 수집 전(166 미적용)" : `공식몰 리뷰 조회 실패: ${String(error.message).slice(0, 120)}` };
-  const rows = ((data ?? []) as ReviewRow[]).filter((r) => (r.content || "").replace(/\s+/g, "").length >= 12); // '좋아요' 같은 한마디는 재료가 못 된다
-  if (!rows.length) return { ok: false, total: 0, items: [], note: `최근 ${REVIEW_DAYS}일 공식몰 리뷰가 없습니다(수집 전일 수 있음)` };
-  // 낮은 별점(불만·장벽)을 먼저 챙기고 나머지는 최신순 — 글자 총량 안에서
-  const low = rows.filter((r) => r.rating != null && r.rating <= 3).slice(0, 30);
-  const rest = rows.filter((r) => !low.includes(r));
-  const items: { d: string; product: string; star: number | null; text: string }[] = [];
+//  리뷰는 두 곳에서 온다(shop_reviews.channel): 공식몰 = 카페24 게시판 자동 수집, 스마트스토어 = 담당자가 올린 리뷰 엑셀.
+//  스마트스토어 리뷰가 훨씬 많아 최신순으로만 뽑으면 공식몰이 묻힌다 — 채널마다 따로 읽어 번갈아 고른다.
+type ReviewRow = { channel: string | null; product_name: string | null; rating: number | null; title: string | null; content: string | null; written_at: string | null };
+type ReviewItem = { ch: string; d: string; product: string; star: number | null; text: string };
+const REVIEW_DAYS = 90, REVIEW_MAX = 160, REVIEW_BUDGET = 36_000;
+const REVIEW_CHANNELS = ["공식몰", "스마트스토어"];
+async function loadReviews(sb: SupabaseClient, today: string): Promise<{ ok: boolean; note?: string; total: number; items: ReviewItem[]; by: Record<string, number> }> {
+  const since = `${shift(today, -REVIEW_DAYS)}T00:00:00+09:00`;
+  const res = await Promise.all(REVIEW_CHANNELS.map((ch) => sb.from("shop_reviews").select("channel, product_name, rating, title, content, written_at")
+    .eq("channel", ch).gte("written_at", since).order("written_at", { ascending: false }).limit(500)));
+  const error = res.find((r) => r.error)?.error;
+  if (error) return { ok: false, total: 0, items: [], by: {}, note: missingTable(error, "shop_reviews") ? "리뷰 수집 전(166 미적용)" : `리뷰 조회 실패: ${String(error.message).slice(0, 120)}` };
+  // 채널별로: 낮은 별점(불만·장벽)을 먼저 챙기고 나머지는 최신순. '좋아요' 같은 한마디는 재료가 못 된다.
+  const queues = res.map((r) => {
+    const rows = ((r.data ?? []) as ReviewRow[]).filter((x) => (x.content || "").replace(/\s+/g, "").length >= 12);
+    const low = rows.filter((x) => x.rating != null && x.rating <= 3).slice(0, 20);
+    return [...low, ...rows.filter((x) => !low.includes(x))];
+  });
+  const total = queues.reduce((n, q) => n + q.length, 0);
+  if (!total) return { ok: false, total: 0, items: [], by: {}, note: `최근 ${REVIEW_DAYS}일 리뷰가 없습니다(수집·업로드 전일 수 있음)` };
+  const items: ReviewItem[] = [];
+  const by: Record<string, number> = {};
   let used = 0;
-  for (const r of [...low, ...rest]) {
-    if (items.length >= REVIEW_MAX) break;
-    const text = maskPii(cut([r.title, r.content].filter(Boolean).join(" — "), 320));
-    if (used + text.length > REVIEW_BUDGET) break;
-    used += text.length;
-    items.push({ d: (r.written_at || "").slice(5, 10), product: cut(r.product_name, 40), star: r.rating, text });
+  pick: for (let k = 0; queues.some((q) => k < q.length); k++) {
+    for (const q of queues) {
+      if (k >= q.length) continue;
+      if (items.length >= REVIEW_MAX) break pick;
+      const r = q[k];
+      const text = maskPii(cut([r.title, r.content].filter(Boolean).join(" — "), 320));
+      if (used + text.length > REVIEW_BUDGET) break pick;
+      used += text.length;
+      const ch = r.channel || "공식몰";
+      by[ch] = (by[ch] || 0) + 1;
+      items.push({ ch, d: (r.written_at || "").slice(5, 10), product: cut(r.product_name, 40), star: r.rating, text });
+    }
   }
-  return { ok: true, total: rows.length, items };
+  return { ok: true, total, items, by };
 }
 
 const VOICE_SYSTEM = `당신은 ${COMPANY.replace("입니다.", "의 광고 카피 담당 에이전트입니다.")}
-지금은 세 단계 중 첫 단계입니다. 고객이 남긴 글(공식몰 리뷰, 스마트스토어 문의, 접수된 VOC)을 읽고, 광고 소재를 쓸 때 쓸 수 있는 재료만 뽑아 정리합니다. 이 정리는 뒤 단계의 당신이 읽습니다.
+지금은 세 단계 중 첫 단계입니다. 고객이 남긴 글(공식몰·스마트스토어 리뷰, 스마트스토어 문의, 접수된 VOC)을 읽고, 광고 소재를 쓸 때 쓸 수 있는 재료만 뽑아 정리합니다. 이 정리는 뒤 단계의 당신이 읽습니다.
 
 [정리할 것]
 ## 사는 이유
@@ -155,7 +171,9 @@ async function stageVoice(c: StageCtx): Promise<StageResult> {
     collectVoiceFacts(c.sb, { since: shift(today, -27), until: today }, { since: shift(today, -55), until: shift(today, -28) }),
     loadReviews(c.sb, today),
   ]);
-  const warnings = [reviews.ok ? "" : reviews.note || "", voice.naver.ok ? "" : `스마트스토어 문의: ${voice.naver.note || "집계 없음"}`, voice.voc.ok ? "" : `VOC: ${voice.voc.note || "집계 없음"}`].filter(Boolean);
+  const noNaver = reviews.ok && !reviews.by["스마트스토어"] ? `최근 ${REVIEW_DAYS}일 스마트스토어 리뷰가 없습니다(리뷰 엑셀을 올리지 않았을 수 있음).` : "";
+  const noMall = reviews.ok && !reviews.by["공식몰"] ? `최근 ${REVIEW_DAYS}일 공식몰 리뷰가 없습니다(수집이 멈췄을 수 있음).` : "";
+  const warnings = [reviews.ok ? "" : reviews.note || "", noMall, noNaver, voice.naver.ok ? "" : `스마트스토어 문의: ${voice.naver.note || "집계 없음"}`, voice.voc.ok ? "" : `VOC: ${voice.voc.note || "집계 없음"}`].filter(Boolean);
   const counts = { reviews: reviews.items.length, inquiries: voice.naver.items?.length || 0, voc: voice.voc.items?.length || 0 };
   if (!counts.reviews && !counts.inquiries && !counts.voc) {
     // 읽을 글이 하나도 없으면 AI 를 부르지 않는다
@@ -163,7 +181,7 @@ async function stageVoice(c: StageCtx): Promise<StageResult> {
   }
   const { text } = await converse(m, {
     system: VOICE_SYSTEM, effort: "high", maxTokens: 20000, deadlineAt: c.deadlineAt,
-    content: [{ type: "text", text: `기준일 ${kstTodayLabel()}\n\n[공식몰 리뷰 — 최근 ${REVIEW_DAYS}일 ${reviews.total}건 중 ${reviews.items.length}건]\n${reviews.ok ? JSON.stringify(reviews.items) : reviews.note}\n\n[스마트스토어 문의·VOC — 최근 4주]\n${JSON.stringify(voiceForAi(voice))}` }],
+    content: [{ type: "text", text: `기준일 ${kstTodayLabel()}\n\n[고객 리뷰 — 최근 ${REVIEW_DAYS}일 ${reviews.total}건 중 ${reviews.items.length}건(${Object.entries(reviews.by).map(([k, n]) => `${k} ${n}건`).join(" · ") || "없음"}), ch = 리뷰가 달린 곳]\n${reviews.ok ? JSON.stringify(reviews.items) : reviews.note}\n\n[스마트스토어 문의·VOC — 최근 4주]\n${JSON.stringify(voiceForAi(voice))}` }],
   });
   if (!text) throw fail(m, "고객 목소리 정리가 비어 있습니다. [업무 요청]을 다시 누르세요.");
   return { ...meterOut(m), counts, warnings, note: { key: "voice", text: text.slice(0, 5000) } };

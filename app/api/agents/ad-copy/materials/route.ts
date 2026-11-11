@@ -14,20 +14,19 @@ async function actor(req: NextRequest): Promise<string | null> {
   return (await verifySession(token)) || resolveUserName(token);
 }
 
-// GET — 광고 카피 에이전트가 읽는 자료: 타깃 메모 · 타사 레퍼런스 목록 · 공식몰 리뷰 수집 현황
+// GET — 광고 카피 에이전트가 읽는 자료: 타깃 메모 · 타사 레퍼런스 목록 · 리뷰 현황(공식몰 자동 수집 · 스마트스토어 엑셀 업로드)
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const [brief, syncedAt] = await Promise.all([getAdBrief(), getKv("shop_reviews_synced_at")]);
+    const [brief, syncedAt, naverAt] = await Promise.all([getAdBrief(), getKv("shop_reviews_synced_at"), getKv("naver_reviews_uploaded_at")]);
+    const count = (ch: string) => sb.from("shop_reviews").select("id", { count: "exact", head: true }).eq("channel", ch);
     try {
-      const [references, reviews] = await Promise.all([
-        listReferences(sb),
-        sb.from("shop_reviews").select("id", { count: "exact", head: true }),
-      ]);
+      const [references, reviews, naver] = await Promise.all([listReferences(sb), count("공식몰"), count("스마트스토어")]);
       if (reviews.error) throw reviews.error;
-      return NextResponse.json({ ok: true, brief, references, reviews: { count: reviews.count ?? 0, synced_at: syncedAt || null } });
+      if (naver.error) throw naver.error;
+      return NextResponse.json({ ok: true, brief, references, reviews: { count: reviews.count ?? 0, synced_at: syncedAt || null, naver: naver.count ?? 0, naver_at: naverAt || null } });
     } catch (e) {
-      if (isPending166(e)) return NextResponse.json({ ok: true, brief, references: [], reviews: { count: 0, synced_at: null }, pending: PENDING_166 });
+      if (isPending166(e)) return NextResponse.json({ ok: true, brief, references: [], reviews: { count: 0, synced_at: null, naver: 0, naver_at: null }, pending: PENDING_166 });
       throw e;
     }
   } catch (err) {
