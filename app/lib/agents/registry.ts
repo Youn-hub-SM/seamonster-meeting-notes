@@ -64,7 +64,16 @@ export const AGENTS: AgentMeta[] = [
     schedule: { on: false, weekday: 1, hour: 9 },
     versions: [
       {
-        id: "v2", date: "2026-11-11",
+        id: "v3", date: "2026-11-12",
+        changes: [
+          "중량·개수 같은 상품 숫자는 상품 마스터의 규격에 있는 값만 씀",
+          "정부·기관·전문가 권장, 인증, 통계는 광고 문구에 쓰지 않고 근거에만 적음",
+          "일부 고객의 말을 모두의 일처럼 넓혀 쓰지 않음",
+          "본문을 짧은 본문(3~4줄)과 긴 본문 둘로 냄",
+        ],
+      },
+      {
+        id: "v2", date: "2026-11-11", retired: true,
         changes: [
           "소재 작성을 '소재 기획'과 '카피 작성' 두 단계로 나눔 — v1 은 한 번에 쓰다가 시간 초과로 실패",
           "품질 우선: 모든 단계를 생각 강도 높음으로 실행하고 단계마다 시간을 800초까지 씀",
@@ -125,7 +134,8 @@ export type AdIdea = {
   hook: string;          // ① 후킹(첫 문장·첫 1~3초)
   story: string;         // ② 스토리(문제→공감→해결)
   offer: string;         // ③ 제안(혜택·행동 유도)
-  primary_text: string;  // 광고 본문
+  short_text?: string;   // (v3~) 짧은 본문(3~4줄)
+  primary_text: string;  // 광고 본문(긴 것)
   headline: string;      // 제목
   visual: string;        // 비주얼·촬영 안내
   basis: string;         // 근거(어느 고객 목소리·트렌드·성과·레퍼런스에서 나왔나)

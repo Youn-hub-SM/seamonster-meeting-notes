@@ -300,6 +300,27 @@ async function priorIdeas(sb: SupabaseClient, exceptId: string): Promise<string>
   }).join("\n");
 }
 
+// ── 버전 설정 ──
+//  v3(2026-11-12, 대표가 v2 첫 결과를 보고): 문구에 확인 안 된 사실이 섞였다 — "정부가 권장하는 … 보관법 그대로예요", "100g 한 팩".
+//   ① 기관·전문가 권장, 인증, 통계는 광고 문구에 쓰지 않는다(근거 칸에만) ② 상품 규격은 상품 마스터 값만 쓴다(없는 숫자 금지)
+//   ③ 본문을 짧은 것(short_text)과 긴 것(primary_text) 둘로 낸다.
+type Cfg = { facts: boolean };
+const V2: Cfg = { facts: false }, V3: Cfg = { facts: true };
+
+// 상품 규격 — 상품 마스터(products)의 사용 중인 품목 이름·규격·단위. 광고 문구의 중량·포장 숫자는 여기 있는 것만 쓴다.
+const PRODUCT_MAX = 150;
+async function loadProducts(sb: SupabaseClient): Promise<{ ok: boolean; text: string }> {
+  const { data, error } = await sb.from("products").select("name, spec, unit, active").order("name", { ascending: true }).limit(1000);
+  if (error) return { ok: false, text: "읽지 못함" };
+  const rows = ((data ?? []) as { name: string | null; spec: string | null; unit: string | null; active: boolean | null }[]).filter((p) => p.active !== false && p.name);
+  if (!rows.length) return { ok: false, text: "없음" };
+  return { ok: true, text: rows.slice(0, PRODUCT_MAX).map((p) => `- ${cut(p.name, 60)}${p.spec ? ` · ${cut(p.spec, 60)}` : ""}${p.unit ? ` · 단위 ${p.unit}` : ""}`).join("\n") };
+}
+const FACT_RULE = `[사실만 쓰기 — 가장 먼저 지킬 것]
+- 중량, 개수, 포장 단위 같은 상품 숫자는 [상품 규격]에 적힌 값만 씁니다. 거기 없는 숫자는 쓰지 않고 숫자 없이 표현합니다(예: '한 팩씩').
+- 정부·기관·전문가의 권장, 인증, 수상, 통계, 기사 내용은 광고 문구(hook·story·offer·short_text·primary_text·headline)에 쓰지 않습니다. 소재를 고른 이유로만 쓸 수 있고, 그때는 근거(basis)에 적습니다.
+- '다들', '늘', '누구나'처럼 일부 고객의 말을 모두의 일로 넓히지 않습니다. 고객의 말은 한 사람의 말로 씁니다.`;
+
 // ── 3단계: 소재 기획 — 어떤 소재를 낼지만 정한다(문구는 다음 단계) ──
 const IDEA_MIN = 8, IDEA_MAX = 12;
 const ROLE = COMPANY.replace("입니다.", "의 광고 카피 담당 에이전트입니다.");
@@ -376,10 +397,12 @@ const checkPlan = (input: unknown): Plan | null => {
 const FORMATS = ["이미지", "영상", "캐러셀"];
 const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
 
-async function stagePlan(c: StageCtx): Promise<StageResult> {
+async function stagePlan(c: StageCtx, cfg: Cfg): Promise<StageResult> {
   const today = kstTodayIso();
   const m = await newMeter();
   const warnings: string[] = [];
+  const products = cfg.facts ? await loadProducts(c.sb) : null;
+  if (products && !products.ok) warnings.push("상품 규격을 읽지 못했습니다 — 문구에 중량·개수 숫자를 쓰지 않았습니다.");
   const [ads, refs, saved, prior, brief] = await Promise.all([
     loadAdHistory(today).catch((e) => ({ ok: false as const, note: `메타 광고 성과 조회 실패: ${String((e as Error)?.message || e).slice(0, 140)}`, rows: [] as AdRow[], avgRoas: 0, totalAds: 0 })),
     listReferences(c.sb, REF_MAX).catch((e) => { warnings.push(missingTable(e, "ad_references") ? "타사 레퍼런스 표가 없습니다(166 미적용)." : "타사 레퍼런스를 읽지 못했습니다."); return [] as AdReference[]; }),
@@ -413,13 +436,14 @@ async function stagePlan(c: StageCtx): Promise<StageResult> {
         `[소재 보관함]\n${saved.length ? JSON.stringify(saved.slice(0, 20).map((x) => ({ 이름: x.name, 형식: x.format, 후킹: cut(x.hook, 150), 스토리: cut(x.story, 200), 제안: cut(x.offer, 150), ROAS: x.roas ?? null }))) : "없음"}`,
         `[타사 레퍼런스 — 담당자가 올린 ${refs.length}건]\n${refs.length ? JSON.stringify(refText) : "없음"}`,
         `[지난 목록 — 최신순]\n${prior}`,
+        ...(products ? [`[상품 규격 — 상품 마스터]\n${products.text}`] : []),
       ].join("\n\n"),
     },
   ];
   // 생각(thinking)도 max_tokens 에 들어간다 — medium·8000 은 생각만으로 한도를 채워 잘렸다(2026-11-11 v2 첫 실행, 119초).
   //  품질 우선(대표 2026-11-11): 생각을 줄이지 않고 high 로 두고, 한도와 시간을 넉넉히 준다(초당 약 65토큰 → 40,000토큰이면 10분쯤).
   const { submitted } = await converse<Plan>(m, {
-    system: PLAN_SYSTEM, effort: "high", maxTokens: 40000, deadlineAt: c.deadlineAt,
+    system: cfg.facts ? PLAN_SYSTEM.replace("[소재를 정하는 법]", `${FACT_RULE}\n\n[소재를 정하는 법]`) : PLAN_SYSTEM, effort: "high", maxTokens: 40000, deadlineAt: c.deadlineAt,
     submit: { tool: planTool, check: checkPlan }, content,
   });
   const s = submitted as Plan;
@@ -459,8 +483,13 @@ const WRITE_SYSTEM = `당신은 ${ROLE}
 - primary_text 광고 본문(바로 붙여 넣을 수 있게, 줄바꿈 포함 300자 안쪽) · headline 제목(25자 안쪽)
 - visual 비주얼·촬영 안내 한두 문장`;
 
-type Copy = { no: number; hook: string; story: string; offer: string; primary_text: string; headline: string; visual: string };
-const copiesTool = (strict: boolean): Anthropic.Tool => ({
+const WRITE_SYSTEM_V3 = WRITE_SYSTEM
+  .replace("[쓰는 법]", `${FACT_RULE}\n\n[쓰는 법]`)
+  .replace("- primary_text 광고 본문(바로 붙여 넣을 수 있게, 줄바꿈 포함 300자 안쪽) · headline 제목(25자 안쪽)",
+    "- short_text 짧은 본문(3~4줄, 100자 안쪽 — '더 보기'를 누르지 않아도 뜻이 서게) · primary_text 긴 본문(바로 붙여 넣을 수 있게, 줄바꿈 포함 300자 안쪽, 첫 두 줄만 읽어도 뜻이 서게) · headline 제목(25자 안쪽)");
+
+type Copy = { no: number; hook: string; story: string; offer: string; primary_text: string; headline: string; visual: string; short_text?: string };
+const copiesTool = (withShort: boolean) => (strict: boolean): Anthropic.Tool => ({
   name: "submit_copies", ...(strict ? { strict: true } : {}),
   description: "소재별 광고 문구를 제출합니다. 정확히 한 번 호출합니다.",
   input_schema: {
@@ -469,8 +498,8 @@ const copiesTool = (strict: boolean): Anthropic.Tool => ({
       copies: {
         type: "array",
         items: {
-          type: "object", additionalProperties: false, required: ["no", "hook", "story", "offer", "primary_text", "headline", "visual"],
-          properties: { no: { type: "integer", description: "받은 소재 번호 그대로" }, hook: str, story: str, offer: str, primary_text: str, headline: str, visual: str },
+          type: "object", additionalProperties: false, required: ["no", "hook", "story", "offer", ...(withShort ? ["short_text"] : []), "primary_text", "headline", "visual"],
+          properties: { no: { type: "integer", description: "받은 소재 번호 그대로" }, hook: str, story: str, offer: str, ...(withShort ? { short_text: str } : {}), primary_text: str, headline: str, visual: str },
         },
       },
     },
@@ -481,21 +510,22 @@ const checkCopies = (input: unknown): Copy[] | null => {
   return s && Array.isArray(s.copies) && s.copies.length ? s.copies : null;
 };
 
-async function stageWrite(c: StageCtx): Promise<StageResult> {
+async function stageWrite(c: StageCtx, cfg: Cfg): Promise<StageResult> {
   const m = await newMeter();
+  const products = cfg.facts ? await loadProducts(c.sb) : null;
   let plan: Plan;
   try { plan = JSON.parse(c.notes.plan || "") as Plan; } catch { throw fail(m, "소재 기획을 읽지 못했습니다. [업무 요청]을 다시 누르세요."); }
   const prev = c.revise?.ideas || [];
   const todo = plan.ideas.map((it, i) => ({ no: i + 1, it })).filter(({ it }) => !(it.keep_no && prev[it.keep_no - 1]));
   const brief = await getAdBrief();
-  const shared = `[타깃 메모]\n${brief || "없음"}\n\n[덧붙인 말]\n${c.report.instruction || "없음"}\n\n${c.revise ? `[담당자 피드백]\n${c.revise.feedback}\n\n` : ""}[고객 목소리]\n${c.notes.voice || "없음"}\n\n[타깃 트렌드]\n${(c.notes.trend || "없음").split("\n## 출처")[0]}`;
+  const shared = `${products ? `[상품 규격 — 상품 마스터]\n${products.text}\n\n` : ""}[타깃 메모]\n${brief || "없음"}\n\n[덧붙인 말]\n${c.report.instruction || "없음"}\n\n${c.revise ? `[담당자 피드백]\n${c.revise.feedback}\n\n` : ""}[고객 목소리]\n${c.notes.voice || "없음"}\n\n[타깃 트렌드]\n${(c.notes.trend || "없음").split("\n## 출처")[0]}`;
   const chunks: (typeof todo)[] = [];
   for (let i = 0; i < todo.length; i += WRITE_CHUNK) chunks.push(todo.slice(i, i + WRITE_CHUNK));
   const others = (chunk: typeof todo) => plan.ideas.map((it, i) => ({ no: i + 1, title: it.title })).filter((x) => !chunk.some((y) => y.no === x.no)).map((x) => `${x.no} ${x.title}`).join(" · ");
   // 묶음마다 따로 부른다 — 한 묶음이 실패해도 나머지 문구는 살린다(실패한 소재는 문구 없이 목록에 남고 경고가 붙는다)
   const results = await Promise.allSettled(chunks.map((chunk) => converse<Copy[]>(m, {
-    system: WRITE_SYSTEM, effort: "high", maxTokens: 24000, deadlineAt: c.deadlineAt,
-    submit: { tool: copiesTool, check: checkCopies },
+    system: cfg.facts ? WRITE_SYSTEM_V3 : WRITE_SYSTEM, effort: "high", maxTokens: 24000, deadlineAt: c.deadlineAt,
+    submit: { tool: copiesTool(cfg.facts), check: checkCopies },
     content: [{ type: "text", text: `아래 소재 ${chunk.length}건의 광고 문구를 써서 submit_copies 로 제출하세요.\n\n[쓸 소재]\n${JSON.stringify(chunk.map(({ no, it }) => ({ no, 이름: it.title, 구분: it.kind, 소구점: it.angle, 대상: it.target, 형식: it.format, 근거: it.basis })))}\n\n[같은 목록의 다른 소재 — 겹치지 않게 참고만]\n${others(chunk) || "없음"}\n\n${shared}` }],
   })));
   const byNo = new Map<number, Copy>();
@@ -517,6 +547,7 @@ async function stageWrite(c: StageCtx): Promise<StageResult> {
       title: it.title, kind: it.kind, angle: it.angle, target: it.target, format: it.format, basis: it.basis,
       hook: clip(cp?.hook, 400), story: clip(cp?.story, 800), offer: clip(cp?.offer, 400),
       primary_text: clip(cp?.primary_text, 1200), headline: clip(cp?.headline, 120), visual: clip(cp?.visual, 500),
+      ...(cfg.facts ? { short_text: clip(cp?.short_text, 400) } : {}),
     };
   });
   if (missing.length) warnings.push(`${missing.join("·")}번 소재는 문구를 쓰지 못했습니다${failed ? `(${failed.slice(0, 80)})` : ""}. 피드백으로 다시 요청하세요.`);
@@ -524,4 +555,5 @@ async function stageWrite(c: StageCtx): Promise<StageResult> {
 }
 
 // v1(2026-11-11) = voice → trend → compose(기획+문구 한 번에). 첫 실행에서 compose 가 시간 초과로 실패해 종료 — 실행기는 남기지 않는다.
-export const AD_COPY_V2: StagedRunner = { stages: [stageVoice, stageTrend, stagePlan, stageWrite], reviseFrom: 2 };
+export const AD_COPY_V2: StagedRunner = { stages: [stageVoice, stageTrend, (c) => stagePlan(c, V2), (c) => stageWrite(c, V2)], reviseFrom: 2 };
+export const AD_COPY_V3: StagedRunner = { stages: [stageVoice, stageTrend, (c) => stagePlan(c, V3), (c) => stageWrite(c, V3)], reviseFrom: 2 };

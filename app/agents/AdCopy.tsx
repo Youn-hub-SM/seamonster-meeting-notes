@@ -9,7 +9,7 @@ import { Md } from "./Md";
 
 const ROWS: [keyof AdIdea, string][] = [
   ["angle", "소구점"], ["target", "대상"], ["hook", "후킹"], ["story", "스토리"], ["offer", "제안"],
-  ["headline", "제목"], ["primary_text", "본문"], ["visual", "비주얼"], ["basis", "근거"],
+  ["headline", "제목"], ["short_text", "짧은 본문"], ["primary_text", "긴 본문"], ["visual", "비주얼"], ["basis", "근거"],
 ];
 const COUNT_LABEL: [string, string][] = [["reviews", "리뷰"], ["inquiries", "문의"], ["voc", "VOC"], ["searches", "웹 검색"], ["ads", "광고"], ["references", "레퍼런스"]];
 
@@ -22,7 +22,7 @@ export function IdeasSection({ r, onChange }: { r: AgentReport; onChange: (r: Ag
   const [err, setErr] = useState("");
 
   const copy = async (d: AdIdea) => {
-    try { await navigator.clipboard.writeText(`${d.headline}\n\n${d.primary_text}`); toast.success("제목과 본문을 복사했습니다"); }
+    try { await navigator.clipboard.writeText([d.headline, d.short_text, d.primary_text].filter(Boolean).join("\n\n")); toast.success("제목과 본문을 복사했습니다"); }
     catch { toast.error("복사하지 못했습니다."); }
   };
   const sendFeedback = async () => {
@@ -57,7 +57,7 @@ export function IdeasSection({ r, onChange }: { r: AgentReport; onChange: (r: Ag
             </div>
             <dl className="ag-idea-grid">
               {ROWS.filter(([k]) => d[k]).map(([k, label]) => (
-                <div key={k} className="ag-idea-row"><dt>{label}</dt><dd className={k === "primary_text" ? "is-copy" : undefined}>{d[k]}</dd></div>
+                <div key={k} className="ag-idea-row"><dt>{label}</dt><dd className={k === "primary_text" || k === "short_text" ? "is-copy" : undefined}>{d[k]}</dd></div>
               ))}
             </dl>
           </div>
