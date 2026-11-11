@@ -100,8 +100,8 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
           <span className="ag-meta-fold">{open ? "접기" : "펼치기"}</span>
         </div>
         <div className={`ag-summary ${running || failed ? "is-muted" : ""}`}>
-          {isIdeas && revising ? "피드백을 반영해 목록을 다시 쓰고 있습니다. 보통 2~4분 걸립니다."
-            : isIdeas && running ? `${stageText || "작성을 시작했습니다."} 전체 4~8분 걸립니다.`
+          {isIdeas && revising ? "피드백을 반영해 목록을 다시 쓰고 있습니다. 보통 5~10분 걸립니다."
+            : isIdeas && running ? `${stageText || "작성을 시작했습니다."} 전체 10~20분 걸립니다.`
             : revising ? "피드백을 반영해 요청서를 작성하고 있습니다. 보통 1~3분 걸립니다."
             : running ? "초안을 작성하고 있습니다. 보통 1~3분 걸립니다."
             : failed ? (r.error || "작성하지 못했습니다.") : (r.summary || "요약 없음")}

@@ -5,7 +5,7 @@ import { getSchedule, getLastTarget, setLastTarget, markTick } from "@/app/lib/a
 import { startAgentRun, AgentStartError } from "@/app/lib/agents/run";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 에이전트 기한 270초 + 알림
+export const maxDuration = 800; // 단계형 에이전트의 한 단계 740초(staged.ts STAGE_MS) + 저장·넘기기. 요청서 에이전트는 그 안에서 270초 기한을 따로 지킨다(Pro + Fluid 한도 800)
 
 // POST — 예약 신호. Supabase pg_cron 이 매시 45분에 두드린다(migration 165, Authorization: Bearer DIGEST_CRON_KEY).
 //  에이전트마다 예약 설정(/agents 화면)을 보고 지금이 '목표 시각 15분 전'이면 최신 버전으로 초안을 작성한다.

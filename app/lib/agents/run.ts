@@ -11,7 +11,7 @@ import { applyWholesaleDraft } from "./wholesale-apply";
 import { getAssistantSettings, getAssistantMonthUsage, addAssistantUsage } from "../assistant";
 import { logAgentDraftReady } from "../b2b-activity";
 import { getAppBaseUrl } from "../b2b-settings";
-import { runStages, type StagedRunner } from "./staged";
+import { runStages, STAGED_FN_MS, type StagedRunner } from "./staged";
 import { AD_COPY_V2 } from "./ad-copy";
 
 export const AGENT_DEADLINE_MS = 270_000; // 라우트 maxDuration 300
@@ -31,7 +31,7 @@ const STAGED: Record<string, Record<string, StagedRunner>> = {
   "ad-copy": { v2: AD_COPY_V2 }, // v1 은 첫 실행에서 시간 초과 — 종료(registry retired), 실행기 없음
 };
 // 이 함수 호출이 끝나야 하는 시각 — Vercel 밖(로컬 개발)에는 300초 제한이 없어 단계를 한 호출에서 이어 돈다
-const fnDeadline = () => Date.now() + (process.env.VERCEL ? AGENT_DEADLINE_MS : 15 * 60_000);
+const fnDeadline = () => Date.now() + (process.env.VERCEL ? STAGED_FN_MS : 30 * 60_000);
 
 export class AgentStartError extends Error { status: number; constructor(m: string, status = 400) { super(m); this.status = status; } }
 

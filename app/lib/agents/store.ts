@@ -11,7 +11,9 @@ export function isPending164(err: unknown): boolean {
 }
 
 // 함수 최대 실행 시간(300초)을 넘긴 '작성 중'은 죽은 실행이다 — 행은 그대로 두고 화면에만 멈춤으로 보여 준다.
+//  단계형 에이전트(registry stages)는 한 단계가 800초 함수에서 돌아 기준이 더 길다(staged.ts STAGED_STALE_MS 와 같은 값).
 export const RUN_STALE_MS = 330_000;
+const staleMs = (agent: unknown): number => (agentOf(String(agent))?.stages ? 830_000 : RUN_STALE_MS);
 type Facts = NonNullable<AgentReport["facts"]>;
 const startedAt = (r: Record<string, unknown>): number => Date.parse(String((r.facts as Facts | null)?.run_started || r.created_at));
 
@@ -21,7 +23,7 @@ function toReport(r: Row): AgentReport {
   let status = String(r.status || "running") as AgentReportStatus;
   let error = (r.error as string | null) ?? null;
   let facts = (r.facts as AgentReport["facts"]) ?? null;
-  if (status === "running" && Date.now() - startedAt(r) > RUN_STALE_MS) {
+  if (status === "running" && Date.now() - startedAt(r) > staleMs(r.agent)) {
     if (facts?.revising) { status = "done"; facts = { ...facts, revising: false, revise_error: "피드백 반영이 끝나지 않고 멈췄습니다. 피드백을 다시 보내거나 결재하세요." }; }
     else { status = "error"; error = "작성이 끝나지 않고 멈췄습니다. [업무 요청]을 다시 누르세요."; }
   }
@@ -83,7 +85,7 @@ export async function countByVersion(sb: SupabaseClient, agent: string): Promise
 export async function runningReportId(sb: SupabaseClient, agent: string): Promise<string | null> {
   const { data, error } = await sb.from("agent_reports").select("id, created_at, facts").eq("agent", agent).eq("status", "running").limit(20);
   if (error) throw error;
-  const live = ((data ?? []) as Row[]).find((r) => Date.now() - startedAt(r) <= RUN_STALE_MS);
+  const live = ((data ?? []) as Row[]).find((r) => Date.now() - startedAt(r) <= staleMs(agent));
   return live ? String(live.id) : null;
 }
 

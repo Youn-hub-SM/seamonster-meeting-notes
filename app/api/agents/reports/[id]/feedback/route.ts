@@ -6,7 +6,7 @@ import { agentOf } from "@/app/lib/agents/registry";
 import { startRevision, AgentStartError } from "@/app/lib/agents/run";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 에이전트 기한 270초 + 요청서 작성
+export const maxDuration = 800; // 단계형 에이전트의 한 단계 740초(staged.ts STAGE_MS) + 저장·넘기기. 요청서 에이전트는 그 안에서 270초 기한을 따로 지킨다(Pro + Fluid 한도 800)
 
 type Ctx = { params: Promise<{ id: string }> };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -6,7 +6,7 @@ import { listReports, countByVersion, isPending164 } from "@/app/lib/agents/stor
 import { startAgentRun, AgentStartError } from "@/app/lib/agents/run";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 에이전트 기한 270초(AGENT_DEADLINE_MS) + 응답 여유
+export const maxDuration = 800; // 단계형 에이전트의 한 단계 740초(staged.ts STAGE_MS) + 저장·넘기기. 요청서 에이전트는 그 안에서 270초 기한을 따로 지킨다(Pro + Fluid 한도 800)
 
 async function actor(req: NextRequest): Promise<string | null> {
   const token = req.cookies.get("b2b_auth")?.value;

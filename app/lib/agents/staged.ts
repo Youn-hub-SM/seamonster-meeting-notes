@@ -1,5 +1,6 @@
 // 단계로 나눠 도는 에이전트의 공통 실행기 — 서버 전용.
-//  왜: Vercel 함수 한 번은 300초까지다. 조사가 긴 에이전트(웹 조사 + 분석 + 작성)는 한 번에 못 끝낸다.
+//  왜: Vercel 함수 한 번에는 시간 한도가 있다(이 프로젝트는 Pro + Fluid 라 라우트가 maxDuration 800 까지 선언할 수 있다).
+//   조사가 긴 에이전트(웹 조사 + 분석 + 작성)를 품질 우선(생각 강도 high)으로 돌리면 한 번에 못 끝낸다.
 //  어떻게: 일을 단계로 자르고, 단계가 끝날 때마다 결과(조사 요약·비용·진행)를 agent_reports 행에 적은 뒤
 //   다음 단계를 '새 함수 호출'(/api/agents/tick/resume)로 넘긴다. 단계마다 시간이 새로 주어져 전체 길이에 제한이 없다.
 //   넘기지 못하면(키 없음·호출 실패) 같은 호출 안에서 남은 시간으로 이어서 돈다 — 로컬 개발은 늘 이 길이다.
@@ -10,7 +11,11 @@ import type { AgentReport, AgentToolLog, AdIdea } from "./registry";
 import { getReport, saveStage, failStage } from "./store";
 import { addAssistantUsage } from "../assistant";
 
-export const STAGE_MS = 250_000;        // 한 단계가 쓸 수 있는 시간(함수 300초 − 저장·넘기기 여유)
+// 단계형 에이전트를 시작·이어 도는 라우트는 maxDuration = 800 을 선언한다(reports POST·feedback·tick·tick/resume).
+//  2026-11-11: 300초 한도에 맞추려고 생각 강도를 낮추다 품질이 떨어져, 대표 결정으로 '품질 우선' — 한도를 800초로 올리고 high 로 돈다.
+export const STAGED_FN_MS = 770_000;    // 함수 한 번이 쓸 수 있는 시간(800초 − 응답·저장 여유)
+export const STAGE_MS = 740_000;        // 한 단계가 쓸 수 있는 시간
+export const STAGED_STALE_MS = 830_000; // '작성 중'이 이보다 오래 그대로면 죽은 실행(화면에 멈춤으로 표시)
 const INLINE_MIN_MS = 100_000;          // 다음 단계를 넘기지 못했을 때, 이만큼 남아 있어야 같은 호출에서 이어 돈다
 
 export type StageUsage = { input: number; output: number; rounds: number; tool_calls: number; elapsed_ms: number };
