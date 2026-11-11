@@ -46,7 +46,7 @@ export async function getCurrentModel(): Promise<string> {
 }
 
 // ── 기능별 모델 ──
-export type AiFeature = "meeting" | "cs" | "voc" | "report" | "daily_analyst" | "notice"; // briefing(옛 06:30 브리핑)은 2026-10-20, production(재고 AI 조언·주간 초안)은 2026-11-08 삭제
+export type AiFeature = "meeting" | "cs" | "voc" | "report" | "daily_analyst" | "notice" | "agent"; // briefing(옛 06:30 브리핑)은 2026-10-20, production(재고 AI 조언·주간 초안)은 2026-11-08 삭제
 // inheritDefault: 기능 설정이 'inherit' 일 때 공통 기본 대신 쓰는 모델(정확도가 중요한 기능). 없으면 공통 기본을 따른다.
 export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inheritDefault?: ModelKey }[] = [
   { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
@@ -55,6 +55,7 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inherit
   { key: "report", label: "AI 비서", desc: "질문 → 조사(SQL·글 검색) → 근거 있는 답 (기본 fable — 2026-10-19). 보조 작업은 Opus 낮음 고정", inheritDefault: "fable" },
   { key: "daily_analyst", label: "종합 리포트(일일·주간·월간)", desc: "매출·광고 분석 에이전트 — 일일·주간·월간 공통 (기본 fable — 2026-10-19 대표 선택, 이전 opus)", inheritDefault: "fable" },
   { key: "notice", label: "공지 작성기", desc: "상황 항목 → 씨몬스터 톤 공지문 (기본 sonnet)", inheritDefault: "sonnet" },
+  { key: "agent", label: "AI 에이전트", desc: "맡은 일을 조사해 보고서로 내는 에이전트 — 도매 생산 요청서 (기본 fable — 2026-11-11)", inheritDefault: "fable" },
 ];
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   meeting: "ai_model_meeting",
@@ -63,6 +64,7 @@ const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   report: "ai_model_report",
   daily_analyst: "ai_model_daily_analyst",
   notice: "ai_model_notice",
+  agent: "ai_model_agent",
 };
 
 // 기능별 설정값: 'inherit'(공통 따름·기본) 또는 특정 모델 키.

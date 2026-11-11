@@ -1,0 +1,77 @@
+/* AI 에이전트(/agents) 전용 — 접두사 .ag-*. 색·간격·글자는 globals.css :root 토큰만. */
+
+/* 실행 줄 — 버전 · 덧붙일 말 · [보고서 작성] */
+.ag-run { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; }
+.ag-run-version { flex: 0 0 auto; width: auto; min-width: 120px; }
+.ag-run-note { flex: 1 1 280px; min-width: 200px; }
+
+/* 버전 기록 */
+.ag-versions { margin-top: var(--sm-space-3); font-size: var(--sm-fs-base); }
+.ag-versions > summary { cursor: pointer; color: var(--sm-text-mid); font-size: var(--sm-fs-xs); font-weight: 500; width: fit-content; }
+.ag-version { display: grid; grid-template-columns: 96px 1fr; gap: var(--sm-space-3); padding: var(--sm-space-3) 0; border-top: 1px solid var(--sm-border-light); }
+.ag-version:first-of-type { margin-top: var(--sm-space-2); }
+.ag-version-id { font-weight: 600; }
+.ag-version-date { display: block; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-weight: 400; }
+.ag-version ul { margin: 0; padding-left: 18px; line-height: var(--sm-lh-body); }
+
+.ag-filter { margin: var(--sm-space-5) 0 var(--sm-space-3); }
+
+/* 보고서 카드 — 쌓이는 목록 */
+.ag-card { background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); margin-bottom: var(--sm-space-3); }
+.ag-card-head {
+  display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+  padding: var(--sm-space-4) var(--sm-space-5); font-family: inherit; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-black);
+  border-radius: var(--sm-radius);
+}
+.ag-card-head:hover { background: var(--sm-bg-subtle); }
+.ag-meta { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.ag-meta-time { font-variant-numeric: tabular-nums; color: var(--sm-black); font-weight: 500; }
+.ag-meta-fold { margin-left: auto; }
+.ag-summary { margin-top: var(--sm-space-1); font-size: var(--sm-fs-lg); font-weight: 500; line-height: var(--sm-lh-body); }
+.ag-summary.is-muted { color: var(--sm-text-mid); font-weight: 400; }
+
+.ag-body { padding: var(--sm-space-4) var(--sm-space-5) var(--sm-space-5); border-top: 1px solid var(--sm-border); display: flex; flex-direction: column; gap: var(--sm-space-4); }
+.ag-sec-title { font-size: var(--sm-fs-xs); font-weight: 600; color: var(--sm-text-mid); letter-spacing: var(--sm-ls-label); margin-bottom: var(--sm-space-2); }
+.ag-note { font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+
+/* 제안 표 */
+.ag-item-name { font-weight: 500; }
+.ag-item-sku { display: block; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+/* 숫자 8열 — 좁은 화면에서는 눌리지 않고 감싸개(.b2b-table-wrap)가 옆으로 민다 */
+.b2b-table.ag-table { min-width: 780px; }
+.b2b-table.ag-table th, .b2b-table.ag-table td { padding: 8px 10px; }
+.ag-item { white-space: nowrap; }
+/* 이유는 숫자 줄 아래 한 줄 — 열로 두면 표가 눌려 품목 칸이 세로로 접힌다 */
+.b2b-table.ag-table .ag-item-row td { border-bottom: 0; padding-bottom: 2px; }
+.b2b-table.ag-table .ag-reason-row td { padding-top: 0; white-space: normal; color: var(--sm-text-mid); line-height: var(--sm-lh-body); }
+.ag-qty { width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
+.ag-changed { color: var(--sm-text-mid); font-size: var(--sm-fs-xs); display: block; }
+.ag-apply { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; margin-top: var(--sm-space-3); }
+.ag-apply-due { width: auto; }
+
+/* 보고서 본문(마크다운 — 제목·목록·굵게만) */
+.ag-md { line-height: var(--sm-lh-body); }
+.ag-md h3 { font-size: var(--sm-fs-base); font-weight: 600; margin: var(--sm-space-4) 0 var(--sm-space-1); }
+.ag-md h3:first-child { margin-top: 0; }
+.ag-md ul { margin: 0; padding-left: 18px; }
+.ag-md p { margin: 0 0 var(--sm-space-2); }
+
+/* 조회 내역 */
+.ag-tools > summary { cursor: pointer; font-size: var(--sm-fs-xs); font-weight: 500; color: var(--sm-text-mid); width: fit-content; }
+.ag-tools ol { margin: var(--sm-space-2) 0 0; padding-left: 20px; font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); }
+.ag-tools pre { margin: var(--sm-space-1) 0 var(--sm-space-2); padding: var(--sm-space-2) var(--sm-space-3); background: var(--sm-bg-subtle); border-radius: var(--sm-radius); font-family: var(--sm-mono); font-size: var(--sm-fs-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 평가 */
+.ag-feedback { display: flex; gap: var(--sm-space-2); align-items: flex-start; flex-wrap: wrap; }
+.ag-feedback textarea { flex: 1 1 320px; min-height: 64px; resize: vertical; }
+
+.ag-foot { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.ag-foot-right { margin-left: auto; }
+.ag-more { display: flex; justify-content: center; margin-top: var(--sm-space-4); }
+
+@media (max-width: 640px) {
+  .ag-card-head { padding: var(--sm-space-3) var(--sm-space-4); }
+  .ag-body { padding: var(--sm-space-3) var(--sm-space-4) var(--sm-space-4); }
+  .ag-version { grid-template-columns: 1fr; gap: var(--sm-space-1); }
+  .ag-run-version, .ag-run .b2b-btn-primary { flex: 1 1 100%; width: 100%; }
+}

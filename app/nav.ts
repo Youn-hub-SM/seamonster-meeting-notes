@@ -20,6 +20,7 @@ export const NAV: NavCategory[] = [
       { href: "https://seamonster2016.sharepoint.com/sites/manual", label: "씨몬스터 매뉴얼", icon: "link" }, // 2026-10-26 GitBook → SharePoint 매뉴얼 사이트로 이전
       { href: "/meeting", label: "회의 정리", icon: "note" }, // 2026-10-14 대표 결정: 분류 없이 최상단
       { href: "/report", label: "AI 비서", icon: "bars" }, // 2026-10-20 대표: 리포트 분류에서 빼 회의 정리 아래 최상단으로(주소·저장 리포트 그대로)
+      { href: "/agents", label: "AI 에이전트", icon: "pen" }, // 2026-11-11 대표: 에이전트별로 보고서가 쌓이는 화면(첫 에이전트 = 도매 생산 요청서). 에이전트·버전 목록은 app/lib/agents/registry.ts
     ],
   },
   {
