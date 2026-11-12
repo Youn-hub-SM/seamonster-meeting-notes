@@ -12,7 +12,8 @@ import { runSql } from "./analyst";
 export type AudienceCond = {
   from?: string; to?: string;            // 구매 기간 — 이 기간에 산 고객
   channels?: string[];                   // 그 구매의 채널(여러 개 = 그중 하나)
-  products?: string;                     // 그 구매의 상품 — 상품명·SKU 에 든 말, 쉼표로 여러 개(그중 하나)
+  skus?: { sku: string; label: string }[]; // 그 구매의 상품 — 목록에서 고른 상품(상품코드 정확히 일치). label 은 기록에 보일 이름
+  products?: string;                     // 그 구매의 상품 — 상품명·상품코드에 든 말, 쉼표로 여러 개. skus 와 합쳐 '그중 하나라도'
   minOrders?: number; maxOrders?: number; // 전체 기간 주문 횟수
   minAmount?: number;                    // 전체 기간 누적 구매 금액(원)
   lastFrom?: string; lastTo?: string;    // 마지막 구매일
@@ -34,6 +35,18 @@ export function normalizeCond(raw: unknown): AudienceCond {
   if (validDate(o.from)) c.from = o.from;
   if (validDate(o.to)) c.to = o.to;
   if (Array.isArray(o.channels)) { const ch = [...new Set(o.channels.map((x) => String(x).trim()).filter(Boolean))].slice(0, 30); if (ch.length) c.channels = ch; }
+  if (Array.isArray(o.skus)) {
+    const seen = new Set<string>();
+    const skus: { sku: string; label: string }[] = [];
+    for (const x of o.skus as { sku?: unknown; label?: unknown }[]) {
+      const sku = String(x?.sku || "").trim().toUpperCase().slice(0, 64);
+      if (!sku || seen.has(sku)) continue;
+      seen.add(sku);
+      skus.push({ sku, label: String(x?.label || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 60) });
+      if (skus.length >= 50) break;
+    }
+    if (skus.length) c.skus = skus;
+  }
   const p = String(o.products || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 20).join(", ");
   if (p) c.products = p;
   c.minOrders = posInt(o.minOrders); c.maxOrders = posInt(o.maxOrders); c.minAmount = posInt(o.minAmount);
@@ -49,7 +62,8 @@ export function condSummary(c: AudienceCond): string {
   const parts: string[] = [];
   if (c.from || c.to) parts.push(`구매 ${c.from || "처음"}~${c.to || "오늘"}`);
   if (c.channels?.length) parts.push(`채널 ${c.channels.join("/")}`);
-  if (c.products) parts.push(`상품 ${c.products}`);
+  if (c.skus?.length) parts.push(`상품 ${c.skus.map((x) => (x.label ? `${x.label}(${x.sku})` : x.sku)).join(", ")}`);
+  if (c.products) parts.push(`상품명·코드에 '${c.products}' 포함`);
   if (c.minOrders || c.maxOrders) parts.push(c.minOrders && c.maxOrders ? (c.minOrders === c.maxOrders ? `주문 ${c.minOrders}회` : `주문 ${c.minOrders}~${c.maxOrders}회`) : c.minOrders ? `주문 ${c.minOrders}회 이상` : `주문 ${c.maxOrders}회 이하`);
   if (c.minAmount) parts.push(`누적 ${c.minAmount.toLocaleString("ko-KR")}원 이상`);
   if (c.lastFrom || c.lastTo) parts.push(`마지막 구매 ${c.lastFrom || "처음"}~${c.lastTo || "오늘"}`);
@@ -63,10 +77,11 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
   if (c.from) w.push(`o.order_date >= ${lit(c.from)}`);
   if (c.to) w.push(`o.order_date <= ${lit(c.to)}`);
   if (c.channels?.length) w.push(`o.channel in (${c.channels.map(lit).join(",")})`);
-  if (c.products) {
-    const kws = c.products.split(",").map((x) => x.trim()).filter(Boolean);
-    w.push(`(${kws.map((k) => `o.product_name ilike ${likeLit(k)} or o.sku_code ilike ${likeLit(k)}`).join(" or ")})`);
-  }
+  // 상품 — 고른 상품(코드 정확히)과 포함어를 합쳐 '그중 하나라도 산 고객'
+  const prod: string[] = [];
+  if (c.skus?.length) prod.push(`upper(o.sku_code) in (${c.skus.map((x) => lit(x.sku.toUpperCase())).join(",")})`);
+  if (c.products) for (const k of c.products.split(",").map((x) => x.trim()).filter(Boolean)) prod.push(`o.product_name ilike ${likeLit(k)} or o.option_name ilike ${likeLit(k)} or o.sku_code ilike ${likeLit(k)}`);
+  if (prod.length) w.push(`(${prod.join(" or ")})`);
   const h: string[] = [];
   if (c.minOrders) h.push(`a.orders >= ${c.minOrders}`);
   if (c.maxOrders) h.push(`a.orders <= ${c.maxOrders}`);
@@ -112,6 +127,17 @@ export async function loadContacts(sb: SupabaseClient, keys: string[]): Promise<
 // 미리보기용 가리기 — 이름은 첫 글자만, 번호는 가운데를 가린다
 export const maskName = (n: string): string => (n ? n[0] + "*".repeat(Math.max(1, Math.min(n.length - 1, 3))) : "-");
 export const maskPhone = (p: string): string => { const d = p.replace(/\D/g, ""); return d.length >= 9 ? `${d.slice(0, 3)}-****-${d.slice(-4)}` : "-"; };
+
+// 상품 선택지 — 주문에 나온 상품코드마다 한 줄(주문 많은 순). 이름은 상품 마스터(products) 것, 없으면 주문에 적힌 상품명.
+//  화면이 이름·코드·주문 상품명으로 찾아 고른다. 코드 없는 주문은 여기 없다 — 그런 상품은 포함어로 찾는다.
+export type ProductOption = { sku: string; name: string; listing: string; orders: number };
+export async function listProducts(sb: SupabaseClient): Promise<ProductOption[]> {
+  const rows = await runSql<{ sku: string; name: string | null; spec: string | null; listing: string | null; orders: number }>(sb, `
+    select upper(o.sku_code) as sku, max(p.name) as name, max(p.spec) as spec, max(o.product_name) as listing, count(distinct o.order_unit)::int as orders
+    from sales_orders o left join products p on upper(p.sku) = upper(o.sku_code)
+    where o.sku_code <> '' group by upper(o.sku_code) order by orders desc`, 3000);
+  return rows.map((r) => ({ sku: r.sku, name: [r.name, r.spec].filter(Boolean).join(" · ") || (r.listing || r.sku), listing: r.listing || "", orders: Number(r.orders) || 0 }));
+}
 
 // 채널 선택지 — 주문이 있는 채널(많은 순)
 export async function listChannels(sb: SupabaseClient): Promise<string[]> {

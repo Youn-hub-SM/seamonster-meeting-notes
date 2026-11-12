@@ -3,12 +3,17 @@
 // 오디언스 추출 — 조건으로 고객을 찾아 이름·전화번호를 엑셀로 내려받는다. 메시지 발송은 사람이 따로 한다.
 //  고객 전화번호가 밖으로 나가는 유일한 화면이라, 검색과 추출이 모두 아래 기록에 남고 누구에게나 보인다.
 //  [고객 찾기] = 인원과 미리보기 10명(이름·번호 가림) → [엑셀 내려받기] = 방금 찾은 조건 그대로.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
+import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { qty, won, dateTime } from "@/app/lib/format";
 
-type Cond = { from: string; to: string; channels: string[]; products: string; minOrders: string; maxOrders: string; minAmount: string; lastFrom: string; lastTo: string };
-const EMPTY: Cond = { from: "", to: "", channels: [], products: "", minOrders: "", maxOrders: "", minAmount: "", lastFrom: "", lastTo: "" };
+// 상품 조건 = 목록에서 고른 상품(skus — 상품코드 정확히) + 포함어(keywords — 상품명·코드에 든 말). 둘을 합쳐 '그중 하나라도 산 고객'.
+type Sku = { sku: string; label: string };
+type Cond = { from: string; to: string; channels: string[]; skus: Sku[]; keywords: string[]; minOrders: string; maxOrders: string; minAmount: string; lastFrom: string; lastTo: string };
+const EMPTY: Cond = { from: "", to: "", channels: [], skus: [], keywords: [], minOrders: "", maxOrders: "", minAmount: "", lastFrom: "", lastTo: "" };
+const toPayload = (c: Cond) => ({ ...c, products: c.keywords.join(", "), keywords: undefined });
+type ProductOption = { sku: string; name: string; listing: string; orders: number };
 type Preview = { name: string; phone: string; orders: number; amount: number; first_date: string; last_date: string };
 type Result = { count: number; excluded: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
 type History = { id: string | number; action: "검색" | "추출"; cond: string; count: number | null; actor: string | null; created_at: string };
@@ -26,6 +31,10 @@ export default function AudiencePage() {
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<ProductOption[] | null>(null); // 상품 칸을 처음 누를 때 한 번 읽는다
+  const [productsError, setProductsError] = useState("");
+  const [typed, setTyped] = useState("");                                  // 상품 검색칸에 치고 있는 말
+  const productsAsked = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -38,6 +47,19 @@ export default function AudiencePage() {
   useEffect(() => { load(); }, [load]);
 
   const set = <K extends keyof Cond>(k: K, v: Cond[K]) => setCond((c) => ({ ...c, [k]: v }));
+
+  const loadProducts = () => {
+    if (productsAsked.current) return;
+    productsAsked.current = true;
+    fetch("/api/audience?products=1", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (!j.ok) throw new Error(j.error);
+      setProducts(j.products || []);
+    }).catch((e) => { productsAsked.current = false; setProductsError(e instanceof Error ? e.message : "상품 목록을 불러오지 못했습니다."); });
+  };
+  const productOptions: ComboOption[] = useMemo(() => (products || []).filter((p) => !cond.skus.some((s) => s.sku === p.sku))
+    .map((p) => ({ id: p.sku, label: p.name, sub: `${p.sku} · 주문 ${qty(p.orders)}건`, extra: p.listing })), [products, cond.skus]);
+  const addSku = (o: ComboOption) => { setCond((c) => (c.skus.some((s) => s.sku === o.id) ? c : { ...c, skus: [...c.skus, { sku: o.id, label: o.label }] })); setTyped(""); };
+  const addKeyword = () => { const k = typed.replace(/,/g, " ").trim(); if (k) setCond((c) => (c.keywords.includes(k) ? c : { ...c, keywords: [...c.keywords, k] })); setTyped(""); };
   const toggleChannel = (ch: string) => setCond((c) => ({ ...c, channels: c.channels.includes(ch) ? c.channels.filter((x) => x !== ch) : [...c.channels, ch] }));
   const isEmpty = JSON.stringify(cond) === JSON.stringify(EMPTY);
 
@@ -46,7 +68,7 @@ export default function AudiencePage() {
     if (isEmpty) { setError("조건을 하나 이상 입력하세요."); return; }
     setBusy("search");
     try {
-      const j = await (await fetch("/api/audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "search", cond }) })).json();
+      const j = await (await fetch("/api/audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "search", cond: toPayload(cond) }) })).json();
       if (!j.ok) throw new Error(j.error);
       setResult({ ...j, cond });
       load();
@@ -59,7 +81,7 @@ export default function AudiencePage() {
     if (!(await confirm({ title: "엑셀 내려받기", body: `${qty(result.count)}명의 이름과 전화번호가 든 엑셀을 내려받습니다. 추출 기록에 남습니다.`, action: "엑셀 내려받기", danger: false }))) return;
     setBusy("export");
     try {
-      const res = await fetch("/api/audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", cond: result.cond }) });
+      const res = await fetch("/api/audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", cond: toPayload(result.cond) }) });
       if (!res.ok || !(res.headers.get("content-type") || "").includes("spreadsheet")) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "엑셀을 만들지 못했습니다."); }
       const n = res.headers.get("X-Audience-Count") || String(result.count);
       const blob = await res.blob();
@@ -110,9 +132,28 @@ export default function AudiencePage() {
               </div>
             </div>
           )}
-          <div className="b2b-field aud-wide">
-            <label className="b2b-field-label" htmlFor="aud-products">상품</label>
-            <input id="aud-products" className="b2b-input" value={cond.products} onChange={(e) => set("products", e.target.value)} placeholder="예: 대구순살, GA-500" />
+          <div className="b2b-field aud-wide" onFocusCapture={loadProducts} onPointerDownCapture={loadProducts}>
+            <span className="b2b-field-label">상품</span>
+            {productsError && <div className="b2b-error">{productsError}</div>}
+            <Combobox value="" options={productOptions} onSelect={addSku} onType={setTyped} allowFreeText ariaLabel="상품 검색" placeholder="품목·SKU 검색"
+              emptyText={products ? "일치하는 상품이 없습니다" : "상품을 불러오는 중..."} />
+            {typed.trim() && (
+              <div><button type="button" className="b2b-link-btn" onClick={addKeyword}>이름·코드에 ‘{typed.trim()}’가 든 상품 모두 담기</button></div>
+            )}
+            {(cond.skus.length > 0 || cond.keywords.length > 0) && (
+              <div className="aud-chips">
+                {cond.skus.map((s) => (
+                  <button key={s.sku} type="button" className="aud-chip" aria-label={`${s.label} 빼기`} onClick={() => setCond((c) => ({ ...c, skus: c.skus.filter((x) => x.sku !== s.sku) }))}>
+                    {s.label}<span className="aud-chip-code">{s.sku}</span><span aria-hidden="true">✕</span>
+                  </button>
+                ))}
+                {cond.keywords.map((k) => (
+                  <button key={k} type="button" className="aud-chip" aria-label={`‘${k}’ 포함 조건 빼기`} onClick={() => setCond((c) => ({ ...c, keywords: c.keywords.filter((x) => x !== k) }))}>
+                    ‘{k}’ 포함<span aria-hidden="true">✕</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="b2b-field">
             <span className="b2b-field-label">주문 횟수</span>
@@ -132,7 +173,7 @@ export default function AudiencePage() {
           </div>
           <div className="aud-actions aud-wide">
             <button type="button" className="b2b-btn-primary" onClick={search} disabled={!!busy}>{busy === "search" ? "찾는 중" : "고객 찾기"}</button>
-            <button type="button" className="b2b-btn-secondary" onClick={() => { setCond(EMPTY); setResult(null); setError(""); }} disabled={!!busy || (isEmpty && !result)}>조건 지우기</button>
+            <button type="button" className="b2b-btn-secondary" onClick={() => { setCond(EMPTY); setResult(null); setError(""); setTyped(""); }} disabled={!!busy || (isEmpty && !result)}>조건 지우기</button>
           </div>
         </div>
       </section>

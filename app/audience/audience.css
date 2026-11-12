@@ -5,6 +5,11 @@
 .aud-range > span { white-space: nowrap; }
 .aud-range .b2b-input { width: auto; flex: 1 1 130px; min-width: 0; }
 .aud-range .aud-num { flex: 0 1 110px; min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+/* 담은 상품 — 지금 다루는 것이라 연주황 바탕. 누르면 빠진다 */
+.aud-chips { display: flex; flex-wrap: wrap; gap: var(--sm-space-2); margin-top: var(--sm-space-2); }
+.aud-chip { display: inline-flex; align-items: center; gap: var(--sm-space-2); padding: 4px 10px; border: 1px solid var(--sm-orange-border); border-radius: 6px; background: var(--sm-orange-light); color: var(--sm-black); font-family: inherit; font-size: var(--sm-fs-xs); font-weight: 500; line-height: var(--sm-lh-ui); cursor: pointer; }
+.aud-chip:hover { background: var(--sm-bg-subtle); }
+.aud-chip-code { font-family: var(--sm-mono); font-weight: 400; color: var(--sm-text-mid); }
 .aud-actions { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; }
 
 /* 결과 — 인원이 이 화면의 숫자 */
