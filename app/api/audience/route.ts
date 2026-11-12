@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { logAudience } from "@/app/lib/b2b-activity";
-import { normalizeCond, isEmptyCond, condSummary, findAudience, loadContacts, listChannels, listProducts, maskName, maskPhone, MAX_AUDIENCE } from "@/app/lib/audience";
+import { normalizeCond, isEmptyCond, condSummary, findAudience, loadContacts, listChannels, listProducts, listOrderNames, maskName, maskPhone, MAX_AUDIENCE } from "@/app/lib/audience";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const maxDuration = 60;
 
 // 오디언스 추출 — 조건으로 고객을 찾고(검색), 이름·전화번호가 든 엑셀을 내려받는다(추출).
 //  GET                         → 채널 선택지 + 검색·추출 기록(최근 100건)
-//  GET ?products=1             → 상품 선택지(주문에 나온 상품코드·이름·주문 건수) — 화면이 상품 칸을 처음 누를 때 한 번
+//  GET ?products=1             → 상품 선택지(상품코드별 한 줄 + 주문서에 적힌 상품명별 한 줄, 주문 건수) — 화면이 상품 칸을 처음 누를 때 한 번
 //  POST { action: "search", cond } → 인원·제외 인원·미리보기 10명(이름·번호 가림). 기록에 남는다.
 //  POST { action: "export", cond } → 엑셀 파일(이름·전화번호·주문 횟수·누적 금액·첫/마지막 구매일). 기록에 남는다.
 //  로그인한 내부 직원 누구나 쓸 수 있다(공장 계정 제외) — 대신 누가 언제 어떤 조건으로 몇 명을 봤는지 전부 화면에 보인다.
@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
   try {
     if (!(await loginName(req))) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
     const sb = supabaseAdmin();
-    if (req.nextUrl.searchParams.get("products") === "1") return NextResponse.json({ ok: true, products: await listProducts(sb) });
+    if (req.nextUrl.searchParams.get("products") === "1") {
+      const [products, names] = await Promise.all([listProducts(sb), listOrderNames(sb)]);
+      return NextResponse.json({ ok: true, products, names });
+    }
     const [channels, hist] = await Promise.all([
       listChannels(sb).catch(() => [] as string[]),
       sb.from("activity_log").select("id, event_type, summary, meta, actor, created_at").in("event_type", HISTORY_TYPES).order("created_at", { ascending: false }).limit(100),

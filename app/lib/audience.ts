@@ -13,7 +13,8 @@ export type AudienceCond = {
   from?: string; to?: string;            // 구매 기간 — 이 기간에 산 고객
   channels?: string[];                   // 그 구매의 채널(여러 개 = 그중 하나)
   skus?: { sku: string; label: string }[]; // 그 구매의 상품 — 목록에서 고른 상품(상품코드 정확히 일치). label 은 기록에 보일 이름
-  products?: string;                     // 그 구매의 상품 — 상품명·상품코드에 든 말, 쉼표로 여러 개. skus 와 합쳐 '그중 하나라도'
+  names?: string[];                      // 그 구매의 상품 — 목록에서 고른 주문 상품명(주문서에 적힌 이름과 정확히 일치)
+  products?: string;                     // 그 구매의 상품 — 상품명·상품코드에 든 말, 쉼표로 여러 개. skus·names 와 합쳐 '그중 하나라도'
   minOrders?: number; maxOrders?: number; // 전체 기간 주문 횟수
   minAmount?: number;                    // 전체 기간 누적 구매 금액(원)
   lastFrom?: string; lastTo?: string;    // 마지막 구매일
@@ -47,6 +48,10 @@ export function normalizeCond(raw: unknown): AudienceCond {
     }
     if (skus.length) c.skus = skus;
   }
+  if (Array.isArray(o.names)) {
+    const names = [...new Set(o.names.map((x) => String(x ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 300)).filter(Boolean))].slice(0, 50);
+    if (names.length) c.names = names;
+  }
   const p = String(o.products || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 20).join(", ");
   if (p) c.products = p;
   c.minOrders = posInt(o.minOrders); c.maxOrders = posInt(o.maxOrders); c.minAmount = posInt(o.minAmount);
@@ -63,6 +68,7 @@ export function condSummary(c: AudienceCond): string {
   if (c.from || c.to) parts.push(`구매 ${c.from || "처음"}~${c.to || "오늘"}`);
   if (c.channels?.length) parts.push(`채널 ${c.channels.join("/")}`);
   if (c.skus?.length) parts.push(`상품 ${c.skus.map((x) => (x.label ? `${x.label}(${x.sku})` : x.sku)).join(", ")}`);
+  if (c.names?.length) parts.push(`주문 상품명 ${c.names.map((n) => `'${n}'`).join(", ")}`);
   if (c.products) parts.push(`상품명·코드에 '${c.products}' 포함`);
   if (c.minOrders || c.maxOrders) parts.push(c.minOrders && c.maxOrders ? (c.minOrders === c.maxOrders ? `주문 ${c.minOrders}회` : `주문 ${c.minOrders}~${c.maxOrders}회`) : c.minOrders ? `주문 ${c.minOrders}회 이상` : `주문 ${c.maxOrders}회 이하`);
   if (c.minAmount) parts.push(`누적 ${c.minAmount.toLocaleString("ko-KR")}원 이상`);
@@ -80,6 +86,7 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
   // 상품 — 고른 상품(코드 정확히)과 포함어를 합쳐 '그중 하나라도 산 고객'
   const prod: string[] = [];
   if (c.skus?.length) prod.push(`upper(o.sku_code) in (${c.skus.map((x) => lit(x.sku.toUpperCase())).join(",")})`);
+  if (c.names?.length) prod.push(`o.product_name in (${c.names.map(lit).join(",")})`);
   if (c.products) for (const k of c.products.split(",").map((x) => x.trim()).filter(Boolean)) prod.push(`o.product_name ilike ${likeLit(k)} or o.option_name ilike ${likeLit(k)} or o.sku_code ilike ${likeLit(k)}`);
   if (prod.length) w.push(`(${prod.join(" or ")})`);
   const h: string[] = [];
@@ -137,6 +144,15 @@ export async function listProducts(sb: SupabaseClient): Promise<ProductOption[]>
     from sales_orders o left join products p on upper(p.sku) = upper(o.sku_code)
     where o.sku_code <> '' group by upper(o.sku_code) order by orders desc`, 3000);
   return rows.map((r) => ({ sku: r.sku, name: [r.name, r.spec].filter(Boolean).join(" · ") || (r.listing || r.sku), listing: r.listing || "", orders: Number(r.orders) || 0 }));
+}
+
+// 주문 상품명 선택지 — 주문서에 적힌 상품명 그대로(채널마다 이름이 다르다). 주문 많은 순.
+export type OrderNameOption = { name: string; orders: number };
+export async function listOrderNames(sb: SupabaseClient): Promise<OrderNameOption[]> {
+  const rows = await runSql<{ name: string; orders: number }>(sb, `
+    select o.product_name as name, count(distinct o.order_unit)::int as orders
+    from sales_orders o where o.product_name <> '' group by o.product_name order by orders desc`, 5000);
+  return rows.map((r) => ({ name: r.name, orders: Number(r.orders) || 0 }));
 }
 
 // 채널 선택지 — 주문이 있는 채널(많은 순)

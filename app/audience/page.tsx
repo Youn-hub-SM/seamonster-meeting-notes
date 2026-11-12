@@ -6,14 +6,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
+import { matchKoQuery } from "@/app/lib/hangul";
 import { qty, won, dateTime } from "@/app/lib/format";
 
-// 상품 조건 = 목록에서 고른 상품(skus — 상품코드 정확히) + 포함어(keywords — 상품명·코드에 든 말). 둘을 합쳐 '그중 하나라도 산 고객'.
+// 상품 조건 = 목록에서 고른 상품(skus — 상품코드 정확히) + 고른 주문 상품명(names — 주문서 이름 정확히) + 포함어(keywords — 든 말). 합쳐서 '그중 하나라도 산 고객'.
 type Sku = { sku: string; label: string };
-type Cond = { from: string; to: string; channels: string[]; skus: Sku[]; keywords: string[]; minOrders: string; maxOrders: string; minAmount: string; lastFrom: string; lastTo: string };
-const EMPTY: Cond = { from: "", to: "", channels: [], skus: [], keywords: [], minOrders: "", maxOrders: "", minAmount: "", lastFrom: "", lastTo: "" };
+type Cond = { from: string; to: string; channels: string[]; skus: Sku[]; names: string[]; keywords: string[]; minOrders: string; maxOrders: string; minAmount: string; lastFrom: string; lastTo: string };
+const EMPTY: Cond = { from: "", to: "", channels: [], skus: [], names: [], keywords: [], minOrders: "", maxOrders: "", minAmount: "", lastFrom: "", lastTo: "" };
 const toPayload = (c: Cond) => ({ ...c, products: c.keywords.join(", "), keywords: undefined });
 type ProductOption = { sku: string; name: string; listing: string; orders: number };
+type NameOption = { name: string; orders: number };
+const SUGGEST_MAX = 60; // 목록에 한 번에 그리는 줄 수 — 주문 상품명은 수천 개라 전부 그리면 느리다
 type Preview = { name: string; phone: string; orders: number; amount: number; first_date: string; last_date: string };
 type Result = { count: number; excluded: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
 type History = { id: string | number; action: "검색" | "추출"; cond: string; count: number | null; actor: string | null; created_at: string };
@@ -32,6 +35,7 @@ export default function AudiencePage() {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<ProductOption[] | null>(null); // 상품 칸을 처음 누를 때 한 번 읽는다
+  const [orderNames, setOrderNames] = useState<NameOption[]>([]);         // 주문서에 적힌 상품명(채널마다 다르다)
   const [productsError, setProductsError] = useState("");
   const [typed, setTyped] = useState("");                                  // 상품 검색칸에 치고 있는 말
   const productsAsked = useRef(false);
@@ -53,12 +57,24 @@ export default function AudiencePage() {
     productsAsked.current = true;
     fetch("/api/audience?products=1", { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (!j.ok) throw new Error(j.error);
-      setProducts(j.products || []);
+      setProducts(j.products || []); setOrderNames(j.names || []);
     }).catch((e) => { productsAsked.current = false; setProductsError(e instanceof Error ? e.message : "상품 목록을 불러오지 못했습니다."); });
   };
-  const productOptions: ComboOption[] = useMemo(() => (products || []).filter((p) => !cond.skus.some((s) => s.sku === p.sku))
-    .map((p) => ({ id: p.sku, label: p.name, sub: `${p.sku} · 주문 ${qty(p.orders)}건`, extra: p.listing })), [products, cond.skus]);
-  const addSku = (o: ComboOption) => { setCond((c) => (c.skus.some((s) => s.sku === o.id) ? c : { ...c, skus: [...c.skus, { sku: o.id, label: o.label }] })); setTyped(""); };
+  // 목록 = 상품(코드) 먼저, 그 아래 주문 상품명. 검색어에 맞는 것만 SUGGEST_MAX 줄까지(콤보박스와 같은 규칙으로 미리 거른다).
+  const productOptions: ComboOption[] = useMemo(() => {
+    const q = typed.trim();
+    const all: ComboOption[] = [
+      ...(products || []).filter((p) => !cond.skus.some((s) => s.sku === p.sku)).map((p) => ({ id: `sku:${p.sku}`, label: p.name, sub: `${p.sku} · 주문 ${qty(p.orders)}건`, extra: p.listing })),
+      ...orderNames.filter((n) => !cond.names.includes(n.name)).map((n) => ({ id: `name:${n.name}`, label: n.name, sub: `주문 상품명 · 주문 ${qty(n.orders)}건` })),
+    ];
+    const hit = q ? all.filter((o) => matchKoQuery(`${o.label} ${o.sub || ""} ${o.extra || ""}`, q)) : all;
+    return hit.slice(0, SUGGEST_MAX);
+  }, [products, orderNames, cond.skus, cond.names, typed]);
+  const addSku = (o: ComboOption) => {
+    if (o.id.startsWith("name:")) { const name = o.id.slice(5); setCond((c) => (c.names.includes(name) ? c : { ...c, names: [...c.names, name] })); }
+    else { const sku = o.id.slice(4); setCond((c) => (c.skus.some((s) => s.sku === sku) ? c : { ...c, skus: [...c.skus, { sku, label: o.label }] })); }
+    setTyped("");
+  };
   const addKeyword = () => { const k = typed.replace(/,/g, " ").trim(); if (k) setCond((c) => (c.keywords.includes(k) ? c : { ...c, keywords: [...c.keywords, k] })); setTyped(""); };
   const toggleChannel = (ch: string) => setCond((c) => ({ ...c, channels: c.channels.includes(ch) ? c.channels.filter((x) => x !== ch) : [...c.channels, ch] }));
   const isEmpty = JSON.stringify(cond) === JSON.stringify(EMPTY);
@@ -140,11 +156,16 @@ export default function AudiencePage() {
             {typed.trim() && (
               <div><button type="button" className="b2b-link-btn" onClick={addKeyword}>이름·코드에 ‘{typed.trim()}’가 든 상품 모두 담기</button></div>
             )}
-            {(cond.skus.length > 0 || cond.keywords.length > 0) && (
+            {(cond.skus.length > 0 || cond.names.length > 0 || cond.keywords.length > 0) && (
               <div className="aud-chips">
                 {cond.skus.map((s) => (
                   <button key={s.sku} type="button" className="aud-chip" aria-label={`${s.label} 빼기`} onClick={() => setCond((c) => ({ ...c, skus: c.skus.filter((x) => x.sku !== s.sku) }))}>
                     {s.label}<span className="aud-chip-code">{s.sku}</span><span aria-hidden="true">✕</span>
+                  </button>
+                ))}
+                {cond.names.map((n) => (
+                  <button key={n} type="button" className="aud-chip" aria-label={`${n} 빼기`} onClick={() => setCond((c) => ({ ...c, names: c.names.filter((x) => x !== n) }))}>
+                    {n}<span className="aud-chip-code">주문 상품명</span><span aria-hidden="true">✕</span>
                   </button>
                 ))}
                 {cond.keywords.map((k) => (
