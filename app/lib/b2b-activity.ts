@@ -479,6 +479,17 @@ export async function logDepositsNeedReview(deps: { amount: number; remark: stri
 }
 
 // ── 매출(sales) ── 비-B2B. 전부 notify:false → 외부 웹훅(Zapier) 미발송, DB 감사기록만.
+// 오디언스 검색·추출 기록 — 고객 전화번호를 밖으로 내보내는 유일한 길(/audience)이라 검색까지 남긴다.
+//  /audience 화면에 그대로 보이고, 매출 변경 기록(sales.*)에도 함께 나온다. 알림은 보내지 않는다. 기록에 전화번호·이름은 넣지 않는다(조건과 인원만).
+export async function logAudience(action: "search" | "export", summary: string, count: number, actor: string | null, cond: Record<string, unknown>): Promise<void> {
+  await recordActivity({
+    event_type: action === "export" ? "sales.audience_export" : "sales.audience_search",
+    summary: `오디언스 ${action === "export" ? "추출" : "검색"} · ${count.toLocaleString("ko-KR")}명 · ${summary}`,
+    meta: { count, summary, cond },
+    notify: false,
+    actor,
+  });
+}
 export async function logSalesUpload(filename: string, inserted: number, skipped: number): Promise<void> {
   await recordActivity({
     event_type: "sales.upload",

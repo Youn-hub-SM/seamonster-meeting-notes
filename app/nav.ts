@@ -110,6 +110,7 @@ export const NAV: NavCategory[] = [
         ],
       },
       { href: "/crm", label: "CRM 메시지맵", icon: "megaphone" },
+      { href: "/audience", label: "오디언스 추출", icon: "user", beta: true }, // 2026-11-13 조건으로 고객을 찾아 이름·전화번호를 엑셀로(발송은 사람이 따로) — 검색·추출 기록이 화면에 남는다
       { href: "/instagram", label: "인스타 자동 DM", icon: "chat" },
     ],
   },

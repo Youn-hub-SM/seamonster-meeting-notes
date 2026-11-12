@@ -1,0 +1,24 @@
+/* 오디언스 추출(/audience) 전용 — 접두사 .aud-*. 색·간격·글자는 globals.css :root 토큰만. */
+.aud-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-4) var(--sm-space-5); }
+.aud-wide { grid-column: 1 / -1; }
+.aud-range { display: flex; align-items: center; gap: var(--sm-space-2); }
+.aud-range > span { white-space: nowrap; }
+.aud-range .b2b-input { width: auto; flex: 1 1 130px; min-width: 0; }
+.aud-range .aud-num { flex: 0 1 110px; min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+.aud-actions { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; }
+
+/* 결과 — 인원이 이 화면의 숫자 */
+.aud-result-head { display: flex; align-items: baseline; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
+.aud-count { font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-kpi); font-variant-numeric: tabular-nums; }
+.aud-count-sub { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.aud-export { margin-left: auto; }
+.aud-cond { font-size: var(--sm-fs-base); color: var(--sm-text-mid); margin-bottom: var(--sm-space-3); }
+
+.b2b-table.aud-table { min-width: 640px; }
+.b2b-table.aud-history { min-width: 720px; }
+.aud-cond-cell { white-space: normal; min-width: 280px; line-height: var(--sm-lh-body); }
+
+@media (max-width: 640px) {
+  .aud-form { grid-template-columns: 1fr; }
+  .aud-export { margin-left: 0; }
+}
