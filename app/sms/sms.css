@@ -1,0 +1,14 @@
+/* 문자 보내기(/sms) 전용 — 접두사 .sms-*. 색·간격·글자는 globals.css :root 토큰만. */
+.sms-form { display: flex; flex-direction: column; gap: var(--sm-space-4); }
+.sms-form textarea { resize: vertical; }
+.sms-receivers { min-height: 88px; font-variant-numeric: tabular-nums; }
+.sms-message { min-height: 140px; line-height: var(--sm-lh-body); }
+/* 칸 옆 계산 결과(받는 사람 수·바이트) — 고정 안내가 아니라 입력에 따라 바뀌는 값 */
+.sms-count { margin-left: var(--sm-space-2); font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
+.sms-count.is-over { color: var(--sm-danger); }
+.sms-actions { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; }
+.sms-remain { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
+/* 좁은 화면에서 내용 칸이 한 글자 폭으로 눌리지 않게 — 표는 감싸개가 옆으로 민다 */
+.b2b-table.sms-table { min-width: 760px; }
+.sms-msg-cell { min-width: 240px; max-width: 420px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--sm-lh-body); }
+.sms-sub { display: block; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }

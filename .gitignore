@@ -63,6 +63,8 @@ next-env.d.ts
 !/scripts/claims-poll.mjs
 !/scripts/cafe24-subscription-sync.mjs
 !/scripts/cafe24-review-sync.mjs
+!/scripts/aligo-sms-runner.mjs
+!/scripts/aligo-setup.sh
 # 판매자센터에서 내려받은 리뷰 엑셀(고객 글) — 커밋 금지
 /*리뷰*.xlsx
 !/scripts/backup-supabase.mjs

@@ -128,6 +128,7 @@ export const NAV: NavCategory[] = [
           { href: "/voc/surveys", label: "설문응답(Tally)" }, // 2026-10-14 대표 결정: 베타 떼고 VOC 관리 아래
         ],
       },
+      { href: "/sms", label: "문자 보내기", icon: "chat", beta: true }, // 2026-11-12 고객 문자 — 중계 서버(클라우드웨이즈)가 알리고 API 로 발송(167)
     ],
   },
   {
