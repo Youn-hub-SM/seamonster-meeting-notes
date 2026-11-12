@@ -37,9 +37,9 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
     const who = await actor(req);
     const purpose = toPrPurpose(b.purpose); // 용도(082·113·115) — 모르는 값은 재고 보충
-    // 제조사(소매) 요청을 생산 담당자 '지인'이 직접 작성하면 확인 절차 생략 — 담당 지정 + 진행중으로 시작.
-    //  (작성자 본인이 담당자라 별도 확인이 무의미. 도매 요청은 이행 주체가 달라 자동 확인 없음.)
-    const autoConfirm = who === "지인" && purpose === "재고 보충";
+    // 요청서는 누가 작성하든 '확정 필요'(요청)로 생긴다 — 확정은 행의 [확정]을 눌러야만 된다(2026-11-12 대표).
+    //  그전에는 생산 담당자가 제조사 요청을 직접 작성하면 작성과 동시에 확정(진행중·담당 지정)됐다. 그 예외를 없앴다:
+    //  확정된 요청서만 '입고 예정'에 잡히므로, 확정은 작성과 따로 한 번 더 확인하고 누르는 동작이어야 한다.
     const { request: full, existing } = await createProductionRequest(sb, {
       title: String(b.title || ""),
       requested_by: String(b.requested_by || ""),
@@ -51,8 +51,8 @@ export async function POST(req: NextRequest) {
       company_id: String(b.company_id || ""),
       memo: String(b.memo || ""),
       items,
-      status: autoConfirm ? "진행중" : "요청",
-      assignee: autoConfirm ? who : null,
+      status: "요청",
+      assignee: null,
       created_by: who,
       client_key: typeof b.client_key === "string" ? b.client_key : null,
     });
