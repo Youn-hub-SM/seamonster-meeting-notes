@@ -21,7 +21,7 @@ const SUGGEST_MAX = 60; // 목록에 한 번에 그리는 줄 수 — 주문 상
 //  상품명·상품코드 = 상품 마스터의 상품(고르면 상품코드로 잡는다), 주문 상품명 = 주문서에 적힌 이름 그대로.
 const PRODUCT_BY = [{ key: "name", label: "상품명" }, { key: "code", label: "상품코드" }, { key: "order", label: "주문 상품명" }] as const;
 type ProductBy = (typeof PRODUCT_BY)[number]["key"];
-type Preview = { name: string; phone: string; orders: number; amount: number; first_date: string; last_date: string };
+type Preview = { name: string; phone: string; orders: number; amount: number; first_date: string; last_date: string; items: string; channels: string };
 type Result = { count: number; excluded: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
 type History = { id: string | number; action: "검색" | "추출"; cond: string; count: number | null; actor: string | null; created_at: string };
 
@@ -227,10 +227,10 @@ export default function AudiencePage() {
           {result.count === 0 ? <div className="b2b-empty">조건에 맞는 고객이 없습니다.</div> : (
             <div className="b2b-table-wrap">
               <table className="b2b-table aud-table">
-                <thead><tr><th>이름</th><th>전화번호</th><th className="num">주문 횟수</th><th className="num">누적 구매 금액</th><th>첫 구매일</th><th>마지막 구매일</th></tr></thead>
+                <thead><tr><th>이름</th><th>전화번호</th><th className="num">주문 횟수</th><th className="num">누적 구매 금액</th><th>첫 구매일</th><th>마지막 구매일</th><th>상품명</th><th>채널</th></tr></thead>
                 <tbody>
                   {result.preview.map((p, i) => (
-                    <tr key={i}><td>{p.name}</td><td className="sm-nowrap">{p.phone}</td><td className="num">{qty(p.orders)}회</td><td className="num">{won(p.amount)}원</td><td className="sm-nowrap">{p.first_date}</td><td className="sm-nowrap">{p.last_date}</td></tr>
+                    <tr key={i}><td>{p.name}</td><td className="sm-nowrap">{p.phone}</td><td className="num">{qty(p.orders)}회</td><td className="num">{won(p.amount)}원</td><td className="sm-nowrap">{p.first_date}</td><td className="sm-nowrap">{p.last_date}</td><td className="aud-items">{p.items}</td><td>{p.channels}</td></tr>
                   ))}
                 </tbody>
               </table>

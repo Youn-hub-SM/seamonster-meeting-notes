@@ -19,7 +19,8 @@ export type AudienceCond = {
   minAmount?: number;                    // 전체 기간 누적 구매 금액(원)
   lastFrom?: string; lastTo?: string;    // 마지막 구매일
 };
-export type AudienceRow = { customer_key: string; orders: number; amount: number; first_date: string; last_date: string };
+// items·order_names·channels = 조건(구매 기간·채널·상품)에 맞은 주문의 것 — 그 고객이 왜 뽑혔는지가 엑셀에 보인다(2026-11-13 대표: "추출시 적용된 필터가 나오면 좋겠음")
+export type AudienceRow = { customer_key: string; orders: number; amount: number; first_date: string; last_date: string; items: string; order_names: string; channels: string };
 export type AudienceFound = { rows: AudienceRow[]; excluded: number; capped: boolean };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -76,6 +77,20 @@ export function condSummary(c: AudienceCond): string {
   return parts.join(" · ") || "조건 없음";
 }
 
+// 엑셀 '추출 정보' 시트용 — 적용한 조건을 항목별 한 줄씩(안 쓴 조건은 빠진다)
+export function condLines(c: AudienceCond): [string, string][] {
+  const out: [string, string][] = [];
+  if (c.from || c.to) out.push(["구매 기간", `${c.from || "처음"} ~ ${c.to || "오늘"}`]);
+  if (c.lastFrom || c.lastTo) out.push(["마지막 구매일", `${c.lastFrom || "처음"} ~ ${c.lastTo || "오늘"}`]);
+  if (c.channels?.length) out.push(["채널", c.channels.join(", ")]);
+  if (c.skus?.length) out.push(["상품명(상품코드)", c.skus.map((x) => (x.label ? `${x.label} (${x.sku})` : x.sku)).join(", ")]);
+  if (c.names?.length) out.push(["주문 상품명", c.names.join(", ")]);
+  if (c.products) out.push(["이름·코드에 든 말", c.products]);
+  if (c.minOrders || c.maxOrders) out.push(["주문 횟수", c.minOrders && c.maxOrders ? `${c.minOrders}~${c.maxOrders}회` : c.minOrders ? `${c.minOrders}회 이상` : `${c.maxOrders}회 이하`]);
+  if (c.minAmount) out.push(["누적 구매 금액", `${c.minAmount.toLocaleString("ko-KR")}원 이상`]);
+  return out;
+}
+
 // ① 조건에 맞는 고객 — 전화번호 없이 키와 집계만.
 //  hit = 구매 기간·채널·상품에 맞는 주문이 하나라도 있는 고객. 주문 횟수·누적 금액·마지막 구매일은 그 고객의 전체 주문으로 센다.
 export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise<AudienceFound> {
@@ -96,21 +111,31 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
   if (c.lastFrom) h.push(`a.last_date >= ${lit(c.lastFrom)}`);
   if (c.lastTo) h.push(`a.last_date <= ${lit(c.lastTo)}`);
   const q = `
-    with hit as (select distinct o.customer_key from sales_orders o where ${w.join(" and ")}),
+    with m as (
+      select o.customer_key, o.product_name, o.channel,
+             coalesce(nullif(concat_ws(' ', p.name, p.spec), ''), o.product_name) as item
+      from sales_orders o left join products p on o.sku_code <> '' and upper(p.sku) = upper(o.sku_code)
+      where ${w.join(" and ")}
+    ),
+    hit as (
+      select customer_key, left(string_agg(distinct item, ' / '), 500) as items,
+             left(string_agg(distinct product_name, ' / '), 800) as order_names, string_agg(distinct channel, ', ') as channels
+      from m group by customer_key
+    ),
     a as (
       select o.customer_key, count(distinct o.order_unit)::int as orders, coalesce(sum(o.subtotal_amount), 0)::bigint as amount,
              min(o.order_date)::text as first_date, max(o.order_date)::text as last_date
       from sales_orders o join hit using (customer_key) group by o.customer_key
     )
-    select a.customer_key, a.orders, a.amount, a.first_date, a.last_date, (s.customer_key is not null) as reachable
-    from a left join sales_customer_summary s on s.customer_key = a.customer_key
+    select a.customer_key, a.orders, a.amount, a.first_date, a.last_date, h.items, h.order_names, h.channels, (s.customer_key is not null) as reachable
+    from a join hit h on h.customer_key = a.customer_key left join sales_customer_summary s on s.customer_key = a.customer_key
     ${h.length ? `where ${h.join(" and ")}` : ""}
     order by a.last_date desc, a.customer_key`;
   type R = AudienceRow & { reachable: boolean };
   const all = await runSql<R>(sb, q, MAX_AUDIENCE + 1);
   const capped = all.length > MAX_AUDIENCE;
   const list = capped ? all.slice(0, MAX_AUDIENCE) : all;
-  const rows = list.filter((r) => r.reachable).map((r) => ({ customer_key: r.customer_key, orders: Number(r.orders) || 0, amount: Number(r.amount) || 0, first_date: r.first_date, last_date: r.last_date }));
+  const rows = list.filter((r) => r.reachable).map((r) => ({ customer_key: r.customer_key, orders: Number(r.orders) || 0, amount: Number(r.amount) || 0, first_date: r.first_date, last_date: r.last_date, items: r.items || "", order_names: r.order_names || "", channels: r.channels || "" }));
   return { rows, excluded: list.length - rows.length, capped };
 }
 
