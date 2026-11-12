@@ -3,7 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getKv } from "@/app/lib/b2b-settings";
 import { PENDING_166 } from "@/app/lib/agents/registry";
-import { getAdBrief, setAdBrief, listReferences, isPending166 } from "@/app/lib/agents/ad-copy";
+import { getAdBrief, setAdBrief, listReferences, isPending166, getReviewInsight, setReviewInsight, INSIGHT_MAX } from "@/app/lib/agents/ad-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +18,15 @@ async function actor(req: NextRequest): Promise<string | null> {
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const [brief, syncedAt, naverAt] = await Promise.all([getAdBrief(), getKv("shop_reviews_synced_at"), getKv("naver_reviews_uploaded_at")]);
+    const [brief, syncedAt, naverAt, insight] = await Promise.all([getAdBrief(), getKv("shop_reviews_synced_at"), getKv("naver_reviews_uploaded_at"), getReviewInsight()]);
     const count = (ch: string) => sb.from("shop_reviews").select("id", { count: "exact", head: true }).eq("channel", ch);
     try {
       const [references, reviews, naver] = await Promise.all([listReferences(sb), count("공식몰"), count("스마트스토어")]);
       if (reviews.error) throw reviews.error;
       if (naver.error) throw naver.error;
-      return NextResponse.json({ ok: true, brief, references, reviews: { count: reviews.count ?? 0, synced_at: syncedAt || null, naver: naver.count ?? 0, naver_at: naverAt || null } });
+      return NextResponse.json({ ok: true, brief, insight, references, reviews: { count: reviews.count ?? 0, synced_at: syncedAt || null, naver: naver.count ?? 0, naver_at: naverAt || null } });
     } catch (e) {
-      if (isPending166(e)) return NextResponse.json({ ok: true, brief, references: [], reviews: { count: 0, synced_at: null, naver: 0, naver_at: null }, pending: PENDING_166 });
+      if (isPending166(e)) return NextResponse.json({ ok: true, brief, insight, references: [], reviews: { count: 0, synced_at: null, naver: 0, naver_at: null }, pending: PENDING_166 });
       throw e;
     }
   } catch (err) {
@@ -35,10 +35,16 @@ export async function GET() {
   }
 }
 
-// PUT { brief } — 타깃 메모 저장
+// PUT { brief } 또는 { insight } — 타깃 메모 저장 / 리뷰 분석 자료 고쳐 저장(보낸 것만 바꾼다)
 export async function PUT(req: NextRequest) {
   try {
-    const b = (await req.json()) as { brief?: string };
+    const b = (await req.json()) as { brief?: string; insight?: string };
+    if (typeof b.insight === "string") {
+      const text = b.insight.trim();
+      if (text.length > INSIGHT_MAX) return NextResponse.json({ ok: false, error: `분석 자료는 ${INSIGHT_MAX.toLocaleString("ko-KR")}자까지 저장할 수 있습니다.` }, { status: 400 });
+      const who = await actor(req);
+      return NextResponse.json({ ok: true, insight: await setReviewInsight(text, `${who || "담당자"} 수정`) });
+    }
     await setAdBrief(String(b.brief ?? "").trim());
     return NextResponse.json({ ok: true, brief: await getAdBrief() });
   } catch (err) {

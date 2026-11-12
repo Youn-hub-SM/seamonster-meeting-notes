@@ -82,6 +82,11 @@
 .ag-idea-row dd.is-copy { background: var(--sm-bg-subtle); border-radius: var(--sm-radius); padding: var(--sm-space-2) var(--sm-space-3); }
 .ag-research { margin-top: var(--sm-space-3); }
 
+/* 자료 — 리뷰 분석 자료(보기·고치기) */
+.ag-insight { padding: var(--sm-space-3) 0 var(--sm-space-2); border-top: 1px solid var(--sm-border-light); margin-top: var(--sm-space-2); }
+.ag-insight .ag-md { max-height: 520px; overflow-y: auto; padding-right: var(--sm-space-2); }
+.ag-insight-edit { min-height: 420px; resize: vertical; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); line-height: var(--sm-lh-body); }
+
 /* 자료 — 타깃 메모 · 타사 레퍼런스 */
 .ag-brief { min-height: 72px; resize: vertical; }
 .ag-mat-actions { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; margin-top: var(--sm-space-2); }

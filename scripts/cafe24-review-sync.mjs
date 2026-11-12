@@ -91,9 +91,20 @@ if (!BOARDS.length) { console.error("[중단] --boards 에 게시판 번호가 �
 
 const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const startD = new Date(Date.now() + 9 * 3600e3 - DAYS * 86400e3).toISOString().slice(0, 10);
+// 고객이 쓰지 않은 글은 올리지 않는다 — app/lib/agents/review-clean.ts 와 같은 규칙(고치면 둘 다 고친다).
+//  ① 리뷰 앱(알파리뷰)이 별점에 맞춰 자동으로 채운 문구 ② 스마트스토어 리뷰를 게시판으로 복사해 온 글(엑셀로 따로 받는다)
+const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu;
+const AUTO_TEMPLATES = new Set(["만족해요. 역시 생선은 씨몬스터! 감사합니다!", "수산물로 건강한 식단을 꾸리고 있어요! 감사합니다.", "나쁘지 않은 선택이었던 것 같아요", "무난한 상품이에요 감사합니다", "솔직히 조금 실망했어요. 다음 번엔 더 좋은 상품 부탁드려요", "운이 안 좋았던 건가.. 다음 번엔 더 좋은 상품으로 준비해주세요"]);
+const IMPORTED = /\(\d{4}-\d{2}-\d{2} 스마트스토어에서 등록된 구매후기\)\s*$/;
+function customerText(t) {
+  if (!t || IMPORTED.test(t)) return null;
+  const body = t.replace(/\s*alpha_review\s*$/, "").trim();
+  return body && !AUTO_TEMPLATES.has(body.replace(EMOJI, "").replace(/\s+/g, " ").trim()) ? body : null;
+}
 const plain = (s) => String(s ?? "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
 
 const reviews = [];
+let skippedAuto = 0;
 for (const board of BOARDS) {
   for (let offset = 0; offset <= 8000; offset += 100) {
     const j = await get(`${API}/admin/boards/${board}/articles?start_date=${startD}&end_date=${today}&limit=100&offset=${offset}`);
@@ -101,8 +112,8 @@ for (const board of BOARDS) {
     for (const a of list) {
       if (Number(a.reply_depth) > 0 || a.parent_article_no && a.parent_article_no !== a.article_no) continue; // 답글
       if (a.deleted === "T" || a.secret === "T" || a.notice === "T") continue;
-      const content = plain(a.content);
-      if (!content) continue;
+      const content = customerText(plain(a.content));
+      if (!content) { skippedAuto++; continue; }
       reviews.push({
         board_no: board, article_no: Number(a.article_no), product_no: a.product_no ? Number(a.product_no) : null,
         rating: Number(a.rating) >= 1 ? Number(a.rating) : null, title: plain(a.title), content,
@@ -138,4 +149,4 @@ for (let i = 0; i < reviews.length; i += 500) {
   if (!res.ok || !j.ok) { console.error(`[${stamp()}] 업로드 실패 (HTTP ${res.status}) ${j.error || ""}`); process.exit(1); }
   saved += j.saved || 0;
 }
-console.log(`[${stamp()}] 리뷰 ${saved}건 저장 (게시판 ${BOARDS.join(",")}, ${startD}~${today})`);
+console.log(`[${stamp()}] 리뷰 ${saved}건 저장 · 자동 문구·복사본 ${skippedAuto}건 제외 (게시판 ${BOARDS.join(",")}, ${startD}~${today})`);

@@ -4,6 +4,9 @@
 //  네 단계로 나눠 돈다(staged.ts — 단계마다 함수 호출이 따로): voice → trend → plan → write.
 //   앞 두 단계는 조사 요약(facts.notes)만 남긴다. plan 이 광고 성과·레퍼런스까지 보고 어떤 소재를 낼지 정하고(notes.plan),
 //   write 가 소재를 4건씩 나눠 동시에 문구를 쓴다. 피드백을 받으면 plan 부터 다시 돈다(조사 요약은 그대로).
+//  v4(2026-11-12): 리뷰를 매번 160건씩 읽던 것을 바꿨다 — 전체 리뷰(약 3만 5천 건)를 한 번 분석해 둔 '리뷰 분석 자료'(kv review_insight,
+//   화면에서 고칠 수 있다)를 plan·write 가 그대로 읽고, 주제별 최근 90일 건수는 실행할 때마다 코드가 다시 센다(review-themes.ts).
+//   voice 단계는 최근 4주 글에서 '분석 자료에 없는 새 이야기'만 뽑는다.
 //   ※ v1 은 plan 과 write 가 한 번의 AI 호출이었는데, 첫 실행(2026-11-11)에서 210초 안에 못 끝나 시간 초과로 실패했다 — 그래서 v2 에서 갈랐다.
 //  개인정보: 고객 글은 가린 뒤(maskPii) AI 에만 보내고, 저장되는 요약에는 이름·연락처·주문 정보를 옮기지 않게 지침으로 막는다.
 //  이 에이전트는 읽기만 한다 — 광고를 켜거나 끄지 않고, 메타에 아무것도 쓰지 않는다.
@@ -18,11 +21,31 @@ import { getKv, setKv } from "../b2b-settings";
 import { kstTodayIso } from "../production-schedule";
 import type { AdIdea, AgentToolLog } from "./registry";
 import { StageError, type StageCtx, type StageResult, type StagedRunner, type StageUsage } from "./staged";
+import { customerReviewText } from "./review-clean";
+import { reviewTrend } from "./review-themes";
 
 export const AD_COPY = "ad-copy";
 const BRIEF_KEY = "agent_brief:ad-copy";
 export const getAdBrief = (): Promise<string> => getKv(BRIEF_KEY);
 export const setAdBrief = (v: string): Promise<void> => setKv(BRIEF_KEY, v.slice(0, 4000));
+
+// 리뷰 분석 자료 — 전체 리뷰를 분석해 둔 글(마크다운). 화면(자료)에서 고치거나 /api/agents/tick/insight 로 통째로 바꾼다.
+const INSIGHT_KEY = "review_insight";
+export const INSIGHT_MAX = 60_000;
+export type ReviewInsight = { text: string; updated_at: string | null; source: string | null };
+export async function getReviewInsight(): Promise<ReviewInsight> {
+  const raw = await getKv(INSIGHT_KEY);
+  if (!raw) return { text: "", updated_at: null, source: null };
+  try {
+    const j = JSON.parse(raw) as Partial<ReviewInsight>;
+    return { text: String(j.text || ""), updated_at: j.updated_at || null, source: j.source || null };
+  } catch { return { text: raw, updated_at: null, source: null }; }
+}
+export async function setReviewInsight(text: string, source: string): Promise<ReviewInsight> {
+  const v: ReviewInsight = { text: text.trim().slice(0, INSIGHT_MAX), updated_at: new Date().toISOString(), source };
+  await setKv(INSIGHT_KEY, JSON.stringify(v));
+  return v;
+}
 
 const shift = (ymd: string, days: number) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const cut = (s: unknown, max: number) => { const t = String(s ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(); return t.length > max ? `${t.slice(0, max)}…` : t; };
@@ -109,20 +132,21 @@ type ReviewRow = { channel: string | null; product_name: string | null; rating: 
 type ReviewItem = { ch: string; d: string; product: string; star: number | null; text: string };
 const REVIEW_DAYS = 90, REVIEW_MAX = 160, REVIEW_BUDGET = 36_000;
 const REVIEW_CHANNELS = ["공식몰", "스마트스토어"];
-async function loadReviews(sb: SupabaseClient, today: string): Promise<{ ok: boolean; note?: string; total: number; items: ReviewItem[]; by: Record<string, number> }> {
-  const since = `${shift(today, -REVIEW_DAYS)}T00:00:00+09:00`;
+async function loadReviews(sb: SupabaseClient, today: string, days = REVIEW_DAYS): Promise<{ ok: boolean; note?: string; total: number; items: ReviewItem[]; by: Record<string, number> }> {
+  const since = `${shift(today, -days)}T00:00:00+09:00`;
   const res = await Promise.all(REVIEW_CHANNELS.map((ch) => sb.from("shop_reviews").select("channel, product_name, rating, title, content, written_at")
     .eq("channel", ch).gte("written_at", since).order("written_at", { ascending: false }).limit(500)));
   const error = res.find((r) => r.error)?.error;
   if (error) return { ok: false, total: 0, items: [], by: {}, note: missingTable(error, "shop_reviews") ? "리뷰 수집 전(166 미적용)" : `리뷰 조회 실패: ${String(error.message).slice(0, 120)}` };
   // 채널별로: 낮은 별점(불만·장벽)을 먼저 챙기고 나머지는 최신순. '좋아요' 같은 한마디는 재료가 못 된다.
   const queues = res.map((r) => {
-    const rows = ((r.data ?? []) as ReviewRow[]).filter((x) => (x.content || "").replace(/\s+/g, "").length >= 12);
+    // 리뷰 앱 자동 문구와 스마트스토어 복사본은 고객의 말이 아니다(review-clean.ts)
+    const rows = ((r.data ?? []) as ReviewRow[]).map((x) => ({ ...x, content: customerReviewText(x.content) })).filter((x) => (x.content || "").replace(/\s+/g, "").length >= 12);
     const low = rows.filter((x) => x.rating != null && x.rating <= 3).slice(0, 20);
     return [...low, ...rows.filter((x) => !low.includes(x))];
   });
   const total = queues.reduce((n, q) => n + q.length, 0);
-  if (!total) return { ok: false, total: 0, items: [], by: {}, note: `최근 ${REVIEW_DAYS}일 리뷰가 없습니다(수집·업로드 전일 수 있음)` };
+  if (!total) return { ok: false, total: 0, items: [], by: {}, note: `최근 ${days}일 리뷰가 없습니다(수집·업로드 전일 수 있음)` };
   const items: ReviewItem[] = [];
   const by: Record<string, number> = {};
   let used = 0;
@@ -131,7 +155,7 @@ async function loadReviews(sb: SupabaseClient, today: string): Promise<{ ok: boo
       if (k >= q.length) continue;
       if (items.length >= REVIEW_MAX) break pick;
       const r = q[k];
-      const text = maskPii(cut([r.title, r.content].filter(Boolean).join(" — "), 320));
+      const text = maskPii(cut(r.content, 320)); // 공식몰의 제목은 본문 앞머리를 그대로 딴 것이라 붙이지 않는다
       if (used + text.length > REVIEW_BUDGET) break pick;
       used += text.length;
       const ch = r.channel || "공식몰";
@@ -164,15 +188,39 @@ const VOICE_SYSTEM = `당신은 ${COMPANY.replace("입니다.", "의 광고 카�
 - 사람 이름, 연락처, 주소, 주문 정보는 옮겨 적지 않습니다.
 - '##' 제목과 '-' 목록만 씁니다. 전체 1,500자 안쪽으로 씁니다.`;
 
-async function stageVoice(c: StageCtx): Promise<StageResult> {
+// v4~: 전체 리뷰는 '리뷰 분석 자료'가 맡는다 — 이 단계는 최근 4주 글에서 그 자료에 없는 새 재료만 뽑는다
+const VOICE_SYSTEM_V4 = `당신은 ${COMPANY.replace("입니다.", "의 광고 카피 담당 에이전트입니다.")}
+지금은 네 단계 중 첫 단계입니다. 뒤 단계의 당신은 [리뷰 분석 자료](전체 리뷰 약 3만 5천 건을 분석해 둔 자료)를 그대로 읽습니다. 그래서 여기서는 전체를 다시 요약하지 않습니다. 최근 4주에 고객이 남긴 글(리뷰, 스마트스토어 문의, 접수된 VOC)에서 이번 주 소재에 쓸 새 재료만 뽑습니다.
+
+[정리할 것]
+## 이번에 두드러진 것
+- 분석 자료에 있는 주제 가운데 최근 4주 글에서 특히 많이 보이거나 새 표현으로 나온 것. 대략 몇 건인지 적습니다.
+## 분석 자료에 없는 새 이야기
+- 분석 자료에 없는 구매 이유, 쓰는 장면, 먹는 법, 고객 유형. 한두 건뿐이면 한두 건이라고 적습니다. 없으면 '없음'이라고 적습니다.
+## 최근 불만과 질문
+- 최근 4주의 불만, 문의에서 되풀이된 질문, VOC. 광고가 먼저 답하면 좋은 것과 광고에서 약속하면 안 되는 것을 가려 적습니다.
+## 새로 보인 표현
+- 광고 문장에 살릴 만한 표현 조각(15자 안쪽). 분석 자료의 표현 목록에 없는 것 위주로 적습니다.
+## 자료 한계
+- 자료가 적거나 빠진 부분. 없으면 이 제목을 뺍니다.
+
+[지킬 것]
+- 받은 글에 있는 내용만 씁니다. 짐작으로 채우지 않습니다.
+- 사람 이름, 연락처, 주소, 주문 정보는 옮겨 적지 않습니다.
+- '##' 제목과 '-' 목록만 씁니다. 전체 1,500자 안쪽으로 씁니다.`;
+const RECENT_DAYS = 28;
+
+async function stageVoice(c: StageCtx, cfg: Cfg): Promise<StageResult> {
   const today = kstTodayIso();
   const m = await newMeter();
-  const [voice, reviews] = await Promise.all([
+  const days = cfg.insight ? RECENT_DAYS : REVIEW_DAYS;
+  const [voice, reviews, insight] = await Promise.all([
     collectVoiceFacts(c.sb, { since: shift(today, -27), until: today }, { since: shift(today, -55), until: shift(today, -28) }),
-    loadReviews(c.sb, today),
+    loadReviews(c.sb, today, days),
+    cfg.insight ? getReviewInsight() : Promise.resolve(null),
   ]);
-  const noNaver = reviews.ok && !reviews.by["스마트스토어"] ? `최근 ${REVIEW_DAYS}일 스마트스토어 리뷰가 없습니다(리뷰 엑셀을 올리지 않았을 수 있음).` : "";
-  const noMall = reviews.ok && !reviews.by["공식몰"] ? `최근 ${REVIEW_DAYS}일 공식몰 리뷰가 없습니다(수집이 멈췄을 수 있음).` : "";
+  const noNaver = reviews.ok && !reviews.by["스마트스토어"] ? `최근 ${days}일 스마트스토어 리뷰가 없습니다(리뷰 엑셀을 올리지 않았을 수 있음).` : "";
+  const noMall = reviews.ok && !reviews.by["공식몰"] ? `최근 ${days}일 공식몰 리뷰가 없습니다(수집이 멈췄을 수 있음).` : "";
   const warnings = [reviews.ok ? "" : reviews.note || "", noMall, noNaver, voice.naver.ok ? "" : `스마트스토어 문의: ${voice.naver.note || "집계 없음"}`, voice.voc.ok ? "" : `VOC: ${voice.voc.note || "집계 없음"}`].filter(Boolean);
   const counts = { reviews: reviews.items.length, inquiries: voice.naver.items?.length || 0, voc: voice.voc.items?.length || 0 };
   if (!counts.reviews && !counts.inquiries && !counts.voc) {
@@ -180,8 +228,8 @@ async function stageVoice(c: StageCtx): Promise<StageResult> {
     return { ...meterOut(m), counts, warnings, note: { key: "voice", text: "## 자료 한계\n- 읽을 고객 글이 없습니다(리뷰·문의·VOC 모두 비어 있음)." } };
   }
   const { text } = await converse(m, {
-    system: VOICE_SYSTEM, effort: "high", maxTokens: 20000, deadlineAt: c.deadlineAt,
-    content: [{ type: "text", text: `기준일 ${kstTodayLabel()}\n\n[고객 리뷰 — 최근 ${REVIEW_DAYS}일 ${reviews.total}건 중 ${reviews.items.length}건(${Object.entries(reviews.by).map(([k, n]) => `${k} ${n}건`).join(" · ") || "없음"}), ch = 리뷰가 달린 곳]\n${reviews.ok ? JSON.stringify(reviews.items) : reviews.note}\n\n[스마트스토어 문의·VOC — 최근 4주]\n${JSON.stringify(voiceForAi(voice))}` }],
+    system: cfg.insight ? VOICE_SYSTEM_V4 : VOICE_SYSTEM, effort: "high", maxTokens: 20000, deadlineAt: c.deadlineAt,
+    content: [{ type: "text", text: `기준일 ${kstTodayLabel()}\n\n${insight ? `[리뷰 분석 자료 — 전체 리뷰 기준]\n${insight.text || "아직 없음(최근 글만으로 정리)"}\n\n` : ""}[고객 리뷰 — 최근 ${days}일 ${reviews.total}건 중 ${reviews.items.length}건(${Object.entries(reviews.by).map(([k, n]) => `${k} ${n}건`).join(" · ") || "없음"}), ch = 리뷰가 달린 곳]\n${reviews.ok ? JSON.stringify(reviews.items) : reviews.note}\n\n[스마트스토어 문의·VOC — 최근 4주]\n${JSON.stringify(voiceForAi(voice))}` }],
   });
   if (!text) throw fail(m, "고객 목소리 정리가 비어 있습니다. [업무 요청]을 다시 누르세요.");
   return { ...meterOut(m), counts, warnings, note: { key: "voice", text: text.slice(0, 5000) } };
@@ -322,8 +370,12 @@ async function priorIdeas(sb: SupabaseClient, exceptId: string): Promise<string>
 //  v3(2026-11-12, 대표가 v2 첫 결과를 보고): 문구에 확인 안 된 사실이 섞였다 — "정부가 권장하는 … 보관법 그대로예요", "100g 한 팩".
 //   ① 기관·전문가 권장, 인증, 통계는 광고 문구에 쓰지 않는다(근거 칸에만) ② 상품 규격은 상품 마스터 값만 쓴다(없는 숫자 금지)
 //   ③ 본문을 짧은 것(short_text)과 긴 것(primary_text) 둘로 낸다.
-type Cfg = { facts: boolean };
-const V2: Cfg = { facts: false }, V3: Cfg = { facts: true };
+//  v4(2026-11-12, 대표: "160건만 읽는 건 한계가 크다 — 분석한 자료를 넣자"): 전체 리뷰 분석 자료 + 주제별 최근 동향(코드 집계)을 읽는다.
+type Cfg = { facts: boolean; insight: boolean };
+const V2: Cfg = { facts: false, insight: false }, V3: Cfg = { facts: true, insight: false }, V4: Cfg = { facts: true, insight: true };
+const PLAN_INPUT_V4 = `- 리뷰 분석 자료: 전체 리뷰(공식몰·스마트스토어)를 분석해 둔 자료. 주제별 건수와 비율, 상품별 차이, 고객이 쓰는 말이 들어 있습니다. 소재의 가장 큰 근거입니다.
+- 주제별 최근 동향: 같은 주제를 최근 90일 리뷰에서 코드가 다시 센 표. '늘어남'으로 표시된 주제는 요즘 커지는 이야기입니다.
+- 최근 4주 고객 목소리: 최근 4주의 리뷰·문의·VOC 에서 당신이 앞 단계에 뽑은 새 재료.`;
 
 // 상품 규격 — 상품 마스터(products)의 사용 중인 품목 이름·규격·단위. 광고 문구의 중량·포장 숫자는 여기 있는 것만 쓴다.
 const PRODUCT_MAX = 150;
@@ -415,12 +467,21 @@ const checkPlan = (input: unknown): Plan | null => {
 const FORMATS = ["이미지", "영상", "캐러셀"];
 const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
 
+function planSystem(cfg: Cfg): string {
+  let s = PLAN_SYSTEM;
+  if (cfg.facts) s = s.replace("[소재를 정하는 법]", `${FACT_RULE}\n\n[소재를 정하는 법]`);
+  if (cfg.insight) s = s.replace("- 고객 목소리: 리뷰·문의·VOC 에서 당신이 앞 단계에 뽑은 정리.", PLAN_INPUT_V4);
+  return s;
+}
 async function stagePlan(c: StageCtx, cfg: Cfg): Promise<StageResult> {
   const today = kstTodayIso();
   const m = await newMeter();
   const warnings: string[] = [];
   const products = cfg.facts ? await loadProducts(c.sb) : null;
   if (products && !products.ok) warnings.push("상품 규격을 읽지 못했습니다 — 문구에 중량·개수 숫자를 쓰지 않았습니다.");
+  const [insight, trend] = cfg.insight ? await Promise.all([getReviewInsight(), reviewTrend(c.sb).catch((e) => ({ ok: false, text: `집계 실패: ${String((e as Error)?.message || e).slice(0, 100)}`, recent: 0 }))]) : [null, null];
+  if (insight && !insight.text) warnings.push("리뷰 분석 자료가 비어 있습니다 — 최근 4주 고객 글만으로 작성했습니다.");
+  if (trend && !trend.ok) warnings.push(`주제별 최근 동향을 내지 못했습니다(${trend.text}).`);
   const [ads, refs, saved, prior, brief] = await Promise.all([
     loadAdHistory(today).catch((e) => ({ ok: false as const, note: `메타 광고 성과 조회 실패: ${String((e as Error)?.message || e).slice(0, 140)}`, rows: [] as AdRow[], avgRoas: 0, totalAds: 0 })),
     listReferences(c.sb, REF_MAX).catch((e) => { warnings.push(missingTable(e, "ad_references") ? "타사 레퍼런스 표가 없습니다(166 미적용)." : "타사 레퍼런스를 읽지 못했습니다."); return [] as AdReference[]; }),
@@ -448,7 +509,8 @@ async function stagePlan(c: StageCtx, cfg: Cfg): Promise<StageResult> {
         `기준일 ${kstTodayLabel()}`,
         `${revised}[타깃 메모]\n${brief || "없음"}`,
         `[덧붙인 말]\n${c.report.instruction || "없음"}`,
-        `[고객 목소리]\n${c.notes.voice || "없음"}`,
+        ...(insight ? [`[리뷰 분석 자료 — 전체 리뷰 기준]\n${insight.text || "없음"}`, `[주제별 최근 동향 — 방금 다시 센 값]\n${trend?.ok ? trend.text : "없음"}`] : []),
+        `[${cfg.insight ? "최근 4주 고객 목소리" : "고객 목소리"}]\n${c.notes.voice || "없음"}`,
         `[타깃 트렌드]\n${c.notes.trend || "없음"}`,
         `[메타 광고 성과 — 최근 ${AD_DAYS}일, 집행 광고 ${ads.totalAds}개 중 광고비 상위 ${ads.rows.length}개, 계정평균ROAS ${ads.avgRoas}]\n${ads.ok ? JSON.stringify(ads.rows) : ads.note}`,
         `[소재 보관함]\n${saved.length ? JSON.stringify(saved.slice(0, 20).map((x) => ({ 이름: x.name, 형식: x.format, 후킹: cut(x.hook, 150), 스토리: cut(x.story, 200), 제안: cut(x.offer, 150), ROAS: x.roas ?? null }))) : "없음"}`,
@@ -461,7 +523,7 @@ async function stagePlan(c: StageCtx, cfg: Cfg): Promise<StageResult> {
   // 생각(thinking)도 max_tokens 에 들어간다 — medium·8000 은 생각만으로 한도를 채워 잘렸다(2026-11-11 v2 첫 실행, 119초).
   //  품질 우선(대표 2026-11-11): 생각을 줄이지 않고 high 로 두고, 한도와 시간을 넉넉히 준다(초당 약 65토큰 → 40,000토큰이면 10분쯤).
   const { submitted } = await converse<Plan>(m, {
-    system: cfg.facts ? PLAN_SYSTEM.replace("[소재를 정하는 법]", `${FACT_RULE}\n\n[소재를 정하는 법]`) : PLAN_SYSTEM, effort: "high", maxTokens: 40000, deadlineAt: c.deadlineAt,
+    system: planSystem(cfg), effort: "high", maxTokens: 40000, deadlineAt: c.deadlineAt,
     submit: { tool: planTool, check: checkPlan }, content,
   });
   const s = submitted as Plan;
@@ -531,12 +593,13 @@ const checkCopies = (input: unknown): Copy[] | null => {
 async function stageWrite(c: StageCtx, cfg: Cfg): Promise<StageResult> {
   const m = await newMeter();
   const products = cfg.facts ? await loadProducts(c.sb) : null;
+  const insight = cfg.insight ? await getReviewInsight() : null;
   let plan: Plan;
   try { plan = JSON.parse(c.notes.plan || "") as Plan; } catch { throw fail(m, "소재 기획을 읽지 못했습니다. [업무 요청]을 다시 누르세요."); }
   const prev = c.revise?.ideas || [];
   const todo = plan.ideas.map((it, i) => ({ no: i + 1, it })).filter(({ it }) => !(it.keep_no && prev[it.keep_no - 1]));
   const brief = await getAdBrief();
-  const shared = `${products ? `[상품 규격 — 상품 마스터]\n${products.text}\n\n` : ""}[타깃 메모]\n${brief || "없음"}\n\n[덧붙인 말]\n${c.report.instruction || "없음"}\n\n${c.revise ? `[담당자 피드백]\n${c.revise.feedback}\n\n` : ""}[고객 목소리]\n${c.notes.voice || "없음"}\n\n[타깃 트렌드]\n${(c.notes.trend || "없음").split("\n## 출처")[0]}`;
+  const shared = `${products ? `[상품 규격 — 상품 마스터]\n${products.text}\n\n` : ""}[타깃 메모]\n${brief || "없음"}\n\n[덧붙인 말]\n${c.report.instruction || "없음"}\n\n${c.revise ? `[담당자 피드백]\n${c.revise.feedback}\n\n` : ""}${insight?.text ? `[리뷰 분석 자료 — 전체 리뷰 기준(고객이 쓰는 말은 여기서 고른다)]\n${insight.text}\n\n` : ""}[${cfg.insight ? "최근 4주 고객 목소리" : "고객 목소리"}]\n${c.notes.voice || "없음"}\n\n[타깃 트렌드]\n${(c.notes.trend || "없음").split("\n## 출처")[0]}`;
   const chunks: (typeof todo)[] = [];
   for (let i = 0; i < todo.length; i += WRITE_CHUNK) chunks.push(todo.slice(i, i + WRITE_CHUNK));
   const others = (chunk: typeof todo) => plan.ideas.map((it, i) => ({ no: i + 1, title: it.title })).filter((x) => !chunk.some((y) => y.no === x.no)).map((x) => `${x.no} ${x.title}`).join(" · ");
@@ -573,5 +636,5 @@ async function stageWrite(c: StageCtx, cfg: Cfg): Promise<StageResult> {
 }
 
 // v1(2026-11-11) = voice → trend → compose(기획+문구 한 번에). 첫 실행에서 compose 가 시간 초과로 실패해 종료 — 실행기는 남기지 않는다.
-export const AD_COPY_V2: StagedRunner = { stages: [stageVoice, stageTrend, (c) => stagePlan(c, V2), (c) => stageWrite(c, V2)], reviseFrom: 2 };
-export const AD_COPY_V3: StagedRunner = { stages: [stageVoice, stageTrend, (c) => stagePlan(c, V3), (c) => stageWrite(c, V3)], reviseFrom: 2 };
+const runner = (v: Cfg): StagedRunner => ({ stages: [(c) => stageVoice(c, v), stageTrend, (c) => stagePlan(c, v), (c) => stageWrite(c, v)], reviseFrom: 2 });
+export const AD_COPY_V2 = runner(V2), AD_COPY_V3 = runner(V3), AD_COPY_V4 = runner(V4);

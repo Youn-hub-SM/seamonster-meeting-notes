@@ -100,16 +100,18 @@ export function AdMaterials() {
   const [refs, setRefs] = useState<Ref[]>([]);
   const [reviews, setReviews] = useState<{ count: number; synced_at: string | null; naver: number; naver_at: string | null }>({ count: 0, synced_at: null, naver: 0, naver_at: null });
   const xlsRef = useRef<HTMLInputElement>(null);
+  const [insight, setInsight] = useState<{ text: string; updated_at: string | null; source: string | null }>({ text: "", updated_at: null, source: null });
+  const [insightDraft, setInsightDraft] = useState<string | null>(null); // null = 보기, 글 = 고치는 중
   const [form, setForm] = useState(EMPTY);
   const [images, setImages] = useState<string[]>([]);
-  const [busy, setBusy] = useState<"" | "brief" | "upload" | "add" | "naver">("");
+  const [busy, setBusy] = useState<"" | "brief" | "upload" | "add" | "naver" | "insight">("");
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/agents/ad-copy/materials", { cache: "no-store" }).then((x) => x.json()).then((j) => {
       if (!j.ok) { setErr(j.error || "자료를 불러오지 못했습니다."); return; }
-      setSavedBrief(j.brief || ""); setBrief(j.brief || ""); setRefs(j.references || []); setReviews(j.reviews); setPending(j.pending || "");
+      setSavedBrief(j.brief || ""); setBrief(j.brief || ""); setRefs(j.references || []); setReviews(j.reviews); setPending(j.pending || ""); if (j.insight) setInsight(j.insight);
     }).catch(() => setErr("자료를 불러오지 못했습니다.")).finally(() => setLoaded(true));
   }, []);
 
@@ -137,6 +139,17 @@ export function AdMaterials() {
       setImages((cur) => [...cur, ...urls].slice(0, 4));
     } catch (e) { setErr(e instanceof Error ? e.message : "이미지를 올리지 못했습니다."); }
     finally { setBusy(""); if (fileRef.current) fileRef.current.value = ""; }
+  };
+  const saveInsight = async () => {
+    if (insightDraft == null) return;
+    setBusy("insight");
+    try {
+      const j = await (await fetch("/api/agents/ad-copy/materials", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ insight: insightDraft }) })).json();
+      if (!j.ok) throw new Error(j.error);
+      setInsight(j.insight); setInsightDraft(null);
+      toast.success("리뷰 분석 자료를 저장했습니다");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "리뷰 분석 자료를 저장하지 못했습니다."); }
+    finally { setBusy(""); }
   };
   const uploadNaver = async (files: FileList | null) => {
     const f = files?.[0];
@@ -196,6 +209,26 @@ export function AdMaterials() {
           {reviews.naver > 0 ? `스마트스토어 리뷰 ${qty(reviews.naver)}건${reviews.naver_at ? ` · 마지막 업로드 ${dateTime(reviews.naver_at)}` : ""}` : "스마트스토어 리뷰 없음"}
         </span>
       </div>
+
+      <details className="ag-versions">
+        <summary>리뷰 분석 자료{insight.updated_at ? ` · ${dateTime(insight.updated_at)}${insight.source ? ` ${insight.source}` : ""}` : ""}</summary>
+        <div className="ag-insight">
+          {insightDraft == null ? (
+            <>
+              {insight.text ? <Md text={insight.text} /> : <div className="b2b-empty">리뷰 분석 자료가 없습니다.</div>}
+              <div className="ag-mat-actions"><button type="button" className="b2b-btn-secondary" onClick={() => setInsightDraft(insight.text)}>분석 자료 고치기</button></div>
+            </>
+          ) : (
+            <>
+              <textarea className="b2b-input ag-insight-edit" value={insightDraft} onChange={(e) => setInsightDraft(e.target.value)} aria-label="리뷰 분석 자료" maxLength={60000} />
+              <div className="ag-mat-actions">
+                <button type="button" className="b2b-btn-primary" onClick={saveInsight} disabled={busy === "insight" || insightDraft === insight.text}>{busy === "insight" ? "저장하는 중" : "분석 자료 저장"}</button>
+                <button type="button" className="b2b-btn-secondary" onClick={() => setInsightDraft(null)} disabled={busy === "insight"}>고치기 취소</button>
+              </div>
+            </>
+          )}
+        </div>
+      </details>
 
       <details className="ag-versions" open={refs.length === 0}>
         <summary>타사 레퍼런스 {qty(refs.length)}건</summary>
