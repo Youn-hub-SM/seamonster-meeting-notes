@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { dateTime } from "@/app/lib/format";
-import { APPLY_STATUS_COLOR, APPLY_STATUSES, POSITIONS, POSITION_KO, parseProductNos, wrapBlock, type ApplyStatus, type Position, type SetMember } from "@/app/lib/detail-page";
+import { APPLY_STATUS_COLOR, APPLY_STATUSES, POSITIONS, POSITION_KO, parseProductNos, sourceCategory, sourceLabel, wrapBlock, type ApplyStatus, type Position, type SetMember } from "@/app/lib/detail-page";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 type Source = { id: number; name: string; html: string; position: Position; version: number; updated_by: string | null; updated_at: string; applied_count: number };
 type SourceSet = { id: number; name: string; members: number[]; position: Position; updated_by: string | null; updated_at: string };
@@ -59,6 +60,72 @@ sr.onclick=function(){w.classList.add('src');on(sr)};})();
   return true;
 }
 
+// 조합에 넣을 소스 고르기 — 소분류(소스 이름의 [대괄호]) 칩 + 검색(초성·영타·여러 단어, 공용 matchKoQuery).
+//  이미 조합에 든 소스는 목록에서 빠진다. 줄을 누르면 바로 추가되고 패널은 그대로 — 여러 개를 이어서 고른다.
+const NO_CAT = "분류 없음";
+function SourcePicker({ sources, excluded, onAdd }: { sources: Source[]; excluded: number[]; onAdd: (id: number) => void }) {
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState<string>("전체");
+
+  const avail = useMemo(() => sources.filter((s) => !excluded.includes(s.id)), [sources, excluded]);
+  const searched = useMemo(() => (q.trim() ? avail.filter((s) => matchKoQuery(s.name, q)) : avail), [avail, q]);
+  const cats = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const s of searched) { const c = sourceCategory(s.name) || NO_CAT; count.set(c, (count.get(c) || 0) + 1); }
+    const names = Array.from(count.keys()).filter((c) => c !== NO_CAT).sort((a, b) => a.localeCompare(b, "ko"));
+    if (count.has(NO_CAT)) names.push(NO_CAT);
+    return names.map((name) => ({ name, n: count.get(name) || 0 }));
+  }, [searched]);
+  const active = cat === "전체" || cats.some((c) => c.name === cat) ? cat : "전체"; // 고른 분류가 비면 전체로
+  const shown = useMemo(() => {
+    const list = active === "전체" ? searched : searched.filter((s) => (sourceCategory(s.name) || NO_CAT) === active);
+    return [...list].sort((a, b) => (sourceCategory(a.name) || "￿").localeCompare(sourceCategory(b.name) || "￿", "ko") || sourceLabel(a.name).localeCompare(sourceLabel(b.name), "ko"));
+  }, [searched, active]);
+
+  return (
+    <div className="dp-pick">
+      <div className="dp-pick-head">
+        <span className="b2b-field-label">소스 고르기</span>
+        <input
+          className="b2b-input dp-pick-search" value={q} placeholder="검색" aria-label="소스 검색"
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && shown.length > 0) { e.preventDefault(); onAdd(shown[0].id); } }}
+        />
+      </div>
+      {cats.length > 1 && (
+        <div className="sm-tabs dp-pick-cats">
+          <button type="button" className={`sm-tab ${active === "전체" ? "is-active" : ""}`} onClick={() => setCat("전체")}>전체<span className="sm-tab-count">{searched.length}</span></button>
+          {cats.map((c) => (
+            <button key={c.name} type="button" className={`sm-tab ${active === c.name ? "is-active" : ""}`} onClick={() => setCat(c.name)}>{c.name}<span className="sm-tab-count">{c.n}</span></button>
+          ))}
+        </div>
+      )}
+      {shown.length === 0 ? (
+        <div className="dp-pick-empty">
+          {avail.length === 0 ? "넣을 소스가 없습니다." : "조건에 맞는 소스가 없습니다."}
+          {avail.length > 0 && <button type="button" className="b2b-link-btn" onClick={() => { setQ(""); setCat("전체"); }}>조건 지우기</button>}
+        </div>
+      ) : (
+        <ul className="dp-pick-list">
+          {shown.map((s) => {
+            const c = sourceCategory(s.name);
+            return (
+              <li key={s.id}>
+                <button type="button" className="dp-pick-row" onClick={() => onAdd(s.id)}>
+                  {active === "전체" && <span className="dp-pick-cat">{c || NO_CAT}</span>}
+                  <span className="dp-pick-name">{c ? sourceLabel(s.name) : s.name}</span>
+                  <span className="dp-pick-meta num">v{s.version}</span>
+                  <span className="dp-pick-add">추가</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function DetailSendPage() {
   const toast = useToast();
   const confirm = useConfirm();
@@ -78,7 +145,6 @@ export default function DetailSendPage() {
   const [comboForm, setComboForm] = useState(EMPTY_SET);
   const [comboDirty, setComboDirty] = useState(false);
   const [comboSaving, setComboSaving] = useState(false);
-  const [addId, setAddId] = useState("");
   // 쏘기
   const [nosText, setNosText] = useState("");
   const [names, setNames] = useState<Record<string, string>>({});
@@ -462,7 +528,16 @@ export default function DetailSendPage() {
               </div>
               <div className="b2b-field">
                 <label className="b2b-field-label" htmlFor="dp-html">HTML</label>
-                <textarea id="dp-html" className="b2b-input dp-code" spellCheck={false} value={form.html} onChange={(e) => { setForm({ ...form, html: e.target.value }); setDirty(true); }} />
+                {/* 소스 번호 띠 — 상세설명 안 마커(sm:src=번호)와 같은 번호. 저장 전(새 소스)에는 번호가 없어 띠도 없다 */}
+                <div className={`dp-code-box ${selected ? "has-bar" : ""}`}>
+                  {selected && (
+                    <div className="dp-code-bar">
+                      <span className="dp-code-no num">소스 번호 {selected.id}</span>
+                      <code className="dp-code-marker">{`<!-- sm:src=${selected.id} -->`}</code>
+                    </div>
+                  )}
+                  <textarea id="dp-html" className="b2b-input dp-code" spellCheck={false} value={form.html} onChange={(e) => { setForm({ ...form, html: e.target.value }); setDirty(true); }} />
+                </div>
               </div>
               {selected && (
                 <div className="dp-meta">
@@ -536,14 +611,11 @@ export default function DetailSendPage() {
                     ))}
                   </ol>
                 )}
-                <div className="dp-member-add">
-                  <select className="b2b-input" value={addId} onChange={(e) => setAddId(e.target.value)} aria-label="추가할 소스">
-                    <option value="">소스 고르기</option>
-                    {sources.filter((s) => !comboForm.members.includes(s.id)).map((s) => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-                  </select>
-                  <button type="button" className="b2b-btn-secondary" disabled={!addId} onClick={() => { setComboForm({ ...comboForm, members: [...comboForm.members, Number(addId)] }); setAddId(""); setComboDirty(true); }}>소스 추가</button>
-                </div>
               </div>
+              <SourcePicker
+                sources={sources} excluded={comboForm.members}
+                onAdd={(id) => { setComboForm((f) => (f.members.includes(id) ? f : { ...f, members: [...f.members, id] })); setComboDirty(true); }}
+              />
               {selectedSet && (
                 <div className="dp-meta">
                   <span>{selectedSet.updated_by || "-"} {dateTime(selectedSet.updated_at)}</span>

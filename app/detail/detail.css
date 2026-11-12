@@ -32,6 +32,13 @@
 /* 편집 폼 */
 .dp-editor .b2b-field { margin-bottom: var(--sm-space-4); }
 .dp-code { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); line-height: 1.55; min-height: 320px; resize: vertical; white-space: pre; overflow: auto; tab-size: 2; }
+/* HTML 칸 위에 붙는 소스 번호 띠(저장된 소스만) — 띠와 입력칸이 한 상자로 보이게 모서리를 잇는다 */
+.dp-code-box { display: flex; flex-direction: column; }
+.dp-code-box .dp-code { display: block; width: 100%; }
+.dp-code-bar { display: flex; align-items: center; gap: var(--sm-space-3); padding: 6px 12px; background: var(--sm-bg-subtle); border: 1px solid var(--sm-border-strong); border-bottom: 0; border-radius: var(--sm-radius) var(--sm-radius) 0 0; font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); }
+.dp-code-no { font-weight: 600; color: var(--sm-black); }
+.dp-code-marker { font-family: var(--sm-mono); color: var(--sm-text-mid); }
+.dp-code-box.has-bar .dp-code { border-top-left-radius: 0; border-top-right-radius: 0; }
 .dp-nos { min-height: 88px; resize: vertical; font-family: var(--sm-mono); font-size: var(--sm-fs-base); }
 .dp-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 
@@ -43,9 +50,22 @@
 .dp-member-actions { display: flex; gap: var(--sm-space-3); flex: 0 0 auto; }
 .dp-member-actions .b2b-link-btn:disabled { opacity: .4; cursor: not-allowed; text-decoration: none; }
 .dp-members-empty { padding: 12px; font-size: var(--sm-fs-base); color: var(--sm-text-mid); border: 1px dashed var(--sm-border-strong); border-radius: var(--sm-radius); }
-.dp-member-add { display: flex; gap: var(--sm-space-2); margin-top: var(--sm-space-2); }
-.dp-member-add .b2b-input { flex: 1 1 auto; }
-.dp-member-add .b2b-btn-secondary { flex: 0 0 auto; white-space: nowrap; }
+
+/* 조합 — 소스 고르기(소분류 칩 + 검색 + 목록). 줄을 누르면 추가 */
+.dp-pick { margin-bottom: var(--sm-space-4); }
+.dp-pick-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-3); margin-bottom: var(--sm-space-2); }
+.dp-pick-head .b2b-field-label { margin: 0; }
+.dp-pick-search { width: 240px; max-width: 100%; flex: 0 1 auto; }
+.dp-pick-cats { margin-bottom: var(--sm-space-2); }
+.dp-pick-list { list-style: none; margin: 0; padding: 0; max-height: 264px; overflow-y: auto; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); }
+.dp-pick-list li + li { border-top: 1px solid var(--sm-border-light); }
+.dp-pick-row { display: flex; align-items: center; gap: var(--sm-space-3); width: 100%; padding: 8px 12px; background: none; border: 0; text-align: left; font: inherit; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-black); cursor: pointer; }
+.dp-pick-row:hover { background: var(--sm-bg-subtle); }
+.dp-pick-cat { flex: 0 0 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.dp-pick-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.dp-pick-meta { flex: 0 0 auto; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.dp-pick-add { flex: 0 0 auto; font-size: var(--sm-fs-xs); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.dp-pick-empty { display: flex; align-items: center; gap: var(--sm-space-3); padding: 12px; font-size: var(--sm-fs-base); color: var(--sm-text-mid); border: 1px dashed var(--sm-border-strong); border-radius: var(--sm-radius); }
 .dp-cell-sub { display: block; font-size: var(--sm-fs-xs); }
 .dp-present-hit { font-weight: 600; } /* 적용 상품 보기에서 지금 고른 소스 */
 

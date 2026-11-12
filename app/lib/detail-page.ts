@@ -136,3 +136,14 @@ export function parseProductNos(text: string): number[] {
   }
   return out;
 }
+
+/** 소스 이름의 소분류 — 제목 안 첫 대괄호 [ ] 의 글자. 없으면 ""(분류 없음). 예: "[이유식] 보관방법" → "이유식" */
+export function sourceCategory(name: string): string {
+  const m = /\[([^\]]+)\]/.exec(name || "");
+  return m ? m[1].trim() : "";
+}
+/** 소분류 대괄호를 뺀 표시 이름. 대괄호만 있고 나머지가 비면 원래 이름 그대로 */
+export function sourceLabel(name: string): string {
+  const rest = (name || "").replace(/\[[^\]]+\]\s*/, "").trim();
+  return rest || (name || "").trim();
+}
