@@ -32,13 +32,13 @@
 /* 편집 폼 */
 .dp-editor .b2b-field { margin-bottom: var(--sm-space-4); }
 .dp-code { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); line-height: 1.55; min-height: 320px; resize: vertical; white-space: pre; overflow: auto; tab-size: 2; }
-/* HTML 칸 위에 붙는 소스 번호 띠(저장된 소스만) — 띠와 입력칸이 한 상자로 보이게 모서리를 잇는다 */
-.dp-code-box { display: flex; flex-direction: column; }
-.dp-code-box .dp-code { display: block; width: 100%; }
-.dp-code-bar { display: flex; align-items: center; gap: var(--sm-space-3); padding: 6px 12px; background: var(--sm-bg-subtle); border: 1px solid var(--sm-border-strong); border-bottom: 0; border-radius: var(--sm-radius) var(--sm-radius) 0 0; font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); }
-.dp-code-no { font-weight: 600; color: var(--sm-black); }
-.dp-code-marker { font-family: var(--sm-mono); color: var(--sm-text-mid); }
-.dp-code-box.has-bar .dp-code { border-top-left-radius: 0; border-top-right-radius: 0; }
+/* HTML 입력칸 왼쪽 줄 번호 칸 — 입력칸과 한 상자로 보이게 모서리를 잇는다.
+   번호는 입력칸과 같은 글꼴·줄 높이·위 여백(테두리 1 + 안쪽 10)이어야 줄이 맞는다. 번호 묶음은 절대 배치라 칸 높이에 영향을 주지 않고,
+   입력칸 스크롤만큼 transform 으로 올라간다(CodeArea). */
+.dp-code-box { display: flex; align-items: stretch; }
+.dp-code-gutter { position: relative; flex: 0 0 auto; overflow: hidden; background: var(--sm-bg-subtle); border: 1px solid var(--sm-border-strong); border-right: 0; border-radius: var(--sm-radius) 0 0 var(--sm-radius); }
+.dp-code-nums { position: absolute; top: 0; left: 0; right: 0; padding: 10px 8px 0; text-align: right; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); line-height: 1.55; white-space: pre; color: var(--sm-text-mid); font-variant-numeric: tabular-nums; user-select: none; }
+.dp-code-box .dp-code { display: block; flex: 1 1 auto; min-width: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .dp-nos { min-height: 88px; resize: vertical; font-family: var(--sm-mono); font-size: var(--sm-fs-base); }
 .dp-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 

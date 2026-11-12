@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { dateTime } from "@/app/lib/format";
 import { APPLY_STATUS_COLOR, APPLY_STATUSES, POSITIONS, POSITION_KO, parseProductNos, sourceCategory, sourceLabel, wrapBlock, type ApplyStatus, type Position, type SetMember } from "@/app/lib/detail-page";
@@ -58,6 +58,27 @@ sr.onclick=function(){w.classList.add('src');on(sr)};})();
   if (!w) return false;
   w.document.open(); w.document.write(doc); w.document.close();
   return true;
+}
+
+// HTML 입력칸 + 왼쪽 줄 번호. 입력칸은 줄바꿈 없이 가로 스크롤(white-space: pre)이라 '소스의 줄 = 화면의 줄' —
+//  번호 칸은 줄 수만큼 숫자를 찍고, 입력칸의 세로 스크롤을 따라 같은 만큼 올린다(번호 칸 자체는 스크롤하지 않는다).
+function CodeArea({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const numsRef = useRef<HTMLDivElement>(null);
+  const lines = useMemo(() => value.split("\n").length, [value]);
+  const nums = useMemo(() => Array.from({ length: lines }, (_, i) => i + 1).join("\n"), [lines]);
+  const sync = useCallback(() => {
+    if (taRef.current && numsRef.current) numsRef.current.style.transform = `translateY(-${taRef.current.scrollTop}px)`;
+  }, []);
+  useEffect(() => { sync(); }, [value, sync]); // 소스를 바꿔 내용이 통째로 바뀌면 스크롤 위치가 달라진다
+  return (
+    <div className="dp-code-box">
+      <div className="dp-code-gutter" aria-hidden="true" style={{ width: `calc(${Math.max(String(lines).length, 2)}ch + 20px)` }}>
+        <div className="dp-code-nums" ref={numsRef}>{nums}</div>
+      </div>
+      <textarea ref={taRef} id={id} className="b2b-input dp-code" spellCheck={false} wrap="off" value={value} onChange={(e) => onChange(e.target.value)} onScroll={sync} />
+    </div>
+  );
 }
 
 // 조합에 넣을 소스 고르기 — 소분류(소스 이름의 [대괄호]) 칩 + 검색(초성·영타·여러 단어, 공용 matchKoQuery).
@@ -528,16 +549,7 @@ export default function DetailSendPage() {
               </div>
               <div className="b2b-field">
                 <label className="b2b-field-label" htmlFor="dp-html">HTML</label>
-                {/* 소스 번호 띠 — 상세설명 안 마커(sm:src=번호)와 같은 번호. 저장 전(새 소스)에는 번호가 없어 띠도 없다 */}
-                <div className={`dp-code-box ${selected ? "has-bar" : ""}`}>
-                  {selected && (
-                    <div className="dp-code-bar">
-                      <span className="dp-code-no num">소스 번호 {selected.id}</span>
-                      <code className="dp-code-marker">{`<!-- sm:src=${selected.id} -->`}</code>
-                    </div>
-                  )}
-                  <textarea id="dp-html" className="b2b-input dp-code" spellCheck={false} value={form.html} onChange={(e) => { setForm({ ...form, html: e.target.value }); setDirty(true); }} />
-                </div>
+                <CodeArea id="dp-html" value={form.html} onChange={(v) => { setForm({ ...form, html: v }); setDirty(true); }} />
               </div>
               {selected && (
                 <div className="dp-meta">
