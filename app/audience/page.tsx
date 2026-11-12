@@ -17,6 +17,10 @@ const toPayload = (c: Cond) => ({ ...c, products: c.keywords.join(", "), keyword
 type ProductOption = { sku: string; name: string; listing: string; orders: number };
 type NameOption = { name: string; orders: number };
 const SUGGEST_MAX = 60; // 목록에 한 번에 그리는 줄 수 — 주문 상품명은 수천 개라 전부 그리면 느리다
+// 무엇으로 찾을지 먼저 고른다(2026-11-13 대표: "너무 많아서 안 보이네. 선택 후 검색하는 게 나을듯 — 상품명 → 상품명 검색").
+//  상품명·상품코드 = 상품 마스터의 상품(고르면 상품코드로 잡는다), 주문 상품명 = 주문서에 적힌 이름 그대로.
+const PRODUCT_BY = [{ key: "name", label: "상품명" }, { key: "code", label: "상품코드" }, { key: "order", label: "주문 상품명" }] as const;
+type ProductBy = (typeof PRODUCT_BY)[number]["key"];
 type Preview = { name: string; phone: string; orders: number; amount: number; first_date: string; last_date: string };
 type Result = { count: number; excluded: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
 type History = { id: string | number; action: "검색" | "추출"; cond: string; count: number | null; actor: string | null; created_at: string };
@@ -38,6 +42,7 @@ export default function AudiencePage() {
   const [orderNames, setOrderNames] = useState<NameOption[]>([]);         // 주문서에 적힌 상품명(채널마다 다르다)
   const [productsError, setProductsError] = useState("");
   const [typed, setTyped] = useState("");                                  // 상품 검색칸에 치고 있는 말
+  const [productBy, setProductBy] = useState<ProductBy>("name");          // 무엇으로 찾을지
   const productsAsked = useRef(false);
 
   const load = useCallback(async () => {
@@ -60,19 +65,22 @@ export default function AudiencePage() {
       setProducts(j.products || []); setOrderNames(j.names || []);
     }).catch((e) => { productsAsked.current = false; setProductsError(e instanceof Error ? e.message : "상품 목록을 불러오지 못했습니다."); });
   };
-  // 목록 = 상품(코드) 먼저, 그 아래 주문 상품명. 검색어에 맞는 것만 SUGGEST_MAX 줄까지(콤보박스와 같은 규칙으로 미리 거른다).
+  // 목록 = 고른 종류 하나만. 그 종류의 글자(상품명 / 상품코드 / 주문 상품명)로만 찾고, 맞는 것을 주문 많은 순으로 SUGGEST_MAX 줄까지.
   const productOptions: ComboOption[] = useMemo(() => {
     const q = typed.trim();
-    const all: ComboOption[] = [
-      ...(products || []).filter((p) => !cond.skus.some((s) => s.sku === p.sku)).map((p) => ({ id: `sku:${p.sku}`, label: p.name, sub: `${p.sku} · 주문 ${qty(p.orders)}건`, extra: p.listing })),
-      ...orderNames.filter((n) => !cond.names.includes(n.name)).map((n) => ({ id: `name:${n.name}`, label: n.name, sub: `주문 상품명 · 주문 ${qty(n.orders)}건` })),
-    ];
-    const hit = q ? all.filter((o) => matchKoQuery(`${o.label} ${o.sub || ""} ${o.extra || ""}`, q)) : all;
-    return hit.slice(0, SUGGEST_MAX);
-  }, [products, orderNames, cond.skus, cond.names, typed]);
+    if (productBy === "order") {
+      return orderNames.filter((n) => !cond.names.includes(n.name) && (!q || matchKoQuery(n.name, q))).slice(0, SUGGEST_MAX)
+        .map((n) => ({ id: `name:${n.name}`, label: n.name, sub: `주문 ${qty(n.orders)}건` }));
+    }
+    const rest = (products || []).filter((p) => !cond.skus.some((s) => s.sku === p.sku));
+    if (productBy === "code") {
+      return rest.filter((p) => !q || matchKoQuery(p.sku, q)).slice(0, SUGGEST_MAX).map((p) => ({ id: `sku:${p.sku}`, label: p.sku, sub: `${p.name} · 주문 ${qty(p.orders)}건` }));
+    }
+    return rest.filter((p) => !q || matchKoQuery(p.name, q)).slice(0, SUGGEST_MAX).map((p) => ({ id: `sku:${p.sku}`, label: p.name, sub: `${p.sku} · 주문 ${qty(p.orders)}건` }));
+  }, [products, orderNames, cond.skus, cond.names, typed, productBy]);
   const addSku = (o: ComboOption) => {
     if (o.id.startsWith("name:")) { const name = o.id.slice(5); setCond((c) => (c.names.includes(name) ? c : { ...c, names: [...c.names, name] })); }
-    else { const sku = o.id.slice(4); setCond((c) => (c.skus.some((s) => s.sku === sku) ? c : { ...c, skus: [...c.skus, { sku, label: o.label }] })); }
+    else { const sku = o.id.slice(4); const label = products?.find((p) => p.sku === sku)?.name || sku; setCond((c) => (c.skus.some((s) => s.sku === sku) ? c : { ...c, skus: [...c.skus, { sku, label }] })); }
     setTyped("");
   };
   const addKeyword = () => { const k = typed.replace(/,/g, " ").trim(); if (k) setCond((c) => (c.keywords.includes(k) ? c : { ...c, keywords: [...c.keywords, k] })); setTyped(""); };
@@ -151,8 +159,16 @@ export default function AudiencePage() {
           <div className="b2b-field aud-wide" onFocusCapture={loadProducts} onPointerDownCapture={loadProducts}>
             <span className="b2b-field-label">상품</span>
             {productsError && <div className="b2b-error">{productsError}</div>}
-            <Combobox value="" options={productOptions} onSelect={addSku} onType={setTyped} allowFreeText ariaLabel="상품 검색" placeholder="품목·SKU 검색"
-              emptyText={products ? "일치하는 상품이 없습니다" : "상품을 불러오는 중..."} />
+            <div className="aud-product">
+              <div className="sm-tabs" role="group" aria-label="상품을 찾는 기준">
+                {PRODUCT_BY.map((t) => (
+                  <button key={t.key} type="button" className={`sm-tab ${productBy === t.key ? "is-active" : ""}`} aria-pressed={productBy === t.key} onClick={() => { setProductBy(t.key); setTyped(""); }}>{t.label}</button>
+                ))}
+              </div>
+              <Combobox key={productBy} value="" options={productOptions} onSelect={addSku} onType={setTyped} allowFreeText
+                ariaLabel={`${PRODUCT_BY.find((t) => t.key === productBy)!.label} 검색`} placeholder={`${PRODUCT_BY.find((t) => t.key === productBy)!.label} 검색`}
+                emptyText={products ? `일치하는 ${PRODUCT_BY.find((t) => t.key === productBy)!.label}이 없습니다` : "상품을 불러오는 중..."} />
+            </div>
             {typed.trim() && (
               <div><button type="button" className="b2b-link-btn" onClick={addKeyword}>이름·코드에 ‘{typed.trim()}’가 든 상품 모두 담기</button></div>
             )}
