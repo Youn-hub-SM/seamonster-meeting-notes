@@ -2,7 +2,7 @@
 
 // 문자 보내기 — 받는 번호와 내용을 적어 고객에게 문자를 보낸다.
 //  실제 발송은 중계 서버(클라우드웨이즈)가 알리고 API 로 한다(알리고는 등록한 서버 IP 에서만 받는다). 여기서는 요청을 줄 세우고 결과를 본다.
-//  요청 → 2분 안에 발송 서버가 가져감 → 결과(접수·거절 건수). 08~21시(한국 시간)에만 보낸다.
+//  요청 → 3분 안에 발송 서버가 가져감 → 결과(접수·거절 건수). 08~21시(한국 시간)에만 보낸다.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import {
@@ -78,7 +78,7 @@ export default function SmsPage() {
       if (!j.ok) throw new Error(j.error);
       setSends((list) => [j.send, ...list]);
       setReceivers(""); setMessage(""); setTitle("");
-      toast.success("문자를 보냈습니다. 2분 안에 발송됩니다");
+      toast.success("문자를 보냈습니다. 3분 안에 발송됩니다");
     } catch (e) { setErrors([e instanceof Error ? e.message : "문자를 보내지 못했습니다."]); }
     finally { setSending(false); }
   };

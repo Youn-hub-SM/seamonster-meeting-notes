@@ -3,7 +3,7 @@
 //  알리고는 등록한 서버 IP 에서만 발송을 받는다 — 그래서 고정 IP 인 이 서버가 보낸다(Vercel 은 IP 가 바뀐다).
 //
 //  실행: node bin/aligo-sms-runner.mjs [서버URL]
-//  크론(UTC — 한국 08:00~20:59 에만, 2분마다):  */2 23,0-11 * * *  cd $HOME/seamonster-sync && /usr/bin/node bin/aligo-sms-runner.mjs https://… >> logs/aligo-sms.log 2>&1
+//  크론(UTC — 한국 08:00~20:59 에만, 3분마다 — 월 약 7,800회):  */3 23,0-11 * * *  cd $HOME/seamonster-sync && /usr/bin/node bin/aligo-sms-runner.mjs https://… >> logs/aligo-sms.log 2>&1
 //  env(.env.local): ALIGO_API_KEY / ALIGO_USER_ID / ALIGO_SENDER(알리고에 등록한 발신번호)
 //                   ALIGO_TESTMODE — 'N' 이어야 실제로 나간다. 없거나 다른 값이면 시험 발송(알리고가 접수만 하고 보내지 않음).
 //                   ALIGO_API_BASE(선택, 기본 https://apis.aligo.in — 로컬 점검용)
