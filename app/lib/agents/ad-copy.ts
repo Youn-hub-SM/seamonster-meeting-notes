@@ -371,8 +371,13 @@ async function priorIdeas(sb: SupabaseClient, exceptId: string): Promise<string>
 //   ① 기관·전문가 권장, 인증, 통계는 광고 문구에 쓰지 않는다(근거 칸에만) ② 상품 규격은 상품 마스터 값만 쓴다(없는 숫자 금지)
 //   ③ 본문을 짧은 것(short_text)과 긴 것(primary_text) 둘로 낸다.
 //  v4(2026-11-12, 대표: "160건만 읽는 건 한계가 크다 — 분석한 자료를 넣자"): 전체 리뷰 분석 자료 + 주제별 최근 동향(코드 집계)을 읽는다.
-type Cfg = { facts: boolean; insight: boolean };
-const V2: Cfg = { facts: false, insight: false }, V3: Cfg = { facts: true, insight: false }, V4: Cfg = { facts: true, insight: true };
+//  v5(2026-11-12, 대표: "카피 지침 두 가지도 반영") — v3 둘째 결과("비리지 않나요? 3편으로 답합니다")를 보고 정한 두 가지.
+//   ① 후킹에서 걱정을 꺼내 놓고 답은 다음 편으로 미뤘다 — 광고 하나만 본 사람에게는 걱정만 남는다 → 같은 광고 안에서 답한다(기획도 한 편으로 뜻이 서게).
+//   ② 일반화 금지를 글자 그대로 따르다 "한 고객이 알려 준 방법을 그대로 따라 해 봅니다" 같은 어색한 문장이 나왔다
+//      → '부풀리지 말 것'으로 풀고, 얼마나 넓게 말해도 되는지는 리뷰 분석 자료의 건수로 가늠한다.
+type Cfg = { facts: boolean; insight: boolean; craft: boolean };
+const V2: Cfg = { facts: false, insight: false, craft: false }, V3: Cfg = { facts: true, insight: false, craft: false },
+  V4: Cfg = { facts: true, insight: true, craft: false }, V5: Cfg = { facts: true, insight: true, craft: true };
 const PLAN_INPUT_V4 = `- 리뷰 분석 자료: 전체 리뷰(공식몰·스마트스토어)를 분석해 둔 자료. 주제별 건수와 비율, 상품별 차이, 고객이 쓰는 말이 들어 있습니다. 소재의 가장 큰 근거입니다.
 - 주제별 최근 동향: 같은 주제를 최근 90일 리뷰에서 코드가 다시 센 표. '늘어남'으로 표시된 주제는 요즘 커지는 이야기입니다.
 - 최근 4주 고객 목소리: 최근 4주의 리뷰·문의·VOC 에서 당신이 앞 단계에 뽑은 새 재료.`;
@@ -386,10 +391,18 @@ async function loadProducts(sb: SupabaseClient): Promise<{ ok: boolean; text: st
   if (!rows.length) return { ok: false, text: "없음" };
   return { ok: true, text: rows.slice(0, PRODUCT_MAX).map((p) => `- ${cut(p.name, 60)}${p.spec ? ` · ${cut(p.spec, 60)}` : ""}${p.unit ? ` · 단위 ${p.unit}` : ""}`).join("\n") };
 }
+const GENERAL_RULE = `- '다들', '늘', '누구나'처럼 일부 고객의 말을 모두의 일로 넓히지 않습니다. 고객의 말은 한 사람의 말로 씁니다.`; // v3·v4
 const FACT_RULE = `[사실만 쓰기 — 가장 먼저 지킬 것]
 - 중량, 개수, 포장 단위 같은 상품 숫자는 [상품 규격]에 적힌 값만 씁니다. 거기 없는 숫자는 쓰지 않고 숫자 없이 표현합니다(예: '한 팩씩').
 - 정부·기관·전문가의 권장, 인증, 수상, 통계, 기사 내용은 광고 문구(hook·story·offer·short_text·primary_text·headline)에 쓰지 않습니다. 소재를 고른 이유로만 쓸 수 있고, 그때는 근거(basis)에 적습니다.
-- '다들', '늘', '누구나'처럼 일부 고객의 말을 모두의 일로 넓히지 않습니다. 고객의 말은 한 사람의 말로 씁니다.`;
+${GENERAL_RULE}`;
+// v5~: 부풀리지 않되 어색하게 쓰지 않는다 — 넓게 말해도 되는지는 분석 자료의 건수가 정한다
+const GENERAL_RULE_V5 = `- 일부 고객의 경험을 모든 고객의 일처럼 부풀리지 않습니다. '누구나', '모두', '100%' 같은 말은 쓰지 않습니다. 다만 문장마다 한 사람의 말이라고 밝힐 필요는 없습니다. 리뷰 분석 자료에서 수백 건 넘게 나온 이야기는 '많은 분이', '후기에 자주 나오는'처럼 말해도 됩니다. 수십 건인 이야기와 분석 자료에 없는 이야기는 '이렇게 드시는 분도 있어요'처럼 씁니다. '한 고객이 알려 준 방법'처럼 출처를 드러내느라 어색해진 문장은 쓰지 않습니다.`;
+const factRule = (cfg: Cfg): string => (cfg.craft ? FACT_RULE.replace(GENERAL_RULE, GENERAL_RULE_V5) : FACT_RULE);
+// v5~: 기획 단계 — 한 편만 봐도 뜻이 서는 소재, 걱정에서 출발하면 답까지 정한다
+const PLAN_RULE_V5 = `7. 소재 하나는 광고 한 편만 봐도 뜻이 서야 합니다. 걱정이나 질문에서 출발하는 소재(비린내, 가시, 냉동, 가격 등)는 무엇으로 답할지까지 angle 에 적습니다. 여러 편으로 나눠 내더라도 편마다 따로 봐도 답이 들어 있어야 합니다.`;
+// v5~: 작성 단계 — 꺼낸 걱정은 같은 광고 안에서 답한다
+const WRITE_RULE_V5 = `6. 후킹에서 걱정이나 질문을 꺼냈으면 같은 광고 안에서 답합니다. 바로 다음 문장에서 답을 시작하고, short_text 와 primary_text 는 각각 그것만 읽어도 답이 들어 있어야 합니다. '다음 편에서', '곧 알려 드립니다'처럼 답을 미루지 않습니다. 답은 리뷰 분석 자료의 '걱정했는데 괜찮았다'에 있는 고객 경험이나 조리법 같은 구체적인 사실로 하고, 분석 자료의 '광고에서 말할 수 있는 선'을 넘지 않습니다.`;
 
 // ── 3단계: 소재 기획 — 어떤 소재를 낼지만 정한다(문구는 다음 단계) ──
 const IDEA_MIN = 8, IDEA_MAX = 12;
@@ -469,8 +482,9 @@ const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
 
 function planSystem(cfg: Cfg): string {
   let s = PLAN_SYSTEM;
-  if (cfg.facts) s = s.replace("[소재를 정하는 법]", `${FACT_RULE}\n\n[소재를 정하는 법]`);
+  if (cfg.facts) s = s.replace("[소재를 정하는 법]", `${factRule(cfg)}\n\n[소재를 정하는 법]`);
   if (cfg.insight) s = s.replace("- 고객 목소리: 리뷰·문의·VOC 에서 당신이 앞 단계에 뽑은 정리.", PLAN_INPUT_V4);
+  if (cfg.craft) s = s.replace("\n\n[피드백을 받았을 때]", `\n${PLAN_RULE_V5}\n\n[피드백을 받았을 때]`);
   return s;
 }
 async function stagePlan(c: StageCtx, cfg: Cfg): Promise<StageResult> {
@@ -568,6 +582,10 @@ const WRITE_SYSTEM_V3 = WRITE_SYSTEM
   .replace("- primary_text 광고 본문(바로 붙여 넣을 수 있게, 줄바꿈 포함 300자 안쪽) · headline 제목(25자 안쪽)",
     "- short_text 짧은 본문(3~4줄, 100자 안쪽 — '더 보기'를 누르지 않아도 뜻이 서게) · primary_text 긴 본문(바로 붙여 넣을 수 있게, 줄바꿈 포함 300자 안쪽, 첫 두 줄만 읽어도 뜻이 서게) · headline 제목(25자 안쪽)");
 
+const WRITE_LAST_RULE = "5. 소재끼리 첫 문장과 말투가 겹치지 않게 씁니다.";
+const WRITE_SYSTEM_V5 = WRITE_SYSTEM_V3.replace(FACT_RULE, factRule(V5)).replace(WRITE_LAST_RULE, `${WRITE_LAST_RULE}\n${WRITE_RULE_V5}`);
+const writeSystem = (cfg: Cfg): string => (cfg.craft ? WRITE_SYSTEM_V5 : cfg.facts ? WRITE_SYSTEM_V3 : WRITE_SYSTEM);
+
 type Copy = { no: number; hook: string; story: string; offer: string; primary_text: string; headline: string; visual: string; short_text?: string };
 const copiesTool = (withShort: boolean) => (strict: boolean): Anthropic.Tool => ({
   name: "submit_copies", ...(strict ? { strict: true } : {}),
@@ -605,7 +623,7 @@ async function stageWrite(c: StageCtx, cfg: Cfg): Promise<StageResult> {
   const others = (chunk: typeof todo) => plan.ideas.map((it, i) => ({ no: i + 1, title: it.title })).filter((x) => !chunk.some((y) => y.no === x.no)).map((x) => `${x.no} ${x.title}`).join(" · ");
   // 묶음마다 따로 부른다 — 한 묶음이 실패해도 나머지 문구는 살린다(실패한 소재는 문구 없이 목록에 남고 경고가 붙는다)
   const results = await Promise.allSettled(chunks.map((chunk) => converse<Copy[]>(m, {
-    system: cfg.facts ? WRITE_SYSTEM_V3 : WRITE_SYSTEM, effort: "high", maxTokens: 24000, deadlineAt: c.deadlineAt,
+    system: writeSystem(cfg), effort: "high", maxTokens: 24000, deadlineAt: c.deadlineAt,
     submit: { tool: copiesTool(cfg.facts), check: checkCopies },
     content: [{ type: "text", text: `아래 소재 ${chunk.length}건의 광고 문구를 써서 submit_copies 로 제출하세요.\n\n[쓸 소재]\n${JSON.stringify(chunk.map(({ no, it }) => ({ no, 이름: it.title, 구분: it.kind, 소구점: it.angle, 대상: it.target, 형식: it.format, 근거: it.basis })))}\n\n[같은 목록의 다른 소재 — 겹치지 않게 참고만]\n${others(chunk) || "없음"}\n\n${shared}` }],
   })));
@@ -637,4 +655,4 @@ async function stageWrite(c: StageCtx, cfg: Cfg): Promise<StageResult> {
 
 // v1(2026-11-11) = voice → trend → compose(기획+문구 한 번에). 첫 실행에서 compose 가 시간 초과로 실패해 종료 — 실행기는 남기지 않는다.
 const runner = (v: Cfg): StagedRunner => ({ stages: [(c) => stageVoice(c, v), stageTrend, (c) => stagePlan(c, v), (c) => stageWrite(c, v)], reviseFrom: 2 });
-export const AD_COPY_V2 = runner(V2), AD_COPY_V3 = runner(V3), AD_COPY_V4 = runner(V4);
+export const AD_COPY_V2 = runner(V2), AD_COPY_V3 = runner(V3), AD_COPY_V4 = runner(V4), AD_COPY_V5 = runner(V5);

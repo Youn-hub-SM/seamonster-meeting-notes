@@ -12,7 +12,7 @@ import { getAssistantSettings, getAssistantMonthUsage, addAssistantUsage } from 
 import { logAgentDraftReady } from "../b2b-activity";
 import { getAppBaseUrl } from "../b2b-settings";
 import { runStages, STAGED_FN_MS, type StagedRunner } from "./staged";
-import { AD_COPY_V2, AD_COPY_V3, AD_COPY_V4 } from "./ad-copy";
+import { AD_COPY_V2, AD_COPY_V3, AD_COPY_V4, AD_COPY_V5 } from "./ad-copy";
 
 export const AGENT_DEADLINE_MS = 270_000; // 라우트 maxDuration 300
 
@@ -28,7 +28,7 @@ const RUNNERS: Record<string, Record<string, Runner>> = {
 
 // 단계로 나눠 도는 에이전트(staged.ts) — 단계마다 함수 호출이 따로라 전체 길이에 제한이 없다
 const STAGED: Record<string, Record<string, StagedRunner>> = {
-  "ad-copy": { v2: AD_COPY_V2, v3: AD_COPY_V3, v4: AD_COPY_V4 }, // v1 은 첫 실행에서 시간 초과 — 종료(registry retired), 실행기 없음
+  "ad-copy": { v2: AD_COPY_V2, v3: AD_COPY_V3, v4: AD_COPY_V4, v5: AD_COPY_V5 }, // v1 은 첫 실행에서 시간 초과 — 종료(registry retired), 실행기 없음
 };
 // 이 함수 호출이 끝나야 하는 시각 — Vercel 밖(로컬 개발)에는 300초 제한이 없어 단계를 한 호출에서 이어 돈다
 const fnDeadline = () => Date.now() + (process.env.VERCEL ? STAGED_FN_MS : 30 * 60_000);
