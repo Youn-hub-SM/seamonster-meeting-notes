@@ -1,54 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getTallyApiKey, getTallyFormId, getTallyCursor, setTallyCursor, tallyFetch } from "@/app/lib/voc-tally";
-import { findRespondent, summarizeAnswers, type SurveyAnswer } from "@/app/lib/surveys";
+import { getTallyApiKey, getTallyFormId, getTallyCursor, setTallyCursor, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "@/app/lib/voc-tally";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_PAGES = 20;
 
-type Q = { id: string; type?: string; title?: string };
-type Resp = { questionId: string; answer?: unknown; formattedAnswer?: unknown };
-type Sub = { id: string; submittedAt?: string; responses?: Resp[] };
-
-function stringify(a: unknown): string {
-  if (a == null) return "";
-  if (Array.isArray(a)) return a.map(stringify).filter(Boolean).join(", ");
-  if (typeof a === "object") { try { return JSON.stringify(a); } catch { return ""; } }
-  return String(a);
-}
-
-// 제출 → 설문 응답 행. 폼이 제각각이라 모든 Q&A 를 그대로 보존, 파일은 photos 로 분리.
-function mapSubmission(sub: Sub, qmap: Map<string, Q>, formId: string): Record<string, unknown> {
-  const answers: SurveyAnswer[] = [];
-  const photos: string[] = [];
-  for (const r of sub.responses || []) {
-    const q: Q = qmap.get(r.questionId) || { id: "" };
-    const title = (q.title || "").trim();
-    const type = (q.type || "").toUpperCase();
-    if (type.includes("FILE") || type.includes("UPLOAD")) {
-      if (Array.isArray(r.answer)) for (const it of r.answer) { const u = it && typeof it === "object" ? (it as { url?: string }).url : null; if (u) photos.push(u); }
-      const fa = stringify(r.formattedAnswer);
-      if (fa) answers.push({ label: title || "첨부", value: fa });
-      continue;
-    }
-    const ans = r.formattedAnswer != null && r.formattedAnswer !== "" ? stringify(r.formattedAnswer) : stringify(r.answer);
-    if (!ans && !title) continue;
-    answers.push({ label: title, value: ans });
-  }
-  return {
-    source: "tally",
-    form_id: formId,
-    submission_id: sub.id,
-    submitted_at: sub.submittedAt || null,
-    respondent: findRespondent(answers),
-    answers,
-    summary: summarizeAnswers(answers),
-    photos,
-  };
-}
+type Q = TallyQ;
+type Sub = TallySub;
 
 // 2026-10-29: 미들웨어 matcher 가 /api/voc/tally 하위 경로까지 제외해 왔으므로 여기서 직접 로그인 쿠키를 검사한다(웹훅 /api/voc/tally 만 서명 검증으로 공개).
 export async function POST(req: NextRequest) {
@@ -77,7 +38,7 @@ export async function POST(req: NextRequest) {
         scanned++;
         if (sub.submittedAt && sub.submittedAt > maxAt) maxAt = sub.submittedAt;
         if (seen.has(sub.id)) { skipped++; continue; }
-        newRows.push(mapSubmission(sub, qmap, formId));
+        newRows.push(mapTallySubmission(sub, qmap, formId));
       }
       if (!json.hasMore || subs.length === 0) break;
     }

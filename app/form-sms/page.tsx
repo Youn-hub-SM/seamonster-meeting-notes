@@ -11,7 +11,7 @@ type Rule = { on: boolean; formId: string; formName: string; from: string; text:
 type Last = { at: string; by: string; sent: number; failed: number; skipped: number; held?: number; error?: string };
 type Pending = { id: string; at: string; phone: string | null };
 type Log = { id: number; phone_mask: string | null; status: "sending" | "sent" | "failed" | "skipped" | "unknown"; reason: string | null; sent_by: string | null; created_at: string; sent_at: string | null };
-type Data = { rule: Rule; last: Last | null; tickAt: string | null; forms: { id: string; name: string }[]; applied: boolean; configured: boolean; pending: Pending[]; log: Log[]; autoCap: number; hour: number };
+type Data = { rule: Rule; last: Last | null; tickAt: string | null; forms: { id: string; name: string }[]; hasTallyKey: boolean; tallyError: string; applied: boolean; configured: boolean; pending: Pending[]; log: Log[]; autoCap: number; hour: number };
 
 const STATUS: Record<Log["status"], { label: string; bg: string; fg: string }> = {
   sent: { label: "보냄", bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
@@ -104,6 +104,8 @@ export default function FormSmsPage() {
       <div className="b2b-page-head"><h1 className="b2b-page-title">신청자 문자</h1></div>
       {!data.applied && <div className="b2b-error">migration 167 이 적용되지 않아 발송할 수 없습니다.</div>}
       {!data.configured && <div className="b2b-error">솔라피 키(SOLAPI_API_KEY·SOLAPI_API_SECRET)가 설정되지 않았습니다.</div>}
+      {!data.hasTallyKey && <div className="b2b-error">Tally API 키가 없어 신청을 가져올 수 없습니다. 관리자 › 설정 › 연결의 Tally 에 API 키를 저장하세요.</div>}
+      {data.tallyError && <div className="b2b-error">{data.tallyError}</div>}
       {tickStale && <div className="sm-warn">예약 신호가 오지 않습니다. {hh}:00 자동 발송이 돌지 않으니 migration 167 의 예약 설정을 확인하세요.</div>}
       {data.last?.error && <div className="b2b-error">{dateTime(data.last.at)} {data.last.error}</div>}
       {error && <div className="b2b-error">{error}</div>}

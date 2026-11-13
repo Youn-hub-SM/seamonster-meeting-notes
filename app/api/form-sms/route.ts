@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { isSolapiConfigured, SolapiRejected } from "@/app/lib/solapi";
-import { FORM_SMS_TABLE, AUTO_CAP, SEND_HOUR_KST, FormSmsError, getRule, getLast, getTickAt, saveRule, loadPending, runFormSms, sendTest, maskPhone, isMissingFormSms } from "@/app/lib/form-sms";
+import { FORM_SMS_TABLE, AUTO_CAP, SEND_HOUR_KST, FormSmsError, getRule, getLast, getTickAt, saveRule, loadPending, syncTally, runFormSms, sendTest, maskPhone, isMissingFormSms } from "@/app/lib/form-sms";
+import { getTallyApiKey, listTallyForms } from "@/app/lib/voc-tally";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // 신청자 문자 — 탈리 폼 신청자에게 매일 13시에 문자(app/lib/form-sms.ts).
-//  GET                            → 설정 + 대기 중인 신청(번호 가림) + 최근 발송 기록 + 마지막 실행·예약 신호 시각 + 폼 선택지
+//  GET                            → 설정 + 대기 중인 신청(번호 가림) + 최근 발송 기록 + 마지막 실행·예약 신호 시각 + 폼 선택지(탈리 API)
+//                                    켜져 있으면 먼저 탈리에서 새 신청을 가져온다 — 대기 목록이 지금 기준이 되게
 //  POST { action: "save", rule }  → 설정 저장(켜는 순간부터 들어온 신청이 대상)
 //  POST { action: "test", to, from, text } → 적어 넣은 번호로 시험 발송(기록 표에는 남기지 않는다)
 //  POST { action: "send" }        → 대기 중인 신청자에게 지금 보내기
@@ -26,9 +28,13 @@ export async function GET(req: NextRequest) {
     if (!(await loginName(req))) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
     const sb = supabaseAdmin();
     const [rule, last, tickAt] = await Promise.all([getRule(), getLast(), getTickAt()]);
-    // 폼 선택지 — 응답이 한 번이라도 들어온 탈리 폼(최근 것부터)
-    const { data: fr } = await sb.from("survey_responses").select("form_id, form_name").not("form_id", "is", null).order("created_at", { ascending: false }).limit(1000);
-    const forms = [...new Map(((fr ?? []) as { form_id: string; form_name: string | null }[]).map((r) => [r.form_id, { id: r.form_id, name: r.form_name || r.form_id }])).values()];
+    // 폼 선택지 — 탈리 API 키로 보이는 폼 전부(관리자 › 설정 › 연결 › Tally 의 키). 신청은 같은 키로 가져온다.
+    const apiKey = await getTallyApiKey();
+    let forms: { id: string; name: string }[] = [], tallyError = "";
+    if (apiKey) {
+      try { forms = await listTallyForms(apiKey); } catch (e) { tallyError = e instanceof Error ? e.message : "탈리 폼 목록을 불러오지 못했습니다"; }
+      if (rule.on && !tallyError) { try { await syncTally(sb, rule); } catch (e) { tallyError = `탈리에서 신청을 가져오지 못했습니다 — ${e instanceof Error ? e.message : "오류"}`; } }
+    }
 
     let applied = true, pending: { id: string; at: string; phone: string | null }[] = [], log: unknown[] = [];
     try {
@@ -43,7 +49,7 @@ export async function GET(req: NextRequest) {
       if (!isMissingFormSms(e as { message?: string })) throw e;
       applied = false; // migration 167 미적용
     }
-    return NextResponse.json({ ok: true, rule, last, tickAt, forms, applied, configured: isSolapiConfigured(), pending, log, autoCap: AUTO_CAP, hour: SEND_HOUR_KST });
+    return NextResponse.json({ ok: true, rule, last, tickAt, forms, hasTallyKey: !!apiKey, tallyError, applied, configured: isSolapiConfigured(), pending, log, autoCap: AUTO_CAP, hour: SEND_HOUR_KST });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "신청자 문자 설정을 불러오지 못했습니다") }, { status: 500 });
   }

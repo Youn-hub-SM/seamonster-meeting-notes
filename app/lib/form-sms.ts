@@ -1,6 +1,9 @@
 // 신청자 문자 — 탈리 폼 신청자에게 매일 13시에 문자를 보낸다(2026-11-14 대표 지시). 서버 전용.
-//  옛 흐름: 탈리 → 구글시트 앱스크립트 → 재피어 → 솔라피.  새 흐름: 탈리 → /api/voc/tally(이미 있음, survey_responses) → 여기 → 솔라피.
-//  "신청 직후에 바로 보내지 않기 위함"(대표) — 그래서 신청이 들어와도 아무것도 안 하고, 하루 한 번 13시에 모아서 보낸다.
+//  옛 흐름: 탈리 → 구글시트 앱스크립트 → 재피어 → 솔라피.  새 흐름: 탈리 API → survey_responses → 여기 → 솔라피.
+//  "신청 직후에 바로 보내지 않기 위함"(대표) — 그래서 하루 한 번 13시에 그동안의 신청을 모아서 보낸다.
+//  ■ 신청은 탈리 API 로 '가져온다'(syncTally) — 설문응답 가져오기와 같은 API 키(관리자 › 설정 › 연결 › Tally).
+//    웹훅(/api/voc/tally)은 쓰지 않는다: 서명 값을 탈리 폼마다 맞춰 넣어야 하는데 그 값을 화면에서 볼 수 없어 401 이 났다(11-14 대표 화면).
+//    웹훅으로 들어온 응답이 있어도 같은 표(survey_responses)라 그대로 대상이 된다(제출 ID 로 중복 방지).
 //
 //  ■ 대기 = survey_responses 가운데 ① 설정한 폼 ② 설정을 켠 시각(since) 뒤에 들어옴 ③ form_sms_sends(167)에 줄이 없음.
 //    ② 가 안전장치다 — 켜기 전에 쌓인 옛 응답이나, 나중에 '가져오기'로 한꺼번에 들어온 옛 응답(제출 시각이 옛날)에는 보내지 않는다.
@@ -12,12 +15,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getKv, setKv } from "./b2b-settings";
 import { isSolapiConfigured, sendSolapiSms, SolapiRejected } from "./solapi";
+import { getTallyApiKey, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "./voc-tally";
 
 export const FORM_SMS_TABLE = "form_sms_sends";
 export const SEND_HOUR_KST = 13;          // 예약 신호는 migration 167 의 pg_cron(04:00 UTC)이 준다 — 시각을 바꾸려면 그 일정도 바꾼다
 export const AUTO_CAP = 300;              // 13시 자동 발송의 상한 — 대기가 이보다 많으면 설정 실수로 보고 멈춘다([지금 보내기]로만)
 const BATCH_MAX = 1000;                   // 한 번에 다루는 신청 수
-const RULE_KV = "form_sms_rule", LAST_KV = "form_sms_last", TICK_KV = "form_sms_tick";
+const RULE_KV = "form_sms_rule", LAST_KV = "form_sms_last", TICK_KV = "form_sms_tick", CURSOR_KV = "form_sms_cursor";
+const SYNC_PAGES = 20;                    // 한 번에 가져오는 탈리 제출 = 100건 × 20쪽
 
 export type FormSmsRule = { on: boolean; formId: string; formName: string; from: string; text: string; since: string | null; updatedBy?: string; updatedAt?: string };
 export const EMPTY_RULE: FormSmsRule = { on: false, formId: "", formName: "", from: "", text: "", since: null };
@@ -79,6 +84,42 @@ export async function saveRule(input: unknown, who: string): Promise<FormSmsRule
   return next;
 }
 
+// 탈리에서 새 신청 가져오기 — 켠 시각(since) 뒤의 제출만. 이미 있는 제출(submission_id)은 건너뛴다.
+//  다음에는 마지막으로 본 제출 시각부터 읽는다(form_sms_cursor — 폼·켠 시각이 바뀌면 처음부터).
+//  API 키가 없으면 아무것도 하지 않는다(null). 탈리 호출이 실패하면 던진다 — 부르는 쪽이 발송을 멈춘다.
+export async function syncTally(sb: SupabaseClient, rule: FormSmsRule): Promise<{ scanned: number; added: number } | null> {
+  if (!rule.formId || !rule.since) return null;
+  const apiKey = await getTallyApiKey();
+  if (!apiKey) return null;
+  const cur = parse<{ formId?: string; since?: string; at?: string }>(await getKv(CURSOR_KV), {});
+  // 이어 읽는 자리 = 마지막으로 본 제출 시각에서 1분 앞(경계에 걸린 제출을 놓치지 않게 — 겹친 것은 제출 ID 로 걸러진다)
+  const sinceMs = Date.parse(rule.since), curMs = cur.formId === rule.formId && cur.since === rule.since && cur.at ? Date.parse(cur.at) - 60_000 : NaN;
+  const start = curMs > sinceMs ? new Date(curMs).toISOString() : rule.since;
+  const qmap = new Map<string, TallyQ>();
+  const subs: TallySub[] = [];
+  let maxAt = cur.formId === rule.formId && cur.since === rule.since && cur.at ? cur.at : rule.since;
+  for (let page = 1; page <= SYNC_PAGES; page++) {
+    const json = await tallyFetch(`/forms/${encodeURIComponent(rule.formId)}/submissions?filter=completed&limit=100&page=${page}&startDate=${encodeURIComponent(start)}`, apiKey);
+    for (const q of (json.questions || []) as TallyQ[]) if (q.id) qmap.set(q.id, q);
+    const list = (json.submissions || []) as TallySub[];
+    for (const s of list) { if (!s?.id) continue; subs.push(s); if (s.submittedAt && Date.parse(s.submittedAt) > Date.parse(maxAt)) maxAt = s.submittedAt; }
+    if (!json.hasMore || list.length === 0) break;
+  }
+  const have = new Set<string>();
+  for (let i = 0; i < subs.length; i += 100) {
+    const { data, error } = await sb.from("survey_responses").select("submission_id").in("submission_id", subs.slice(i, i + 100).map((s) => s.id));
+    if (error) throw error;
+    for (const r of (data ?? []) as { submission_id: string }[]) have.add(r.submission_id);
+  }
+  const rows = subs.filter((s) => !have.has(s.id)).map((s) => ({ ...mapTallySubmission(s, qmap, rule.formId), form_name: rule.formName || null }));
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await sb.from("survey_responses").upsert(rows.slice(i, i + 200), { onConflict: "submission_id", ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  if (maxAt !== cur.at || cur.formId !== rule.formId || cur.since !== rule.since) await setKv(CURSOR_KV, JSON.stringify({ formId: rule.formId, since: rule.since, at: maxAt })).catch(() => {});
+  return { scanned: subs.length, added: rows.length };
+}
+
 export type PendingRow = { id: string; at: string; phone: string | null };
 type RespRow = { id: string; created_at: string; submitted_at: string | null; answers: unknown };
 // 대기 중인 신청(오래된 것부터). 전화번호는 서버 안에서만 쓴다 — 화면에는 가려서 내보낸다.
@@ -87,8 +128,9 @@ export async function loadPending(sb: SupabaseClient, rule: FormSmsRule): Promis
   const { data, error } = await sb.from("survey_responses").select("id, created_at, submitted_at, answers")
     .eq("form_id", rule.formId).gte("created_at", rule.since).order("created_at", { ascending: true }).limit(BATCH_MAX);
   if (error) throw error;
-  // 제출 시각이 켠 시각보다 앞선 응답 = 나중에 한꺼번에 가져온 옛 응답 → 대상 아님
-  const rows = ((data ?? []) as RespRow[]).filter((r) => !r.submitted_at || r.submitted_at >= rule.since!);
+  // 제출 시각이 켠 시각보다 앞선 응답 = 나중에 한꺼번에 가져온 옛 응답 → 대상 아님(시각 표기가 달라 숫자로 비교한다)
+  const sinceMs = Date.parse(rule.since);
+  const rows = ((data ?? []) as RespRow[]).filter((r) => !r.submitted_at || Date.parse(r.submitted_at) >= sinceMs);
   const done = new Set<string>();
   for (let i = 0; i < rows.length; i += 200) {
     const { data: d, error: e } = await sb.from(FORM_SMS_TABLE).select("response_id").in("response_id", rows.slice(i, i + 200).map((r) => r.id));
@@ -104,6 +146,9 @@ export async function runFormSms(sb: SupabaseClient, by: string, auto: boolean):
   const rule = await getRule();
   if (!rule.on) return { ok: true, sent: 0, failed: 0, skipped: 0, note: "꺼져 있습니다" };
   if (!isSolapiConfigured()) return finish({ ok: false, sent: 0, failed: 0, skipped: 0, error: "솔라피 키(SOLAPI_API_KEY·SOLAPI_API_SECRET)가 없습니다." }, by);
+  // 탈리에서 새 신청을 먼저 가져온다. 못 가져오면 보내지 않는다(일부만 보내고 끝난 것처럼 보이지 않게 — 다음 실행이 이어서 가져온다)
+  try { await syncTally(sb, rule); }
+  catch (e) { return finish({ ok: false, sent: 0, failed: 0, skipped: 0, error: `탈리에서 신청을 가져오지 못했습니다 — ${e instanceof Error ? e.message : "오류"}` }, by); }
   const pending = await loadPending(sb, rule);
   if (!pending.length) return finish({ ok: true, sent: 0, failed: 0, skipped: 0 }, by);
   if (auto && pending.length > AUTO_CAP) return finish({ ok: false, sent: 0, failed: 0, skipped: 0, held: pending.length, error: `대기 ${pending.length}명이 자동 발송 상한(${AUTO_CAP}명)을 넘어 보내지 않았습니다.` }, by);
