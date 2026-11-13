@@ -74,14 +74,14 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("오디언스");
     ws.columns = [
-      { header: "이름", key: "name", width: 14 }, { header: "전화번호", key: "phone", width: 16 }, { header: "정기배송 상태", key: "states", width: 18 }, { header: "일시정지 구분", key: "pause_kind", width: 14 },
+      { header: "이름", key: "name", width: 14 }, { header: "전화번호", key: "phone", width: 16 }, { header: "사람 기준 상태", key: "person", width: 14 }, { header: "품목 상태", key: "states", width: 18 }, { header: "일시정지 구분", key: "pause_kind", width: 14 },
       { header: "회차", key: "round", width: 8 }, { header: "다음 결제 예정일", key: "next_pay", width: 16 }, { header: "마지막 결제일", key: "last_paid", width: 14 }, { header: "해지일", key: "terminated", width: 12 },
       { header: "상품명", key: "items", width: 40 }, { header: "상품코드", key: "codes", width: 24 }, { header: "신청번호", key: "sub_ids", width: 26 },
     ];
     ws.getRow(1).font = { bold: true };
     ws.getColumn("phone").numFmt = "@"; // 글자로 — 맨 앞 0 이 사라지지 않게
     for (const { row: r, contact: c } of list)
-      ws.addRow({ name: c.name, phone: c.phone, states: r.states, pause_kind: r.pause_kind, round: r.round ?? "", next_pay: r.next_pay ?? "", last_paid: r.last_paid ?? "", terminated: r.terminated ?? "", items: r.items, codes: r.codes, sub_ids: r.sub_ids });
+      ws.addRow({ name: c.name, phone: c.phone, person: r.person, states: r.states, pause_kind: r.pause_kind, round: r.round ?? "", next_pay: r.next_pay ?? "", last_paid: r.last_paid ?? "", terminated: r.terminated ?? "", items: r.items, codes: r.codes, sub_ids: r.sub_ids });
     const info = wb.addWorksheet("추출 정보");
     info.columns = [{ width: 20 }, { width: 90 }];
     info.addRows([
@@ -89,10 +89,11 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
       ["제외", `번호를 못 찾은 신청 ${found.unlinked.toLocaleString("ko-KR")}건 · 안심번호(050)·번호 없는 고객 ${excluded.toLocaleString("ko-KR")}명`],
       [], ["적용한 조건", ""], ...subLines(cond),
       [], ["칸 설명", ""],
-      ["정기배송 상태", "전날 밤 카페24에서 가져온 값. 그 고객의 모든 신청·품목 상태를 적는다(품목마다 달라 여러 개일 수 있다)"],
-      ["일시정지 구분", "전체 일시정지 = 일시정지한 품목이 있고 이용 중인 품목이 하나도 없음(지금 받는 정기배송이 없다) / 부분 일시정지 = 일시정지한 품목과 이용 중인 품목이 함께 있음"],
+      ["사람 기준 상태", "그 고객의 모든 신청·품목을 통틀어 — 이용 중인 품목이 하나라도 있으면 이용중, 이용 중인 품목은 없고 일시정지한 품목이 있으면 일시정지, 전부 해지면 해지. 전날 밤 카페24에서 가져온 값"],
+      ["품목 상태", "그 고객이 가진 품목들의 상태(품목마다 달라 여러 개일 수 있다)"],
+      ["일시정지 구분", "전체 일시정지 = 일시정지한 품목이 있고 이용 중인 품목이 하나도 없음 / 부분 일시정지 = 일시정지한 품목과 이용 중인 품목이 함께 있음"],
       ["회차·결제 예정일", "조건에 맞은 신청 기준. 신청이 여러 개면 회차는 큰 값, 결제 예정일은 빠른 날"],
-      ["상품명·상품코드", "조건(상태·상품)에 맞은 품목의 것"],
+      ["상품명·상품코드", "조건(상태·상품)에 맞은 품목의 것. 사람 기준이면 그 사람의 상태와 같은 상태인 품목"],
       ["마지막 결제일", "결제가 완료된 마지막 날. 일시정지한 날은 카페24가 주지 않아, 쉰 지 얼마나 됐는지는 이 날짜로 본다"],
       ["번호를 못 찾은 신청", "결제 주문이 매출 원장에 없어 고객 전화번호와 잇지 못한 신청"],
     ]);
@@ -111,7 +112,7 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
     });
   }
 
-  const preview = list.slice(0, 10).map(({ row: r, contact: c }) => ({ name: maskName(c.name), phone: maskPhone(c.phone), states: r.states, pause_kind: r.pause_kind, round: r.round, next_pay: r.next_pay, last_paid: r.last_paid, terminated: r.terminated, items: r.items }));
+  const preview = list.slice(0, 10).map(({ row: r, contact: c }) => ({ name: maskName(c.name), phone: maskPhone(c.phone), person: r.person, states: r.states, round: r.round, next_pay: r.next_pay, last_paid: r.last_paid, terminated: r.terminated, items: r.items }));
   await logAudience("search", summary, list.length, name, cond as unknown as Record<string, unknown>);
   return NextResponse.json({ ok: true, count: list.length, excluded, unlinked: found.unlinked, subs: found.subs, capped: found.capped, max: MAX_AUDIENCE, summary, preview });
 }
