@@ -25,7 +25,7 @@
 
 .b2b-table.aud-table { min-width: 900px; }
 .aud-items { white-space: normal; min-width: 220px; max-width: 360px; line-height: var(--sm-lh-body); }
-.b2b-table.aud-history { min-width: 720px; }
+.b2b-table.aud-history { min-width: 820px; }
 .aud-cond-cell { white-space: normal; min-width: 280px; line-height: var(--sm-lh-body); }
 
 @media (max-width: 640px) {

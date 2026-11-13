@@ -23,7 +23,7 @@ const PRODUCT_BY = [{ key: "name", label: "상품명" }, { key: "code", label: "
 type ProductBy = (typeof PRODUCT_BY)[number]["key"];
 type Preview = { name: string; phone: string; orders: number; amount: number; first_date: string; last_date: string; items: string; channels: string };
 type Result = { count: number; excluded: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
-type History = { id: string | number; action: "검색" | "추출"; cond: string; count: number | null; actor: string | null; created_at: string };
+type History = { id: string | number; action: "검색" | "추출"; cond: string; count: number | null; actor: string | null; created_at: string; again?: boolean; saved?: Record<string, unknown> | null };
 
 const digits = (s: string) => s.replace(/[^0-9]/g, "");
 
@@ -100,14 +100,13 @@ export default function AudiencePage() {
     finally { setBusy(""); }
   };
 
-  const exportXlsx = async () => {
-    if (!result) return;
-    if (!(await confirm({ title: "엑셀 내려받기", body: `${qty(result.count)}명의 이름과 전화번호가 든 엑셀을 내려받습니다. 추출 기록에 남습니다.`, action: "엑셀 내려받기", danger: false }))) return;
+  // 엑셀 받기 — 방금 찾은 조건(payload) 또는 기록의 조건(fromLog)으로. 어느 쪽이든 서버가 추출 기록을 새로 남긴다.
+  const download = async (payload: unknown, fromLog?: string | number) => {
     setBusy("export");
     try {
-      const res = await fetch("/api/audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", cond: toPayload(result.cond) }) });
+      const res = await fetch("/api/audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", cond: payload, fromLog }) });
       if (!res.ok || !(res.headers.get("content-type") || "").includes("spreadsheet")) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "엑셀을 만들지 못했습니다."); }
-      const n = res.headers.get("X-Audience-Count") || String(result.count);
+      const n = res.headers.get("X-Audience-Count") || "0";
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -118,6 +117,18 @@ export default function AudiencePage() {
       load();
     } catch (e) { toast.error(e instanceof Error ? e.message : "엑셀을 만들지 못했습니다."); }
     finally { setBusy(""); }
+  };
+  const exportXlsx = async () => {
+    if (!result) return;
+    if (!(await confirm({ title: "엑셀 내려받기", body: `${qty(result.count)}명의 이름과 전화번호가 든 엑셀을 내려받습니다. 추출 기록에 남습니다.`, action: "엑셀 내려받기", danger: false }))) return;
+    await download(toPayload(result.cond));
+  };
+  // 기록의 조건으로 다시 추출 — 명단은 저장하지 않으므로 같은 조건을 지금 데이터로 다시 조회한다(인원이 그때와 다를 수 있다)
+  const reExport = async (h: History) => {
+    if (!h.saved) return;
+    const then = h.count == null ? "" : ` 그때는 ${qty(h.count)}명이었고 지금은 달라질 수 있습니다.`;
+    if (!(await confirm({ title: "다시 추출", body: `같은 조건으로 지금 데이터에서 다시 뽑아 엑셀로 내려받습니다.${then} 추출 기록에 새로 남습니다.`, action: "다시 추출", danger: false }))) return;
+    await download(h.saved, h.id);
   };
 
   return (
@@ -246,15 +257,16 @@ export default function AudiencePage() {
           : (
             <div className="b2b-table-wrap">
               <table className="b2b-table aud-history">
-                <thead><tr><th>시각</th><th>누가</th><th>한 일</th><th className="num">인원</th><th>조건</th></tr></thead>
+                <thead><tr><th>시각</th><th>누가</th><th>한 일</th><th className="num">인원</th><th>조건</th><th></th></tr></thead>
                 <tbody>
                   {history.map((h) => (
                     <tr key={h.id}>
                       <td className="sm-nowrap">{dateTime(h.created_at)}</td>
                       <td className="sm-nowrap">{h.actor || "-"}</td>
-                      <td><span className="b2b-status-pill" style={h.action === "추출" ? { background: "var(--sm-black)", color: "var(--sm-white)" } : { background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{h.action}</span></td>
+                      <td><span className="b2b-status-pill" style={h.action === "추출" ? { background: "var(--sm-black)", color: "var(--sm-white)" } : { background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{h.again ? "다시 추출" : h.action}</span></td>
                       <td className="num">{h.count == null ? "-" : `${qty(h.count)}명`}</td>
                       <td className="aud-cond-cell">{h.cond}</td>
+                      <td className="actions sm-nowrap">{h.saved && <button type="button" className="b2b-link-btn" onClick={() => reExport(h)} disabled={!!busy}>다시 추출</button>}</td>
                     </tr>
                   ))}
                 </tbody>

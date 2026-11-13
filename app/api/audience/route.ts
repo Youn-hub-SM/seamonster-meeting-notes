@@ -15,6 +15,8 @@ export const maxDuration = 60;
 //  POST { action: "search", cond } → 인원·제외 인원·미리보기 10명(이름·번호 가림). 기록에 남는다.
 //  POST { action: "export", cond } → 엑셀 파일(이름·전화번호·주문 횟수·누적 금액·첫/마지막 구매일 + 조건에 맞은 상품명·주문 상품명·채널,
 //                                    '추출 정보' 시트에 적용한 조건을 항목별로). 기록에 남는다.
+//  POST { action: "export", cond, fromLog } → 기록의 조건으로 다시 추출. 같은 조건을 '지금 데이터'로 다시 조회하므로 인원은 그때와 다를 수 있다
+//                                    (추출한 명단은 어디에도 저장하지 않는다). 다시 뽑은 것도 새 기록으로 남는다.
 //  로그인한 내부 직원 누구나 쓸 수 있다(공장 계정 제외) — 대신 누가 언제 어떤 조건으로 몇 명을 봤는지 전부 화면에 보인다.
 
 async function loginName(req: NextRequest): Promise<string | null> {
@@ -39,8 +41,10 @@ export async function GET(req: NextRequest) {
       sb.from("activity_log").select("id, event_type, summary, meta, actor, created_at").in("event_type", HISTORY_TYPES).order("created_at", { ascending: false }).limit(100),
     ]);
     if (hist.error) throw hist.error;
-    const history = ((hist.data ?? []) as { id: string | number; event_type: string; summary: string; meta: { count?: number; summary?: string } | null; actor: string | null; created_at: string }[])
-      .map((r) => ({ id: r.id, action: r.event_type === "sales.audience_export" ? "추출" : "검색", cond: r.meta?.summary || r.summary, count: r.meta?.count ?? null, actor: r.actor, created_at: r.created_at }));
+    const history = ((hist.data ?? []) as { id: string | number; event_type: string; summary: string; meta: { count?: number; summary?: string; cond?: unknown; from_log?: string } | null; actor: string | null; created_at: string }[])
+      .map((r) => ({ id: r.id, action: r.event_type === "sales.audience_export" ? "추출" : "검색", cond: r.meta?.summary || r.summary, count: r.meta?.count ?? null, actor: r.actor, created_at: r.created_at,
+        again: !!r.meta?.from_log,            // 예전 기록의 조건으로 다시 추출한 줄
+        saved: r.meta?.cond ?? null }));     // 그때의 조건(전화번호·이름 없음) — [다시 추출]이 이 조건을 그대로 보낸다
     return NextResponse.json({ ok: true, channels, history });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "오디언스 기록을 불러오지 못했습니다") }, { status: 500 });
@@ -51,7 +55,8 @@ export async function POST(req: NextRequest) {
   try {
     const name = await loginName(req);
     if (!name) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
-    const b = (await req.json().catch(() => ({}))) as { action?: string; cond?: unknown };
+    const b = (await req.json().catch(() => ({}))) as { action?: string; cond?: unknown; fromLog?: string | number };
+    const fromLog = b.fromLog != null && /^[A-Za-z0-9-]{1,64}$/.test(String(b.fromLog)) ? String(b.fromLog) : null;
     const cond = normalizeCond(b.cond);
     if (isEmptyCond(cond)) return NextResponse.json({ ok: false, error: "조건을 하나 이상 입력하세요." }, { status: 400 });
     if (cond.from && cond.to && cond.from > cond.to) return NextResponse.json({ ok: false, error: "구매 기간의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
@@ -95,7 +100,7 @@ export async function POST(req: NextRequest) {
       info.getColumn(1).font = { bold: true };
       info.getColumn(2).alignment = { wrapText: true, vertical: "top" };
       const buf = await wb.xlsx.writeBuffer();
-      await logAudience("export", summary, n, name, cond as Record<string, unknown>);
+      await logAudience("export", summary, n, name, cond as Record<string, unknown>, fromLog);
       const file = `오디언스_${kstStamp().slice(0, 10).replace(/-/g, "")}_${n}명.xlsx`;
       return new NextResponse(buf as ArrayBuffer, {
         headers: {
