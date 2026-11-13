@@ -1,4 +1,6 @@
 /* 오디언스 추출(/audience) 전용 — 접두사 .aud-*. 색·간격·글자는 globals.css :root 토큰만. */
+/* 대상 고르기(구매 고객 / 정기배송 고객) */
+.aud-mode { margin-bottom: var(--sm-space-4); }
 .aud-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-4) var(--sm-space-5); }
 .aud-wide { grid-column: 1 / -1; }
 .aud-range { display: flex; align-items: center; gap: var(--sm-space-2); }

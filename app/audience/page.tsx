@@ -3,9 +3,11 @@
 // 오디언스 추출 — 조건으로 고객을 찾아 이름·전화번호를 엑셀로 내려받는다. 메시지 발송은 사람이 따로 한다.
 //  고객 전화번호가 밖으로 나가는 유일한 화면이라, 검색과 추출이 모두 아래 기록에 남고 누구에게나 보인다.
 //  [고객 찾기] = 인원과 미리보기 10명(이름·번호 가림) → [엑셀 내려받기] = 방금 찾은 조건 그대로.
+//  위 탭으로 대상을 고른다: 구매 고객(이 파일의 조건) / 정기배송 고객(SubAudience.tsx — 상태·회차·결제 예정일 등). 기록과 [다시 추출]은 둘이 함께 쓴다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
+import SubAudience from "./SubAudience";
 import { matchKoQuery } from "@/app/lib/hangul";
 import { qty, won, dateTime } from "@/app/lib/format";
 
@@ -35,6 +37,7 @@ export default function AudiencePage() {
   const [history, setHistory] = useState<History[]>([]);
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState<"" | "search" | "export">("");
+  const [mode, setMode] = useState<"buy" | "sub">("buy"); // 누구를 뽑을지 — 구매 고객(매출 주문 조건) / 정기배송 고객(정기배송 상태 조건)
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -138,6 +141,14 @@ export default function AudiencePage() {
       </div>
       {loadError && <div className="b2b-error">{loadError}</div>}
 
+      <div className="sm-tabs aud-mode" role="tablist" aria-label="뽑을 대상">
+        <button type="button" role="tab" aria-selected={mode === "buy"} className={`sm-tab ${mode === "buy" ? "is-active" : ""}`} onClick={() => setMode("buy")} disabled={!!busy}>구매 고객</button>
+        <button type="button" role="tab" aria-selected={mode === "sub"} className={`sm-tab ${mode === "sub" ? "is-active" : ""}`} onClick={() => setMode("sub")} disabled={!!busy}>정기배송 고객</button>
+      </div>
+
+      {mode === "sub" && <SubAudience download={(payload) => download(payload)} onLogged={load} exporting={busy === "export"} />}
+
+      {mode === "buy" && (<>
       <section className="b2b-form-section">
         {error && <div className="b2b-error" style={{ marginBottom: "var(--sm-space-4)" }}>{error}</div>}
         <div className="aud-form">
@@ -249,6 +260,7 @@ export default function AudiencePage() {
           )}
         </section>
       )}
+      </>)}
 
       <div className="b2b-card" style={{ marginTop: "var(--sm-space-5)" }}>
         <div className="b2b-card-head"><span className="b2b-card-title">검색·추출 기록</span></div>
