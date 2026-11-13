@@ -7,7 +7,7 @@ import { normalizeCond, isEmptyCond, condSummary, condLines, findAudience, loadC
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300; // 조회 제한 60초 + 연락처 읽기(고객 100명씩) + 엑셀 만들기 — 수만 명 추출에도 끊기지 않게
 
 // 오디언스 추출 — 조건으로 고객을 찾고(검색), 이름·전화번호가 든 엑셀을 내려받는다(추출).
 //  GET                         → 채널 선택지 + 검색·추출 기록(최근 100건)
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
       const buf = await wb.xlsx.writeBuffer();
       await logAudience("export", summary, n, name, cond as Record<string, unknown>, fromLog);
       const file = `오디언스_${kstStamp().slice(0, 10).replace(/-/g, "")}_${n}명.xlsx`;
-      return new NextResponse(buf as ArrayBuffer, {
+      return new NextResponse(Buffer.from(buf), { // 다른 엑셀 내려받기(b2b/orders/export-shipping)와 같은 방식
         headers: {
           "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           "Content-Disposition": `attachment; filename="audience.xlsx"; filename*=UTF-8''${encodeURIComponent(file)}`,

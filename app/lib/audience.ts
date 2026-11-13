@@ -29,6 +29,9 @@ const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;                       /
 const likeLit = (s: string) => lit(`%${s.replace(/[\\%_]/g, "\\$&")}%`);       // 포함 검색(와일드카드 무력화)
 const posInt = (v: unknown): number | undefined => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n > 0 ? n : undefined; };
 export const MAX_AUDIENCE = 50_000; // 한 번에 다루는 고객 수 상한
+// run_report 는 요청 행 수가 5,000 이하면 제한 시간 15초, 넘으면 60초(migration 156 본문). 주문 전체를 묶어 세는 선택지 조회가
+//  15초에 걸리지 않게 5,000 을 넘겨 요청하고 결과는 잘라 쓴다.
+const LIST_LIMIT = 6000;
 
 // 화면에서 온 값을 다듬는다 — 형식이 틀린 값은 조건에서 뺀다(조건이 조용히 넓어지지 않게 호출부가 빈 조건을 막는다).
 export function normalizeCond(raw: unknown): AudienceCond {
@@ -168,8 +171,8 @@ export async function listProducts(sb: SupabaseClient): Promise<ProductOption[]>
   const rows = await runSql<{ sku: string; name: string | null; spec: string | null; listing: string | null; orders: number }>(sb, `
     select upper(o.sku_code) as sku, max(p.name) as name, max(p.spec) as spec, max(o.product_name) as listing, count(distinct o.order_unit)::int as orders
     from sales_orders o left join products p on upper(p.sku) = upper(o.sku_code)
-    where o.sku_code <> '' group by upper(o.sku_code) order by orders desc`, 3000);
-  return rows.map((r) => ({ sku: r.sku, name: [r.name, r.spec].filter(Boolean).join(" · ") || (r.listing || r.sku), listing: r.listing || "", orders: Number(r.orders) || 0 }));
+    where o.sku_code <> '' group by upper(o.sku_code) order by orders desc`, LIST_LIMIT);
+  return rows.slice(0, 3000).map((r) => ({ sku: r.sku, name: [r.name, r.spec].filter(Boolean).join(" · ") || (r.listing || r.sku), listing: r.listing || "", orders: Number(r.orders) || 0 }));
 }
 
 // 주문 상품명 선택지 — 주문서에 적힌 상품명 그대로(채널마다 이름이 다르다). 주문 많은 순.
@@ -177,8 +180,8 @@ export type OrderNameOption = { name: string; orders: number };
 export async function listOrderNames(sb: SupabaseClient): Promise<OrderNameOption[]> {
   const rows = await runSql<{ name: string; orders: number }>(sb, `
     select o.product_name as name, count(distinct o.order_unit)::int as orders
-    from sales_orders o where o.product_name <> '' group by o.product_name order by orders desc`, 5000);
-  return rows.map((r) => ({ name: r.name, orders: Number(r.orders) || 0 }));
+    from sales_orders o where o.product_name <> '' group by o.product_name order by orders desc`, LIST_LIMIT);
+  return rows.slice(0, 5000).map((r) => ({ name: r.name, orders: Number(r.orders) || 0 }));
 }
 
 // 채널 선택지 — 주문이 있는 채널(많은 순)
