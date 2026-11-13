@@ -1,6 +1,7 @@
 "use client";
 
-// 오디언스 추출 — 정기배송 고객 조건(상태·상태 바뀐 날·회차·다음 결제 예정일·상품).
+// 오디언스 추출 — 정기배송 고객 조건(상태·상품·회차·다음 결제 예정일·마지막 결제일·해지일).
+//  상태는 품목 기준이다 — 카페24는 일시정지를 신청 전체가 아니라 품목에만 표시한다(app/lib/audience-sub.ts 머리말).
 //  정기배송 상태는 전날 밤 카페24에서 가져온 값이다. 전화번호는 결제 주문번호로 매출 주문을 찾아 잇는다 — 못 이은 신청 수를 결과에 보인다.
 //  검색·추출 기록과 엑셀 받기는 부모(page.tsx)와 같은 길을 쓴다(cond.mode = "sub").
 import { useMemo, useRef, useState } from "react";
@@ -8,13 +9,19 @@ import { useConfirm } from "@/app/components/Feedback";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { qty } from "@/app/lib/format";
 
-const STATES = [{ key: "U", label: "이용중" }, { key: "P", label: "일시정지" }, { key: "C", label: "해지" }] as const;
+// 일시정지는 전체/부분으로 나눠 고른다 — 전체 = 이용 중인 품목이 하나도 없는 고객, 부분 = 일시정지한 품목과 이용 중인 품목이 함께 있는 고객.
+const STATES = [{ key: "U", label: "이용중" }, { key: "PA", label: "전체 일시정지" }, { key: "PP", label: "부분 일시정지" }, { key: "C", label: "해지" }] as const;
 type StateKey = (typeof STATES)[number]["key"];
-type Cond = { states: StateKey[]; changedFrom: string; changedTo: string; minRound: string; maxRound: string; payFrom: string; payTo: string; products: string[] };
-const EMPTY: Cond = { states: [], changedFrom: "", changedTo: "", minRound: "", maxRound: "", payFrom: "", payTo: "", products: [] };
-const toPayload = (c: Cond) => ({ mode: "sub", ...c });
-type Preview = { name: string; phone: string; states: string; round: number | null; next_pay: string | null; changed_on: string | null; items: string };
-type Result = { count: number; excluded: number; unlinked: number; subs: number; capped: boolean; noLog: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
+type Cond = { states: StateKey[]; products: string[]; minRound: string; maxRound: string; payFrom: string; payTo: string; lastPaidFrom: string; lastPaidTo: string; termFrom: string; termTo: string };
+const EMPTY: Cond = { states: [], products: [], minRound: "", maxRound: "", payFrom: "", payTo: "", lastPaidFrom: "", lastPaidTo: "", termFrom: "", termTo: "" };
+// 서버에는 상태 U·P·C + (일시정지를 한쪽으로만 좁혔을 때) pauseKind 로 보낸다. 전체·부분을 둘 다 고르면 구분 없이 일시정지 전부.
+const toPayload = (c: Cond) => {
+  const all = c.states.includes("PA"), part = c.states.includes("PP");
+  const states = [c.states.includes("U") && "U", (all || part) && "P", c.states.includes("C") && "C"].filter(Boolean);
+  return { mode: "sub", ...c, states, pauseKind: all !== part ? (all ? "all" : "part") : undefined };
+};
+type Preview = { name: string; phone: string; states: string; pause_kind: string; round: number | null; next_pay: string | null; last_paid: string | null; terminated: string | null; items: string };
+type Result = { count: number; excluded: number; unlinked: number; subs: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
 type ProductOption = { name: string; subs: number };
 const digits = (s: string) => s.replace(/[^0-9]/g, "");
 
@@ -76,11 +83,11 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
             </div>
           </div>
           <div className="b2b-field">
-            <span className="b2b-field-label">상태 바뀐 날</span>
+            <span className="b2b-field-label">마지막 결제일</span>
             <div className="aud-range">
-              <input type="date" className="b2b-input" value={cond.changedFrom} onChange={(e) => set("changedFrom", e.target.value)} aria-label="상태 바뀐 날 시작" />
+              <input type="date" className="b2b-input" value={cond.lastPaidFrom} onChange={(e) => set("lastPaidFrom", e.target.value)} aria-label="마지막 결제일 시작" />
               <span>~</span>
-              <input type="date" className="b2b-input" value={cond.changedTo} onChange={(e) => set("changedTo", e.target.value)} aria-label="상태 바뀐 날 끝" />
+              <input type="date" className="b2b-input" value={cond.lastPaidTo} onChange={(e) => set("lastPaidTo", e.target.value)} aria-label="마지막 결제일 끝" />
             </div>
           </div>
           <div className="b2b-field">
@@ -89,6 +96,14 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
               <input type="date" className="b2b-input" value={cond.payFrom} onChange={(e) => set("payFrom", e.target.value)} aria-label="다음 결제 예정일 시작" />
               <span>~</span>
               <input type="date" className="b2b-input" value={cond.payTo} onChange={(e) => set("payTo", e.target.value)} aria-label="다음 결제 예정일 끝" />
+            </div>
+          </div>
+          <div className="b2b-field">
+            <span className="b2b-field-label">해지일</span>
+            <div className="aud-range">
+              <input type="date" className="b2b-input" value={cond.termFrom} onChange={(e) => set("termFrom", e.target.value)} aria-label="해지일 시작" />
+              <span>~</span>
+              <input type="date" className="b2b-input" value={cond.termTo} onChange={(e) => set("termTo", e.target.value)} aria-label="해지일 끝" />
             </div>
           </div>
           <div className="b2b-field">
@@ -130,18 +145,17 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
             <button type="button" className="b2b-btn-secondary aud-export" onClick={exportXlsx} disabled={busy || result.count === 0}>{exporting ? "만드는 중" : "엑셀 내려받기"}</button>
           </div>
           <div className="aud-cond">{result.summary}</div>
-          {result.noLog && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>상태 변화 기록이 없어 일시정지한 날·재개한 날은 알 수 없습니다. 해지한 날만 씁니다.</div>}
           {result.capped && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>신청이 {qty(result.max)}건을 넘어 앞에서부터 {qty(result.max)}건만 다룹니다. 조건을 좁히세요.</div>}
           {result.count === 0 ? <div className="b2b-empty">조건에 맞는 고객이 없습니다.</div> : (
             <div className="b2b-table-wrap">
               <table className="b2b-table aud-table">
-                <thead><tr><th>이름</th><th>전화번호</th><th>상태</th><th className="num">회차</th><th>다음 결제 예정일</th><th>상태 바뀐 날</th><th>상품명</th></tr></thead>
+                <thead><tr><th>이름</th><th>전화번호</th><th>상태</th><th>일시정지 구분</th><th className="num">회차</th><th>다음 결제 예정일</th><th>마지막 결제일</th><th>해지일</th><th>상품명</th></tr></thead>
                 <tbody>
                   {result.preview.map((p, i) => (
                     <tr key={i}>
-                      <td>{p.name}</td><td className="sm-nowrap">{p.phone}</td><td className="sm-nowrap">{p.states}</td>
+                      <td>{p.name}</td><td className="sm-nowrap">{p.phone}</td><td className="sm-nowrap">{p.states}</td><td className="sm-nowrap">{p.pause_kind || "-"}</td>
                       <td className="num">{p.round == null ? "-" : `${qty(p.round)}회차`}</td>
-                      <td className="sm-nowrap">{p.next_pay || "-"}</td><td className="sm-nowrap">{p.changed_on || "-"}</td>
+                      <td className="sm-nowrap">{p.next_pay || "-"}</td><td className="sm-nowrap">{p.last_paid || "-"}</td><td className="sm-nowrap">{p.terminated || "-"}</td>
                       <td className="aud-items">{p.items}</td>
                     </tr>
                   ))}

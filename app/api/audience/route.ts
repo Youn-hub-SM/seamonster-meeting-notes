@@ -18,7 +18,7 @@ export const maxDuration = 300; // 조회 제한 60초 + 연락처 읽기(고객
 //                                    '추출 정보' 시트에 적용한 조건을 항목별로). 기록에 남는다.
 //  POST { action: "export", cond, fromLog } → 기록의 조건으로 다시 추출. 같은 조건을 '지금 데이터'로 다시 조회하므로 인원은 그때와 다를 수 있다
 //                                    (추출한 명단은 어디에도 저장하지 않는다). 다시 뽑은 것도 새 기록으로 남는다.
-//  cond.mode = "sub" 이면 정기배송 고객(app/lib/audience-sub.ts) — 상태·상태 바뀐 날·회차·다음 결제 예정일·상품. 흐름과 기록은 같다.
+//  cond.mode = "sub" 이면 정기배송 고객(app/lib/audience-sub.ts) — 상태(품목 기준)·상품·회차·다음 결제 예정일·마지막 결제일·해지일. 흐름과 기록은 같다.
 //  GET ?subproducts=1          → 정기배송 상품 선택지
 //  로그인한 내부 직원 누구나 쓸 수 있다(공장 계정 제외) — 대신 누가 언제 어떤 조건으로 몇 명을 봤는지 전부 화면에 보인다.
 
@@ -59,7 +59,8 @@ export async function GET(req: NextRequest) {
 async function handleSub(action: "search" | "export", raw: unknown, name: string, fromLog: string | null): Promise<NextResponse> {
   const cond = normalizeSubCond(raw);
   if (isEmptySubCond(cond)) return NextResponse.json({ ok: false, error: "조건을 하나 이상 입력하세요." }, { status: 400 });
-  if (cond.changedFrom && cond.changedTo && cond.changedFrom > cond.changedTo) return NextResponse.json({ ok: false, error: "상태 바뀐 날의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
+  if (cond.lastPaidFrom && cond.lastPaidTo && cond.lastPaidFrom > cond.lastPaidTo) return NextResponse.json({ ok: false, error: "마지막 결제일의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
+  if (cond.termFrom && cond.termTo && cond.termFrom > cond.termTo) return NextResponse.json({ ok: false, error: "해지일의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
   if (cond.payFrom && cond.payTo && cond.payFrom > cond.payTo) return NextResponse.json({ ok: false, error: "다음 결제 예정일의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
   if (cond.minRound && cond.maxRound && cond.minRound > cond.maxRound) return NextResponse.json({ ok: false, error: "회차의 최소가 최대보다 큽니다." }, { status: 400 });
 
@@ -73,14 +74,14 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("오디언스");
     ws.columns = [
-      { header: "이름", key: "name", width: 14 }, { header: "전화번호", key: "phone", width: 16 }, { header: "정기배송 상태", key: "states", width: 14 },
-      { header: "회차", key: "round", width: 8 }, { header: "다음 결제 예정일", key: "next_pay", width: 16 }, { header: "상태 바뀐 날", key: "changed_on", width: 14 },
+      { header: "이름", key: "name", width: 14 }, { header: "전화번호", key: "phone", width: 16 }, { header: "정기배송 상태", key: "states", width: 18 }, { header: "일시정지 구분", key: "pause_kind", width: 14 },
+      { header: "회차", key: "round", width: 8 }, { header: "다음 결제 예정일", key: "next_pay", width: 16 }, { header: "마지막 결제일", key: "last_paid", width: 14 }, { header: "해지일", key: "terminated", width: 12 },
       { header: "상품명", key: "items", width: 40 }, { header: "상품코드", key: "codes", width: 24 }, { header: "신청번호", key: "sub_ids", width: 26 },
     ];
     ws.getRow(1).font = { bold: true };
     ws.getColumn("phone").numFmt = "@"; // 글자로 — 맨 앞 0 이 사라지지 않게
     for (const { row: r, contact: c } of list)
-      ws.addRow({ name: c.name, phone: c.phone, states: r.states, round: r.round ?? "", next_pay: r.next_pay ?? "", changed_on: r.changed_on ?? "", items: r.items, codes: r.codes, sub_ids: r.sub_ids });
+      ws.addRow({ name: c.name, phone: c.phone, states: r.states, pause_kind: r.pause_kind, round: r.round ?? "", next_pay: r.next_pay ?? "", last_paid: r.last_paid ?? "", terminated: r.terminated ?? "", items: r.items, codes: r.codes, sub_ids: r.sub_ids });
     const info = wb.addWorksheet("추출 정보");
     info.columns = [{ width: 20 }, { width: 90 }];
     info.addRows([
@@ -88,8 +89,11 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
       ["제외", `번호를 못 찾은 신청 ${found.unlinked.toLocaleString("ko-KR")}건 · 안심번호(050)·번호 없는 고객 ${excluded.toLocaleString("ko-KR")}명`],
       [], ["적용한 조건", ""], ...subLines(cond),
       [], ["칸 설명", ""],
-      ["정기배송 상태·회차·상품", "전날 밤 카페24에서 가져온 값. 한 고객이 신청을 여러 개 가지면 한 줄로 묶는다(회차는 큰 값, 결제 예정일은 빠른 날)"],
-      ["상태 바뀐 날", "일시정지한 날·재개한 날은 2026-10-08 이후에 바뀐 것만 안다(그 전은 빈칸). 해지한 날은 전부 안다"],
+      ["정기배송 상태", "전날 밤 카페24에서 가져온 값. 그 고객의 모든 신청·품목 상태를 적는다(품목마다 달라 여러 개일 수 있다)"],
+      ["일시정지 구분", "전체 일시정지 = 일시정지한 품목이 있고 이용 중인 품목이 하나도 없음(지금 받는 정기배송이 없다) / 부분 일시정지 = 일시정지한 품목과 이용 중인 품목이 함께 있음"],
+      ["회차·결제 예정일", "조건에 맞은 신청 기준. 신청이 여러 개면 회차는 큰 값, 결제 예정일은 빠른 날"],
+      ["상품명·상품코드", "조건(상태·상품)에 맞은 품목의 것"],
+      ["마지막 결제일", "결제가 완료된 마지막 날. 일시정지한 날은 카페24가 주지 않아, 쉰 지 얼마나 됐는지는 이 날짜로 본다"],
       ["번호를 못 찾은 신청", "결제 주문이 매출 원장에 없어 고객 전화번호와 잇지 못한 신청"],
     ]);
     info.getColumn(1).font = { bold: true };
@@ -107,9 +111,9 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
     });
   }
 
-  const preview = list.slice(0, 10).map(({ row: r, contact: c }) => ({ name: maskName(c.name), phone: maskPhone(c.phone), states: r.states, round: r.round, next_pay: r.next_pay, changed_on: r.changed_on, items: r.items }));
+  const preview = list.slice(0, 10).map(({ row: r, contact: c }) => ({ name: maskName(c.name), phone: maskPhone(c.phone), states: r.states, pause_kind: r.pause_kind, round: r.round, next_pay: r.next_pay, last_paid: r.last_paid, terminated: r.terminated, items: r.items }));
   await logAudience("search", summary, list.length, name, cond as unknown as Record<string, unknown>);
-  return NextResponse.json({ ok: true, count: list.length, excluded, unlinked: found.unlinked, subs: found.subs, capped: found.capped, noLog: found.noLog, max: MAX_AUDIENCE, summary, preview });
+  return NextResponse.json({ ok: true, count: list.length, excluded, unlinked: found.unlinked, subs: found.subs, capped: found.capped, max: MAX_AUDIENCE, summary, preview });
 }
 
 export async function POST(req: NextRequest) {
