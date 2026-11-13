@@ -14,10 +14,11 @@ export type GuideEntry = {
 };
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
+import { isHeldHref } from "./hold";
 
 export const GUIDE_UPDATED = "2026-11-13";
 
-export const GUIDE: GuideCategory[] = [
+const GUIDE_ALL: GuideCategory[] = [
   {
     "category": "세일즈",
     "tools": [
@@ -2761,3 +2762,7 @@ export const GUIDE: GuideCategory[] = [
     ]
   }
 ];
+// 운영에서 보류 중인 화면(hold.ts)의 가이드는 뺀다 — /guide 화면·전역 검색이 모두 이 GUIDE 를 본다.
+export const GUIDE: GuideCategory[] = GUIDE_ALL
+  .map((c) => ({ ...c, tools: c.tools.map((t) => ({ ...t, entries: t.entries.filter((e) => !isHeldHref(e.href)) })).filter((t) => t.entries.length > 0) }))
+  .filter((c) => c.tools.length > 0);

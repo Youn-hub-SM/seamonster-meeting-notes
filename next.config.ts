@@ -4,15 +4,29 @@ import type { NextConfig } from "next";
 const factoryHosts = (process.env.FACTORY_HOST || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 const factoryHostRe = factoryHosts.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
 
+// AI 에이전트 운영 보류(2026-11-13 대표: "ai 에이전트만 보류하고 모두 배포해줘").
+//  dev → main 은 통째로 올라가므로, 운영 빌드(VERCEL_ENV=production)에서만 AI 에이전트를 가린다. 베타(dev)·로컬은 그대로.
+//   · 주소: /agents 와 /api/agents/* 를 없는 주소로 보내 404 (화면·API·예약 신호 모두)
+//   · 화면: NEXT_PUBLIC_HOLD_AGENTS 로 메뉴·가이드·업데이트 내역·AI 설정 항목을 뺀다(app/lib/hold.ts)
+//  보류를 풀 때: 아래 HOLD_AGENTS 를 false 로 바꾸고 배포하면 끝(다른 곳은 이 값만 본다).
+const HOLD_AGENTS = process.env.VERCEL_ENV === "production";
+const HELD = "/__held-in-production"; // 없는 주소 — 404
+
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_HOLD_AGENTS: HOLD_AGENTS ? "1" : "" },
   // 파도소리 주소에서 /favicon.ico 를 직접 요청하면(북마크·일부 브라우저) 씨몬스터 파비콘 대신 파도소리 아이콘.
   //  정적 파일이라 미들웨어(matcher 제외)로는 못 막는다 — 파일보다 먼저 도는 beforeFiles 리라이트로.
   //  대표 규칙: 파도소리 주소에서는 씨몬스터 업무도우미가 전혀 보이면 안 된다.
   async rewrites() {
     return {
-      beforeFiles: factoryHostRe
-        ? [{ source: "/favicon.ico", has: [{ type: "host" as const, value: `^(${factoryHostRe})$` }], destination: "/factory/icon.png" }]
-        : [],
+      beforeFiles: [
+        ...(factoryHostRe
+          ? [{ source: "/favicon.ico", has: [{ type: "host" as const, value: `^(${factoryHostRe})$` }], destination: "/factory/icon.png" }]
+          : []),
+        ...(HOLD_AGENTS
+          ? [{ source: "/agents", destination: HELD }, { source: "/agents/:path*", destination: HELD }, { source: "/api/agents/:path*", destination: HELD }]
+          : []),
+      ],
       afterFiles: [],
       fallback: [],
     };

@@ -1,5 +1,7 @@
 // 내부도구 업데이트 노트 — 최신이 위로.
 // 새 기능을 배포할 때마다 맨 위에 한 항목씩 추가한다. (직원이 활용하기 쉽게 '무엇을/왜/어떻게' 중심)
+import { isHeldHref } from "./hold";
+
 export type ChangeTag = "신규" | "개선" | "수정";
 
 export type ChangeEntry = {
@@ -32,7 +34,7 @@ export function changeMenu(tool: string): string {
 // 필터 칩 정렬 순서(nav 순서 기준). 목록에 없는 메뉴는 뒤로.
 export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "생산 및 재고", "UTM 만들기", "광고", "CS 코치", "VOC 관리", "AI 비서", "관리자", "공통"];
 
-export const CHANGELOG: ChangeEntry[] = [
+const CHANGELOG_ALL: ChangeEntry[] = [
   {
     date: "2026-11-13",
     tag: "신규",
@@ -2567,3 +2569,5 @@ export const CHANGELOG: ChangeEntry[] = [
     href: "/utm",
   },
 ];
+// 운영에서 보류 중인 화면(hold.ts)의 소식은 뺀다 — 업데이트 노트·홈·사이드바 배지가 모두 이 CHANGELOG 를 본다.
+export const CHANGELOG: ChangeEntry[] = CHANGELOG_ALL.filter((e) => !(e.href && isHeldHref(e.href)));

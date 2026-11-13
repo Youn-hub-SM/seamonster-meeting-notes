@@ -2,6 +2,7 @@
 //  분류·소속은 여기 배열만 고치면 바로 반영됨.
 
 import type { IconName } from "./components/Icon";
+import { isHeldHref } from "./lib/hold";
 
 // beta: 사이드바·홈 사이트맵에 회색 'BETA' 글자 배지(2026-10-14 C6 — '베타 테스트 중' 분류 해체, 상태는 배지로).
 export type NavMenuItem = { href: string; label: string; adminOnly?: boolean; exact?: boolean; beta?: true }; // exact: 정확히 일치할 때만 활성(다른 독립 툴이 이 경로 아래에 있을 때)
@@ -10,7 +11,7 @@ export type NavTool = { href: string; label: string; icon: IconName; adminOnly?:
 export type NavCategory = { label: string; adminOnly?: boolean; tools: NavTool[] };
 
 
-export const NAV: NavCategory[] = [
+const NAV_ALL: NavCategory[] = [
   {
     // 라벨 없는 최상단 그룹 — 사용 가이드·업데이트 노트(대표 지시 2026-08-24). 사이드바는 빈 라벨을 그리지 않는다.
     label: "",
@@ -110,7 +111,7 @@ export const NAV: NavCategory[] = [
         ],
       },
       { href: "/crm", label: "CRM 메시지맵", icon: "megaphone" },
-      { href: "/audience", label: "오디언스 추출", icon: "user", beta: true }, // 2026-11-13 조건으로 고객을 찾아 이름·전화번호를 엑셀로(발송은 사람이 따로) — 검색·추출 기록이 화면에 남는다
+      { href: "/audience", label: "오디언스 추출", icon: "user" }, // 2026-11-13 조건으로 고객을 찾아 이름·전화번호를 엑셀로(발송은 사람이 따로) — 검색·추출 기록이 화면에 남는다
       { href: "/instagram", label: "인스타 자동 DM", icon: "chat" },
     ],
   },
@@ -153,6 +154,8 @@ export const NAV: NavCategory[] = [
     ],
   },
 ];
+// 운영에서 보류 중인 화면(app/lib/hold.ts)은 메뉴에서 뺀다 — 사이드바·홈 전체 메뉴·검색·탭 제목이 모두 이 NAV 를 본다.
+export const NAV: NavCategory[] = NAV_ALL.map((c) => ({ ...c, tools: c.tools.filter((t) => !isHeldHref(t.href)) })).filter((c) => c.tools.length > 0);
 
 // ── 즐겨찾기 표시 — 담을 때 저장한 이름 대신 지금 메뉴 이름으로(메뉴 개편 뒤 옛 이름이 남지 않게), 활성 판정도 메뉴와 같은 규칙 ──
 //  하위 메뉴 없는 툴 = 툴 이름, 하위 메뉴 = 메뉴 이름 + 작은 글자로 툴 이름(2026-10-17 디자인 1차 A2 — '툴 · 메뉴' 중점 결합을 없앰). 같은 href 는 먼저 나온 자리.

@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin } from "./supabase";
 import { MODELS, DEFAULT_MODEL, ModelKey } from "./config";
+import { HOLD_AGENTS } from "./hold";
 
 // AI 모델 설정 — b2b_settings(key-value) 테이블에 저장. 코드 수정·재배포 없이
 // /b2b/settings/ai 화면에서 기능별로 바꿀 수 있음. (사업자등록증 OCR 은 정확도 위해 sonnet 고정, 별개)
@@ -48,7 +49,7 @@ export async function getCurrentModel(): Promise<string> {
 // ── 기능별 모델 ──
 export type AiFeature = "meeting" | "cs" | "voc" | "report" | "daily_analyst" | "notice" | "agent"; // briefing(옛 06:30 브리핑)은 2026-10-20, production(재고 AI 조언·주간 초안)은 2026-11-08 삭제
 // inheritDefault: 기능 설정이 'inherit' 일 때 공통 기본 대신 쓰는 모델(정확도가 중요한 기능). 없으면 공통 기본을 따른다.
-export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inheritDefault?: ModelKey }[] = [
+const AI_FEATURES_ALL: { key: AiFeature; label: string; desc: string; inheritDefault?: ModelKey }[] = [
   { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
   { key: "cs", label: "CS 코치", desc: "CS 응대 코칭·답변 초안" },
   { key: "voc", label: "VOC 인사이트", desc: "VOC 인사이트·설문 분석·제조사 리포트 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
@@ -57,6 +58,8 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inherit
   { key: "notice", label: "공지 작성기", desc: "상황 항목 → 씨몬스터 톤 공지문 (기본 sonnet)", inheritDefault: "sonnet" },
   { key: "agent", label: "AI 에이전트", desc: "맡은 일을 조사해 보고서로 내는 에이전트 — 도매 생산 요청서 (기본 fable — 2026-11-11)", inheritDefault: "fable" },
 ];
+// 운영에서 보류 중인 AI 에이전트(hold.ts)는 설정 화면의 기능 목록에서 뺀다(모델 조회 getFeatureModel 은 아래에서 전체 목록을 본다).
+export const AI_FEATURES = AI_FEATURES_ALL.filter((f) => !(HOLD_AGENTS && f.key === "agent"));
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   meeting: "ai_model_meeting",
   cs: "ai_model_cs", // 기존 CS 전용 키와 동일(하위호환)
@@ -79,7 +82,7 @@ export async function setFeatureModelKey(f: AiFeature, key: ModelKey | "inherit"
 export async function getFeatureModel(f: AiFeature): Promise<string> {
   const k = await getFeatureModelKey(f);
   if (k !== "inherit") return MODELS[k] ?? MODELS.sonnet;
-  const def = AI_FEATURES.find((x) => x.key === f)?.inheritDefault;
+  const def = AI_FEATURES_ALL.find((x) => x.key === f)?.inheritDefault;
   return def ? MODELS[def] : getCurrentModel();
 }
 
