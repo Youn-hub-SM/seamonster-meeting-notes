@@ -1,0 +1,22 @@
+/* 신청자 문자(/form-sms) 전용 — 접두사 .fs-*. 색·간격·글자는 globals.css :root 토큰만. */
+.fs-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-4) var(--sm-space-5); }
+.fs-wide { grid-column: 1 / -1; }
+.fs-text { min-height: 132px; resize: vertical; line-height: var(--sm-lh-body); }
+.fs-count { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
+.fs-actions { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; }
+.fs-inline { display: flex; gap: var(--sm-space-2); align-items: center; } /* 줄바꿈 없음 — 내용 폭에 딱 맞는 칸이라 wrap 이면 소수점 반올림으로 버튼이 아래로 떨어진다 */
+.fs-inline .b2b-btn-secondary { flex: 0 0 auto; }
+.fs-inline .b2b-input { width: auto; flex: 0 1 200px; min-width: 0; }
+.fs-fixed { font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); padding: 10px 0; font-variant-numeric: tabular-nums; }
+.fs-section { margin-top: var(--sm-space-4); }
+.fs-head { display: flex; align-items: baseline; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
+.fs-num { font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-kpi); font-variant-numeric: tabular-nums; }
+.fs-sub { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.fs-head .fs-end { margin-left: auto; }
+.b2b-table.fs-table { min-width: 560px; }
+.fs-reason { white-space: normal; min-width: 200px; line-height: var(--sm-lh-body); color: var(--sm-text-mid); }
+
+@media (max-width: 640px) {
+  .fs-form { grid-template-columns: 1fr; }
+  .fs-head .fs-end { margin-left: 0; }
+}

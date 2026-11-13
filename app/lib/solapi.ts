@@ -86,3 +86,29 @@ export function aggregateSolapi(msgs: Pick<SolapiMessage, "type" | "status" | "s
   }
   return [...map.values()].sort((a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type));
 }
+
+// ── 문자 보내기(2026-11-14, 신청자 문자 app/lib/form-sms.ts) ──
+//  POST /messages/v4/send-many/detail  body { messages: [{ to, from, text }], allowDuplicates: false }
+//  종류(SMS 90바이트 / LMS 2,000바이트)는 솔라피가 문구 길이로 고른다(autoTypeDetect 기본값).
+//  응답: groupInfo.groupId + failedMessageList[{ to, statusCode, statusMessage }] — 여기에 없는 번호는 접수된 것.
+//  ★ 두 가지 실패를 갈라 던진다 — 부르는 쪽이 '다시 보내도 되는가'를 정할 수 있게.
+//    SolapiRejected = 솔라피가 요청을 거절함(HTTP 4xx·5xx 응답을 받음) → 한 통도 접수되지 않았다. 다시 보내도 된다.
+//    그 밖의 오류(시간 초과·연결 끊김) = 접수됐는지 모른다 → 다시 보내면 두 번 갈 수 있다.
+export class SolapiRejected extends Error {}
+export type SolapiSendResult = { groupId: string | null; failed: { to: string; code: string; message: string }[] };
+export async function sendSolapiSms(p: { from: string; text: string; to: string[] }): Promise<SolapiSendResult> {
+  const body = { messages: p.to.map((to) => ({ to, from: p.from, text: p.text })), allowDuplicates: false };
+  const res = await fetch(`${BASE}/messages/v4/send-many/detail`, {
+    method: "POST", headers: { Authorization: authHeader(), "Content-Type": "application/json" }, body: JSON.stringify(body),
+    signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store",
+  });
+  const j = (await res.json().catch(() => ({}))) as {
+    groupInfo?: { groupId?: string; _id?: string }; failedMessageList?: { to?: string; statusCode?: string; statusMessage?: string }[];
+    errorCode?: string; errorMessage?: string;
+  };
+  if (!res.ok) throw new SolapiRejected(`솔라피 ${res.status}: ${j.errorMessage || j.errorCode || "발송 요청이 거절됐습니다"}`);
+  return {
+    groupId: j.groupInfo?.groupId || j.groupInfo?._id || null,
+    failed: (j.failedMessageList || []).map((f) => ({ to: String(f.to || "").replace(/\D/g, ""), code: String(f.statusCode || ""), message: String(f.statusMessage || "접수 실패") })),
+  };
+}
