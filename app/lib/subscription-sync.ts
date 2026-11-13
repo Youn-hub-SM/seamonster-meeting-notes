@@ -51,11 +51,27 @@ export function kstDate(v: unknown): string | null {
 }
 const regionOf = (v: unknown) => String(v ?? "").trim().split(/\s+/)[0]?.slice(0, 20) || null;
 
+// 신청의 대표 상태(2026-11-13 대표 확정 — 사람 기준과 같은 규칙을 신청 한 건에 적용):
+//  이용중 품목이 하나라도 있으면 U, 이용중은 없고 일시정지(B·Q) 품목이 있으면 P, 전부 해지(M·A·O)면 C. 품목 상태를 모르면 null.
+//  카페24의 신청 단위 상태(subscription_state)는 U·C 뿐이고 일시정지는 품목에만 온다(11-13 실측 — 신청 U / 품목 B 가 26건).
+//  그대로 저장하면 일시정지가 사라져 상태 변화 이력(129)에 일시정지·재개가 한 건도 남지 않았다.
+export function repState(itemStates: (string | null | undefined)[]): "U" | "P" | "C" | null {
+  let paused = false, cancelled = false;
+  for (const raw of itemStates) {
+    const s = String(raw ?? "").trim().toUpperCase();
+    if (s === "U") return "U";
+    if (s === "B" || s === "Q") paused = true;
+    else if (s === "M" || s === "A" || s === "O") cancelled = true;
+  }
+  return paused ? "P" : cancelled ? "C" : null;
+}
+
 export function toSubRow(s: SyncSubIn, runAt: string, key: Buffer) {
   return {
     subscription_id: String(s.subscription_id),
     created_date: kstDate(s.created_date),
-    state: s.subscription_state ? String(s.subscription_state).slice(0, 2) : null,
+    // 품목에서 구한 대표 상태. 품목이 없거나 상태를 모를 때만 카페24가 준 신청 단위 상태를 쓴다.
+    state: repState((s.items ?? []).map((it) => it.subscription_state)) ?? (s.subscription_state ? String(s.subscription_state).slice(0, 2) : null),
     member_hash: subHash("member", s.member_id, key),
     buyer_name_hash: subHash("name", s.buyer_name, key),
     receiver_name_hash: subHash("name", s.receiver_name, key),
@@ -204,8 +220,9 @@ export async function saveAutoSnapshot(sb: SupabaseClient, asOf: string, complet
 }
 export const isMissingTable = (e: { message?: string } | null | undefined) => !!e && /cafe24_subscription|does not exist|schema cache/i.test(e.message || "");
 
-// ── 상태 변경 로그(129) — 신청 단위 상태(U/P/C)가 직전 저장값과 달라진 신청만 한 줄 ──
+// ── 상태 변경 로그(129) — 신청의 대표 상태(U/P/C, repState)가 직전 저장값과 달라진 신청만 한 줄 ──
 //  prev_state=null = 최초 관측(신규 유입). 같은 데이터 재수집 시 prev==new 라 중복 기록 안 됨(멱등).
+//  일시정지(→P)·재개(P→U)는 2026-11-13 수정 뒤 수집분부터 남는다 — 그 전에는 카페24 신청 상태(U·C)만 봐서 한 건도 없다.
 //  이 표가 생긴 이후의 변화부터 쌓인다 — 과거 전이는 수집 이력이 없어 소급 불가.
 export type StateLogRow = { subscription_id: string; member_hash: string | null; prev_state: string | null; new_state: string; round: number | null; cycle: string | null; changed_on: string };
 export const STATE_LOG_TABLE = "cafe24_subscription_state_log";
@@ -225,13 +242,22 @@ export function subMetaFrom(s: SyncSubIn): SubMeta {
   }
   return { round: maxRound > 0 ? maxRound : null, cycle };
 }
-// 덮어쓰기 전 저장돼 있던 신청 단위 상태 맵(subscription_id → 'U'|'P'|'C'|null)
+// 덮어쓰기 전 저장돼 있던 신청의 대표 상태 맵(subscription_id → 'U'|'P'|'C'|null).
+//  저장된 '품목'에서 다시 구한다(repState) — 11-13 이전에 저장된 신청 상태 칸은 일시정지를 U 로 적어 뒀기 때문이다.
+//  신청 상태 칸을 그대로 믿으면 수정 뒤 첫 수집에서 이미 쉬고 있던 신청이 전부 '오늘 일시정지'로 잘못 기록된다.
+//  품목이 저장돼 있지 않은 신청만 신청 상태 칸을 쓴다.
 export async function loadPrevStates(sb: SupabaseClient, ids: string[]): Promise<Map<string, string | null>> {
   const map = new Map<string, string | null>();
   for (let i = 0; i < ids.length; i += 300) {
-    const { data, error } = await sb.from("cafe24_subscriptions").select("subscription_id, state").in("subscription_id", ids.slice(i, i + 300));
+    const part = ids.slice(i, i + 300);
+    const { data, error } = await sb.from("cafe24_subscriptions").select("subscription_id, state").in("subscription_id", part);
     if (error) throw error;
-    for (const r of (data ?? []) as { subscription_id: string; state: string | null }[]) map.set(r.subscription_id, r.state ?? null);
+    const items = await pageAll<{ subscription_id: string; state: string | null }>(
+      (a, b) => sb.from("cafe24_subscription_items").select("subscription_id, state").in("subscription_id", part).order("subscription_item_id").range(a, b),
+    );
+    const byId = new Map<string, (string | null)[]>();
+    for (const it of items) { const a = byId.get(it.subscription_id); if (a) a.push(it.state); else byId.set(it.subscription_id, [it.state]); }
+    for (const r of (data ?? []) as { subscription_id: string; state: string | null }[]) map.set(r.subscription_id, repState(byId.get(r.subscription_id) ?? []) ?? r.state ?? null);
   }
   return map;
 }

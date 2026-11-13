@@ -132,6 +132,9 @@ export function computeSubscriptionSnapshot(inp: SnapshotInput) {
     if (b === "active") activeMembers.add(k);
     if (b === "pause") pauseMembers.add(k);
   }
+  // 사람 기준(2026-11-13 대표 확정) — 이용중 신청이 하나라도 있으면 활성, 이용중은 없고 일시정지 신청이 있으면 일시정지. 한 회원은 한쪽에만 든다.
+  //  그 전 날짜의 스냅샷은 이용중·일시정지를 함께 가진 회원을 양쪽에 다 셌다.
+  for (const k of activeMembers) pauseMembers.delete(k);
   // 첫결제 리드타임 = 회차 1·이용중 신청건(신청일→결제예정일)의 중앙값, 없으면 D+2
   const leadCandidates = orders
     .filter((o) => statusBucket(o.status) === "active" && (parseInt(o.round, 10) || 0) === 1 && o.nextPay && o.signDate)

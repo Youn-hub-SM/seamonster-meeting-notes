@@ -489,7 +489,7 @@
       <div class="kpi">
         <div class="kpi-label">일시정지 회원 수</div>
         <div class="kpi-value" id="kpiPauseMembers">-</div>
-        <div class="kpi-sub" id="kpiPauseMembersSub">CS 컨택 대상</div>
+        <div class="kpi-sub" id="kpiPauseMembersSub">이용중 신청 없음 · CS 컨택 대상</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">결제 도달율</div>
@@ -1176,8 +1176,9 @@ function renderKpis() {
   const pause = orders.filter(o => statusBucket(o.status) === "pause");
   const cancel = orders.filter(o => statusBucket(o.status) === "cancel");
 
+  // 사람 기준(2026-11-13 대표 확정) — app/lib/subscription-snapshot.ts 와 같은 규칙.
   // 활성 회원: 이용중 신청을 하나라도 가진 회원
-  // 일시정지 회원: 일시정지 신청을 하나라도 가진 회원 (이용중과 동시 보유여도 일시정지 카드에서도 카운트)
+  // 일시정지 회원: 이용중 신청은 없고 일시정지 신청을 가진 회원 (한 회원은 한쪽에만 든다)
   const activeMembers = new Set();
   const pauseMembers = new Set();
   orders.forEach(o => {
@@ -1187,6 +1188,7 @@ function renderKpis() {
     if (b === "active") activeMembers.add(k);
     if (b === "pause") pauseMembers.add(k);
   });
+  activeMembers.forEach(k => pauseMembers.delete(k));
 
   // 첫결제 리드타임: 회차 1·이용중 신청건의 중앙값 (신청일 → 결제예정일)
   //  평균은 표본이 적을 때(현재 수 건) 이상치 하나(다음 주기 날짜가 회차 1에 찍힌 건 — D+33 실측)에
@@ -1248,7 +1250,7 @@ function renderKpis() {
   document.getElementById("kpiActiveMembers").textContent = activeMembers.size;
   document.getElementById("kpiActiveMembersSub").textContent = `이용중 신청 ${active.length}건`;
   document.getElementById("kpiPauseMembers").textContent = pauseMembers.size;
-  document.getElementById("kpiPauseMembersSub").textContent = `일시정지 신청 ${pause.length}건 · CS 컨택 대상`;
+  document.getElementById("kpiPauseMembersSub").textContent = `이용중 신청 없음 · 일시정지 신청 ${pause.length}건`;
   document.getElementById("kpiFirstPay").textContent = firstPayRate !== null ? `${firstPayRate}%` : "-";
   document.getElementById("kpiFirstPaySub").textContent = `n=${eligibleFP.length} · 리드타임 D+${leadTime} 기준`;
   document.getElementById("kpi3rd").textContent = rate3 !== null ? `${rate3}%` : "-";

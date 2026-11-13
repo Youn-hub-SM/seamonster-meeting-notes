@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const subRows = subsIn.map((s) => toSubRow(s, runAt, key));
     const itemRows = subsIn.flatMap((s) => toItemRows(s, runAt)).filter((r) => r.subscription_item_id && r.subscription_item_id !== "undefined");
 
-    // 상태 변경 로그(129)용 — 덮어쓰기 전 저장돼 있던 신청 단위 상태를 먼저 읽어 둔다.
+    // 상태 변경 로그(129)용 — 덮어쓰기 전 저장돼 있던 신청의 대표 상태(저장된 품목 기준)를 먼저 읽어 둔다.
     //  읽기가 실패하면 전부 '신규'로 오인될 수 있어, 성공했을 때만 로그를 남긴다.
     let prevStates: Map<string, string | null> | null = null;
     try { prevStates = await loadPrevStates(sb, subRows.map((s) => s.subscription_id)); }
