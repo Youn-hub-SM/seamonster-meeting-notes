@@ -28,41 +28,14 @@ function blockRegex(sourceId: number): RegExp {
   return new RegExp(`<!--\\s*sm:src=${sourceId}\\s*-->[\\s\\S]*?<!--\\s*/sm:src=${sourceId}\\s*-->\\s*`, "g");
 }
 
-/**
- * 보존 블록 — 공식몰 스킨이 아코디언·구매박스 요약으로 읽는 숨김 텍스트 블록(<div class="smd-info"> 또는 .wf-acc).
- *  전체 교체는 상세설명을 전부 지우므로 이 블록만 떼어 새 내용 맨 앞에 되돌려 놓는다(스킨 JS 는 첫 번째 .smd-info 만 읽는다 →
- *  상품 자체 아코디언이 계속 우선). 새 내용에 이미 이 블록이 있으면 소스가 아코디언을 바꾸려는 뜻이므로 보존하지 않는다.
- *  찾는 기준은 class 이름뿐이다 — 편집기에서 class 가 지워진 블록은 보존 대상이 아니다.
- */
-const PRESERVE_OPEN = /<div\b[^>]*\bclass\s*=\s*["'][^"']*\b(?:smd-info|wf-acc)\b[^"']*["'][^>]*>/i;
-const DIV_TAG = /<\/?div\b[^>]*>/gi;
-export function extractPreserved(html: string): { block: string; rest: string } | null {
-  const src = html ?? "";
-  const m = PRESERVE_OPEN.exec(src);
-  if (!m) return null;
-  // 여는 div 부터 짝이 맞는 닫는 </div> 까지(중첩 div 세기)
-  let depth = 0;
-  DIV_TAG.lastIndex = m.index;
-  let t: RegExpExecArray | null;
-  while ((t = DIV_TAG.exec(src))) {
-    if (t[0].startsWith("</")) { depth--; if (depth === 0) { const end = t.index + t[0].length; return { block: src.slice(m.index, end), rest: (src.slice(0, m.index) + src.slice(end)).trim() }; } }
-    else if (!/\/\s*>$/.test(t[0])) depth++;
-  }
-  return null; // 닫는 태그를 못 찾음 — 보존하지 않는다
-}
-export const hasPreserved = (html: string): boolean => PRESERVE_OPEN.test(html ?? "");
-/** 전체 교체 결과 앞에 보존 블록을 되돌려 놓는다 */
-function withPreserved(current: string, replacement: string, newHtml: string): string {
-  if (hasPreserved(newHtml)) return replacement;
-  const p = extractPreserved(current);
-  return p ? `${p.block}\n${replacement}` : replacement;
-}
+// 전체 교체는 기존 상세설명을 하나도 남기지 않는다(2026-11-13 대표 결정). 옛 아코디언 블록(.smd-info)을 남기던 규칙은 없앴다 —
+//  아코디언도 sm-acc 소스로 넣으므로 남겨 두면 옛 내용이 계속 따라다닌다. 조립 규칙을 바꾸면 scripts/detail-apply-runner.mjs 도 함께 고친다.
 
 /** 현재 상세설명에 소스 블록을 넣은 결과. 이미 같은 소스 마커가 있으면 그 자리만 갱신. */
 export function mergeDescription(current: string, sourceId: number, html: string, position: Position): string {
   const block = wrapBlock(sourceId, html);
   const cur = current ?? "";
-  if (position === "replace") return withPreserved(cur, block, html);
+  if (position === "replace") return block;
   const re = blockRegex(sourceId);
   if (re.test(cur)) {
     // 기존 자리 갱신 — 첫 마커 자리에 새 블록, 나머지 중복은 제거
@@ -85,7 +58,7 @@ export type SetMember = { source_id: number; version: number; html: string };
 /** 조합(161): 구성 블록을 전부 걷어낸 뒤 조합 순서대로 묶어서 position 에 넣는다 */
 export function mergeSet(current: string, members: SetMember[], position: Position): string {
   const blocks = members.map((m) => wrapBlock(m.source_id, m.html)).join("\n");
-  if (position === "replace") return withPreserved(current ?? "", blocks, members.map((m) => m.html).join("\n"));
+  if (position === "replace") return blocks;
   const rest = removeBlocks(current, members.map((m) => m.source_id));
   if (!rest) return blocks;
   return position === "prepend" ? `${blocks}\n${rest}` : `${rest}\n${blocks}`;

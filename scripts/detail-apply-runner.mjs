@@ -35,32 +35,11 @@ const markerOpen = (id) => `<!-- sm:src=${id} -->`;
 const markerClose = (id) => `<!-- /sm:src=${id} -->`;
 const wrapBlock = (id, html) => `${markerOpen(id)}\n${String(html).trim()}\n${markerClose(id)}`;
 const blockRegex = (id) => new RegExp(`<!--\\s*sm:src=${id}\\s*-->[\\s\\S]*?<!--\\s*/sm:src=${id}\\s*-->\\s*`, "g");
-// 보존 블록 — 스킨이 아코디언으로 읽는 숨김 텍스트 블록(.smd-info / .wf-acc). 전체 교체 때 떼어 새 내용 맨 앞에 되돌린다.
-//  새 내용에 이미 그 블록이 있으면(소스가 아코디언을 바꾸려는 뜻) 보존하지 않는다. 기준은 class 이름뿐.
-const PRESERVE_OPEN = /<div\b[^>]*\bclass\s*=\s*["'][^"']*\b(?:smd-info|wf-acc)\b[^"']*["'][^>]*>/i;
-function extractPreserved(html) {
-  const src = html ?? "";
-  const m = PRESERVE_OPEN.exec(src);
-  if (!m) return null;
-  const re = /<\/?div\b[^>]*>/gi;
-  re.lastIndex = m.index;
-  let depth = 0, t;
-  while ((t = re.exec(src))) {
-    if (t[0].startsWith("</")) { depth--; if (depth === 0) { const end = t.index + t[0].length; return { block: src.slice(m.index, end), rest: (src.slice(0, m.index) + src.slice(end)).trim() }; } }
-    else if (!/\/\s*>$/.test(t[0])) depth++;
-  }
-  return null;
-}
-function withPreserved(current, replacement, newHtml) {
-  if (PRESERVE_OPEN.test(newHtml ?? "")) return replacement;
-  const p = extractPreserved(current);
-  if (p) console.log("    아코디언 블록(.smd-info) 보존");
-  return p ? `${p.block}\n${replacement}` : replacement;
-}
+// 전체 교체는 기존 상세설명을 하나도 남기지 않는다(2026-11-13 — 옛 아코디언 블록 .smd-info 를 남기던 규칙 삭제).
 function mergeDescription(current, id, html, position) {
   const block = wrapBlock(id, html);
   const cur = current ?? "";
-  if (position === "replace") return withPreserved(cur, block, html);
+  if (position === "replace") return block;
   if (blockRegex(id).test(cur)) {
     let first = true;
     return cur.replace(blockRegex(id), () => { if (first) { first = false; return block + "\n"; } return ""; }).trimEnd();
@@ -76,7 +55,7 @@ function removeBlocks(current, ids) {
 }
 function mergeSet(current, members, position) {
   const blocks = members.map((m) => wrapBlock(m.source_id, m.html)).join("\n");
-  if (position === "replace") return withPreserved(current ?? "", blocks, members.map((m) => m.html).join("\n"));
+  if (position === "replace") return blocks;
   const rest = removeBlocks(current, members.map((m) => m.source_id));
   if (!rest) return blocks;
   return position === "prepend" ? `${blocks}\n${rest}` : `${rest}\n${blocks}`;
