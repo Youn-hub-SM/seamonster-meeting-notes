@@ -1,4 +1,8 @@
-// 신청자 문자 — 탈리 폼 신청자에게 매일 13시에 문자를 보낸다(2026-11-14 대표 지시). 서버 전용.
+// 신청자 문자 — 탈리 폼 신청자에게 정한 시각(매일 hh:mm) 또는 즉시 문자를 보낸다(2026-11-14 대표 지시). 서버 전용.
+//  ■ 보내는 시각(11-14 대표: "커스텀 할 수 있게, 즉시도 포함") — rule.mode
+//    daily   = 매일 rule.time(한국 시간)에 그동안의 신청을 모아서. 하루 한 번(form_sms_daily 에 보낸 날짜).
+//    instant = 예약 신호가 올 때마다(5분 간격) 새 신청을 가져와 바로. 그래서 '즉시'는 신청 뒤 5분 안이다.
+//    예약 신호 = pg_cron 이 5분마다 /api/form-sms/tick 을 두드린다(migration 168). 보낼지는 tickFormSms 가 정한다.
 //  옛 흐름: 탈리 → 구글시트 앱스크립트 → 재피어 → 솔라피.  새 흐름: 탈리 API → survey_responses → 여기 → 솔라피.
 //  "신청 직후에 바로 보내지 않기 위함"(대표) — 그래서 하루 한 번 13시에 그동안의 신청을 모아서 보낸다.
 //  ■ 신청은 탈리 API 로 '가져온다'(syncTally) — 설문응답 가져오기와 같은 API 키(관리자 › 설정 › 연결 › Tally).
@@ -18,14 +22,22 @@ import { isSolapiConfigured, sendSolapiSms, SolapiRejected } from "./solapi";
 import { getTallyApiKey, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "./voc-tally";
 
 export const FORM_SMS_TABLE = "form_sms_sends";
-export const SEND_HOUR_KST = 13;          // 예약 신호는 migration 167 의 pg_cron(04:00 UTC)이 준다 — 시각을 바꾸려면 그 일정도 바꾼다
-export const AUTO_CAP = 300;              // 13시 자동 발송의 상한 — 대기가 이보다 많으면 설정 실수로 보고 멈춘다([지금 보내기]로만)
+export const TICK_MINUTES = 5;            // 예약 신호 간격(migration 168 의 pg_cron) — '즉시'의 최대 지연
+const RETRY_WINDOW_MIN = 60;              // 매일 발송이 탈리·솔라피 문제로 못 나갔을 때 다음 신호에 다시 해 보는 시간(그 뒤엔 다음 날)
+export const AUTO_CAP = 300;              // 자동 발송의 상한 — 대기가 이보다 많으면 설정 실수로 보고 멈춘다([지금 보내기]로만)
 const BATCH_MAX = 1000;                   // 한 번에 다루는 신청 수
-const RULE_KV = "form_sms_rule", LAST_KV = "form_sms_last", TICK_KV = "form_sms_tick", CURSOR_KV = "form_sms_cursor";
+const RULE_KV = "form_sms_rule", LAST_KV = "form_sms_last", TICK_KV = "form_sms_tick", CURSOR_KV = "form_sms_cursor", DAILY_KV = "form_sms_daily";
 const SYNC_PAGES = 20;                    // 한 번에 가져오는 탈리 제출 = 100건 × 20쪽
 
-export type FormSmsRule = { on: boolean; formId: string; formName: string; from: string; text: string; since: string | null; updatedBy?: string; updatedAt?: string };
-export const EMPTY_RULE: FormSmsRule = { on: false, formId: "", formName: "", from: "", text: "", since: null };
+export type SendMode = "daily" | "instant";
+export type FormSmsRule = { on: boolean; mode: SendMode; time: string; formId: string; formName: string; from: string; text: string; since: string | null; updatedBy?: string; updatedAt?: string };
+export const EMPTY_RULE: FormSmsRule = { on: false, mode: "daily", time: "13:00", formId: "", formName: "", from: "", text: "", since: null };
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+// 한국 시간의 오늘 날짜와 시:분
+export function kstNow(now = Date.now()): { date: string; hm: string } {
+  const s = new Date(now + 9 * 3600_000).toISOString();
+  return { date: s.slice(0, 10), hm: s.slice(11, 16) };
+}
 export type FormSmsLast = { at: string; by: string; sent: number; failed: number; skipped: number; held?: number; error?: string };
 export type SendStatus = "sending" | "sent" | "failed" | "skipped" | "unknown";
 
@@ -54,18 +66,27 @@ export function findPhone(answers: unknown): string | null {
 }
 
 const parse = <T,>(raw: string, fallback: T): T => { try { return raw ? (JSON.parse(raw) as T) : fallback; } catch { return fallback; } };
-export async function getRule(): Promise<FormSmsRule> { return { ...EMPTY_RULE, ...parse<Partial<FormSmsRule>>(await getKv(RULE_KV), {}) }; }
+export async function getRule(): Promise<FormSmsRule> {
+  const r = { ...EMPTY_RULE, ...parse<Partial<FormSmsRule>>(await getKv(RULE_KV), {}) };
+  if (r.mode !== "instant") r.mode = "daily";
+  if (!TIME_RE.test(r.time)) r.time = EMPTY_RULE.time;
+  return r;
+}
 export async function getLast(): Promise<FormSmsLast | null> { return parse<FormSmsLast | null>(await getKv(LAST_KV), null); }
 export async function getTickAt(): Promise<string | null> { return (await getKv(TICK_KV)) || null; }
 export async function markTick(): Promise<void> { await setKv(TICK_KV, new Date().toISOString()); }
 
 export class FormSmsError extends Error {}
 // 설정 저장 — 켜는 순간(또는 켠 채로 폼을 바꾼 순간)이 '이 뒤로 들어온 신청부터'의 기준 시각이 된다.
-export async function saveRule(input: unknown, who: string): Promise<FormSmsRule> {
+//  매일 발송에서 오늘의 그 시각이 이미 지났으면 첫 발송은 내일이다 — 켜자마자(또는 시각을 바꾸자마자) 방금 들어온 신청에 바로 나가지 않게.
+export async function saveRule(input: unknown, who: string, now = Date.now()): Promise<FormSmsRule> {
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const prev = await getRule();
+  if (o.mode === "daily" && !TIME_RE.test(String(o.time ?? ""))) throw new FormSmsError("보내는 시각을 입력하세요.");
   const next: FormSmsRule = {
     on: o.on === true,
+    mode: o.mode === "instant" ? "instant" : "daily",
+    time: TIME_RE.test(String(o.time ?? "")) ? String(o.time) : prev.time,
     formId: String(o.formId ?? "").trim().slice(0, 60),
     formName: String(o.formName ?? "").trim().slice(0, 200),
     from: digits(o.from).slice(0, 12),
@@ -78,9 +99,13 @@ export async function saveRule(input: unknown, who: string): Promise<FormSmsRule
     if (next.from.length < 8) throw new FormSmsError("발신번호를 입력하세요.");
     if (!next.text) throw new FormSmsError("문구를 입력하세요.");
     if (smsBytes(next.text) > 2000) throw new FormSmsError("문구가 너무 깁니다(장문 한도 2,000바이트).");
-    if (!prev.on || prev.formId !== next.formId || !prev.since) next.since = new Date().toISOString();
+    if (!prev.on || prev.formId !== next.formId || !prev.since) next.since = new Date(now).toISOString();
   }
   await setKv(RULE_KV, JSON.stringify(next));
+  if (next.on && next.mode === "daily" && (!prev.on || prev.mode !== "daily" || prev.time !== next.time)) {
+    const k = kstNow(now);
+    await setKv(DAILY_KV, k.hm >= next.time ? k.date : "-"); // 지났으면 오늘은 보낸 것으로, 아니면 오늘 그 시각에 보낸다
+  }
   return next;
 }
 
@@ -140,18 +165,18 @@ export async function loadPending(sb: SupabaseClient, rule: FormSmsRule): Promis
   return rows.filter((r) => !done.has(r.id)).map((r) => ({ id: r.id, at: r.submitted_at || r.created_at, phone: findPhone(r.answers) }));
 }
 
-export type RunResult = { ok: boolean; sent: number; failed: number; skipped: number; held?: number; error?: string; note?: string };
-// 대기 중인 신청자에게 보낸다. auto = 13시 예약 신호(상한 적용), 아니면 [지금 보내기].
+export type RunResult = { ok: boolean; sent: number; failed: number; skipped: number; held?: number; error?: string; note?: string; retry?: boolean };
+// 대기 중인 신청자에게 보낸다. auto = 예약 신호(상한 적용), 아니면 [지금 보내기]. retry = 한 통도 안 나갔고 다시 해 봐도 되는 실패(탈리·솔라피 거절).
 export async function runFormSms(sb: SupabaseClient, by: string, auto: boolean): Promise<RunResult> {
   const rule = await getRule();
   if (!rule.on) return { ok: true, sent: 0, failed: 0, skipped: 0, note: "꺼져 있습니다" };
-  if (!isSolapiConfigured()) return finish({ ok: false, sent: 0, failed: 0, skipped: 0, error: "솔라피 키(SOLAPI_API_KEY·SOLAPI_API_SECRET)가 없습니다." }, by);
+  if (!isSolapiConfigured()) return finish({ ok: false, sent: 0, failed: 0, skipped: 0, error: "솔라피 키(SOLAPI_API_KEY·SOLAPI_API_SECRET)가 없습니다." }, by, auto);
   // 탈리에서 새 신청을 먼저 가져온다. 못 가져오면 보내지 않는다(일부만 보내고 끝난 것처럼 보이지 않게 — 다음 실행이 이어서 가져온다)
   try { await syncTally(sb, rule); }
-  catch (e) { return finish({ ok: false, sent: 0, failed: 0, skipped: 0, error: `탈리에서 신청을 가져오지 못했습니다 — ${e instanceof Error ? e.message : "오류"}` }, by); }
+  catch (e) { return finish({ ok: false, sent: 0, failed: 0, skipped: 0, retry: true, error: `탈리에서 신청을 가져오지 못했습니다 — ${e instanceof Error ? e.message : "오류"}` }, by, auto); }
   const pending = await loadPending(sb, rule);
-  if (!pending.length) return finish({ ok: true, sent: 0, failed: 0, skipped: 0 }, by);
-  if (auto && pending.length > AUTO_CAP) return finish({ ok: false, sent: 0, failed: 0, skipped: 0, held: pending.length, error: `대기 ${pending.length}명이 자동 발송 상한(${AUTO_CAP}명)을 넘어 보내지 않았습니다.` }, by);
+  if (!pending.length) return finish({ ok: true, sent: 0, failed: 0, skipped: 0 }, by, auto);
+  if (auto && pending.length > AUTO_CAP) return finish({ ok: false, sent: 0, failed: 0, skipped: 0, held: pending.length, error: `대기 ${pending.length}명이 자동 발송 상한(${AUTO_CAP}명)을 넘어 보내지 않았습니다.` }, by, auto);
 
   // 줄 먼저 만들기(선점) — 번호 없음·같은 번호 중복은 바로 '건너뜀'
   const seen = new Set<string>();
@@ -166,7 +191,7 @@ export async function runFormSms(sb: SupabaseClient, by: string, auto: boolean):
   const mine = new Map(((made ?? []) as { response_id: string; status: SendStatus }[]).map((r) => [r.response_id, r.status]));
   const skipped = [...mine.values()].filter((s) => s === "skipped").length;
   const targets = pending.filter((p) => p.phone && mine.get(p.id) === "sending") as (PendingRow & { phone: string })[];
-  if (!targets.length) return finish({ ok: true, sent: 0, failed: 0, skipped }, by);
+  if (!targets.length) return finish({ ok: true, sent: 0, failed: 0, skipped }, by, auto);
   const ids = targets.map((t) => t.id);
   const setAll = async (patch: Record<string, unknown>) => {
     for (let i = 0; i < ids.length; i += 200) { const { error } = await sb.from(FORM_SMS_TABLE).update(patch).in("response_id", ids.slice(i, i + 200)); if (error) throw error; }
@@ -180,10 +205,10 @@ export async function runFormSms(sb: SupabaseClient, by: string, auto: boolean):
     if (e instanceof SolapiRejected) {
       // 한 통도 접수되지 않았다 → 줄을 지워 대기로 되돌린다(다음 13시나 [지금 보내기]에 다시)
       for (let i = 0; i < ids.length; i += 200) await sb.from(FORM_SMS_TABLE).delete().in("response_id", ids.slice(i, i + 200)).eq("status", "sending");
-      return finish({ ok: false, sent: 0, failed: 0, skipped, error: msg }, by);
+      return finish({ ok: false, sent: 0, failed: 0, skipped, retry: true, error: msg }, by, auto);
     }
     await setAll({ status: "unknown", reason: `솔라피 응답을 받지 못했습니다(${msg}) — 솔라피 발송 내역에서 확인하세요` }).catch(() => {});
-    return finish({ ok: false, sent: 0, failed: 0, skipped, error: `솔라피 응답을 받지 못했습니다 — ${targets.length}명은 접수 여부를 확인해야 합니다.` }, by);
+    return finish({ ok: false, sent: 0, failed: 0, skipped, error: `솔라피 응답을 받지 못했습니다 — ${targets.length}명은 접수 여부를 확인해야 합니다.` }, by, auto);
   }
 
   const failedBy = new Map(res.failed.map((f) => [f.to, f]));
@@ -197,11 +222,31 @@ export async function runFormSms(sb: SupabaseClient, by: string, auto: boolean):
     const { error } = await sb.from(FORM_SMS_TABLE).update({ status: "failed", reason: `${f.message}${f.code ? ` (${f.code})` : ""}`, sent_at: null }).eq("response_id", t.id);
     if (error) throw error;
   }
-  return finish({ ok: true, sent: targets.length - failed, failed, skipped }, by);
+  return finish({ ok: true, sent: targets.length - failed, failed, skipped }, by, auto);
 }
-async function finish(r: RunResult, by: string): Promise<RunResult> {
+// 마지막 실행 기록. 예약 신호가 와서 봤는데 보낼 것이 없던 실행은 남기지 않는다('즉시'는 5분마다 돌아 기록을 덮어쓴다) — 앞의 오류를 지울 때만 남긴다.
+async function finish(r: RunResult, by: string, auto: boolean): Promise<RunResult> {
+  if (auto && !r.error && !r.sent && !r.failed && !r.skipped && !r.held) { const prev = await getLast().catch(() => null); if (!prev?.error) return r; }
   const last: FormSmsLast = { at: new Date().toISOString(), by, sent: r.sent, failed: r.failed, skipped: r.skipped, ...(r.held ? { held: r.held } : {}), ...(r.error ? { error: r.error } : {}) };
   await setKv(LAST_KV, JSON.stringify(last)).catch(() => {});
+  return r;
+}
+
+// 예약 신호(5분마다) — 지금 보낼 차례인지 정하고, 차례면 보낸다.
+//  instant: 신호마다. daily: 오늘의 rule.time 이 지났고 오늘 아직 안 보냈으면 한 번.
+//  daily 가 다시 해 볼 수 있는 실패(retry)로 끝났으면 '보냄' 표시를 하지 않아 다음 신호(5분 뒤)에 다시 한다 — 그 시각에서 한 시간까지만.
+export async function tickFormSms(sb: SupabaseClient, now = Date.now()): Promise<RunResult> {
+  const rule = await getRule();
+  const idle = (note: string): RunResult => ({ ok: true, sent: 0, failed: 0, skipped: 0, note });
+  if (!rule.on) return idle("꺼져 있습니다");
+  if (rule.mode === "instant") return runFormSms(sb, "예약", true);
+  const k = kstNow(now);
+  if (k.hm < rule.time) return idle("아직 보낼 시각이 아닙니다");
+  if ((await getKv(DAILY_KV)) === k.date) return idle("오늘은 이미 보냈습니다");
+  const r = await runFormSms(sb, "예약", true);
+  const [h, m] = rule.time.split(":").map(Number), [nh, nm] = k.hm.split(":").map(Number);
+  const late = nh * 60 + nm - (h * 60 + m) >= RETRY_WINDOW_MIN;
+  if (!r.retry || late) await setKv(DAILY_KV, k.date);
   return r;
 }
 

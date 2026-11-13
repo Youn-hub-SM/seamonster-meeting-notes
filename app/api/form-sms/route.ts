@@ -2,20 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { isSolapiConfigured, SolapiRejected } from "@/app/lib/solapi";
-import { FORM_SMS_TABLE, AUTO_CAP, SEND_HOUR_KST, FormSmsError, getRule, getLast, getTickAt, saveRule, loadPending, syncTally, runFormSms, sendTest, maskPhone, isMissingFormSms } from "@/app/lib/form-sms";
+import { FORM_SMS_TABLE, AUTO_CAP, TICK_MINUTES, FormSmsError, getRule, getLast, getTickAt, saveRule, loadPending, syncTally, runFormSms, sendTest, maskPhone, isMissingFormSms } from "@/app/lib/form-sms";
 import { getTallyApiKey, listTallyForms } from "@/app/lib/voc-tally";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// 신청자 문자 — 탈리 폼 신청자에게 매일 13시에 문자(app/lib/form-sms.ts).
+// 신청자 문자 — 탈리 폼 신청자에게 매일 정한 시각 또는 즉시 문자(app/lib/form-sms.ts).
 //  GET                            → 설정 + 대기 중인 신청(번호 가림) + 최근 발송 기록 + 마지막 실행·예약 신호 시각 + 폼 선택지(탈리 API)
 //                                    켜져 있으면 먼저 탈리에서 새 신청을 가져온다 — 대기 목록이 지금 기준이 되게
 //  POST { action: "save", rule }  → 설정 저장(켜는 순간부터 들어온 신청이 대상)
 //  POST { action: "test", to, from, text } → 적어 넣은 번호로 시험 발송(기록 표에는 남기지 않는다)
 //  POST { action: "send" }        → 대기 중인 신청자에게 지금 보내기
-//  로그인한 내부 직원(공장 계정 제외). 13시 자동 발송은 /api/form-sms/tick.
+//  로그인한 내부 직원(공장 계정 제외). 자동 발송은 /api/form-sms/tick(5분마다 오는 예약 신호).
 async function loginName(req: NextRequest): Promise<string | null> {
   const t = req.cookies.get("b2b_auth")?.value;
   const sess = await verifySessionFull(t);
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       if (!isMissingFormSms(e as { message?: string })) throw e;
       applied = false; // migration 167 미적용
     }
-    return NextResponse.json({ ok: true, rule, last, tickAt, forms, hasTallyKey: !!apiKey, tallyError, applied, configured: isSolapiConfigured(), pending, log, autoCap: AUTO_CAP, hour: SEND_HOUR_KST });
+    return NextResponse.json({ ok: true, rule, last, tickAt, forms, hasTallyKey: !!apiKey, tallyError, applied, configured: isSolapiConfigured(), pending, log, autoCap: AUTO_CAP, tickMinutes: TICK_MINUTES });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "신청자 문자 설정을 불러오지 못했습니다") }, { status: 500 });
   }

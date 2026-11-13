@@ -1,17 +1,17 @@
 "use client";
 
-// 신청자 문자 — 탈리 폼 신청자에게 매일 13시에 문자(솔라피). 서버 규칙은 app/lib/form-sms.ts.
-//  설정을 켠 뒤에 들어온 신청만 대상이다. 신청이 들어와도 바로 보내지 않고 13시에 모아서 보낸다.
+// 신청자 문자 — 탈리 폼 신청자에게 매일 정한 시각 또는 즉시 문자(솔라피). 서버 규칙은 app/lib/form-sms.ts.
+//  설정을 켠 뒤에 들어온 신청만 대상이다. 매일 = 그 시각에 모아서, 즉시 = 예약 신호(5분 간격)마다.
 //  전화번호는 화면에 가려서만 나온다.
 import { useCallback, useEffect, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { dateTime, qty } from "@/app/lib/format";
 
-type Rule = { on: boolean; formId: string; formName: string; from: string; text: string; since: string | null; updatedBy?: string; updatedAt?: string };
+type Rule = { on: boolean; mode: "daily" | "instant"; time: string; formId: string; formName: string; from: string; text: string; since: string | null; updatedBy?: string; updatedAt?: string };
 type Last = { at: string; by: string; sent: number; failed: number; skipped: number; held?: number; error?: string };
 type Pending = { id: string; at: string; phone: string | null };
 type Log = { id: number; phone_mask: string | null; status: "sending" | "sent" | "failed" | "skipped" | "unknown"; reason: string | null; sent_by: string | null; created_at: string; sent_at: string | null };
-type Data = { rule: Rule; last: Last | null; tickAt: string | null; forms: { id: string; name: string }[]; hasTallyKey: boolean; tallyError: string; applied: boolean; configured: boolean; pending: Pending[]; log: Log[]; autoCap: number; hour: number };
+type Data = { rule: Rule; last: Last | null; tickAt: string | null; forms: { id: string; name: string }[]; hasTallyKey: boolean; tallyError: string; applied: boolean; configured: boolean; pending: Pending[]; log: Log[]; autoCap: number; tickMinutes: number };
 
 const STATUS: Record<Log["status"], { label: string; bg: string; fg: string }> = {
   sent: { label: "보냄", bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
@@ -60,17 +60,17 @@ export default function FormSmsPage() {
   }
 
   const set = <K extends keyof Rule>(k: K, v: Rule[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d));
-  const dirty = (["on", "formId", "from", "text"] as const).some((k) => draft[k] !== data.rule[k]);
+  const dirty = (["on", "mode", "time", "formId", "from", "text"] as const).some((k) => draft[k] !== data.rule[k]);
+  const whenOf = (r: Rule) => (r.mode === "instant" ? `${data.tickMinutes}분 안에` : `매일 ${r.time}에`);
   const bytes = smsBytes(draft.text);
   const knownForm = data.forms.some((f) => f.id === draft.formId);
-  const hh = String(data.hour).padStart(2, "0");
-  // 예약 신호가 이틀 넘게 안 왔으면(또는 한 번도) 13시 자동 발송이 안 도는 것
-  const tickStale = data.rule.on && (!data.tickAt || Date.now() - Date.parse(data.tickAt) > 49 * 3600_000);
+  // 예약 신호는 5분마다 온다 — 20분 넘게 안 왔으면(또는 한 번도) 자동 발송이 제때 돌지 않는 것
+  const tickStale = data.rule.on && (!data.tickAt || Date.now() - Date.parse(data.tickAt) > 20 * 60_000);
 
   const save = async () => {
     setError("");
     const turningOn = draft.on && (!data.rule.on || data.rule.formId !== draft.formId);
-    if (turningOn && !(await confirm({ title: "신청자 문자 켜기", body: `지금부터 들어오는 신청자에게 매일 ${hh}:00에 문자를 보냅니다. 이미 들어와 있는 신청에는 보내지 않습니다.`, action: "켜기", danger: false }))) return;
+    if (turningOn && !(await confirm({ title: "신청자 문자 켜기", body: `지금부터 들어오는 신청자에게 ${whenOf(draft)} 문자를 보냅니다. 이미 들어와 있는 신청에는 보내지 않습니다.`, action: "켜기", danger: false }))) return;
     setBusy("save");
     try {
       const formName = data.forms.find((f) => f.id === draft.formId)?.name || draft.formName || "";
@@ -106,7 +106,7 @@ export default function FormSmsPage() {
       {!data.configured && <div className="b2b-error">솔라피 키(SOLAPI_API_KEY·SOLAPI_API_SECRET)가 설정되지 않았습니다.</div>}
       {!data.hasTallyKey && <div className="b2b-error">Tally API 키가 없어 신청을 가져올 수 없습니다. 관리자 › 설정 › 연결의 Tally 에 API 키를 저장하세요.</div>}
       {data.tallyError && <div className="b2b-error">{data.tallyError}</div>}
-      {tickStale && <div className="sm-warn">예약 신호가 오지 않습니다. {hh}:00 자동 발송이 돌지 않으니 migration 167 의 예약 설정을 확인하세요.</div>}
+      {tickStale && <div className="sm-warn">예약 신호가 {data.tickMinutes}분마다 오지 않습니다. 정한 시각에 보내려면 migration 168 을 적용하세요.</div>}
       {data.last?.error && <div className="b2b-error">{dateTime(data.last.at)} {data.last.error}</div>}
       {error && <div className="b2b-error">{error}</div>}
 
@@ -121,7 +121,13 @@ export default function FormSmsPage() {
           </div>
           <div className="b2b-field">
             <span className="b2b-field-label">보내는 시각</span>
-            <div className="fs-fixed">매일 {hh}:00</div>
+            <div className="fs-inline">
+              <div className="sm-tabs" role="group" aria-label="보내는 시각">
+                <button type="button" className={`sm-tab ${draft.mode === "daily" ? "is-active" : ""}`} aria-pressed={draft.mode === "daily"} onClick={() => set("mode", "daily")}>매일</button>
+                <button type="button" className={`sm-tab ${draft.mode === "instant" ? "is-active" : ""}`} aria-pressed={draft.mode === "instant"} onClick={() => set("mode", "instant")}>즉시</button>
+              </div>
+              {draft.mode === "daily" && <input type="time" className="b2b-input fs-time" step={300} value={draft.time} onChange={(e) => set("time", e.target.value)} aria-label="매일 보내는 시각" />}
+            </div>
           </div>
           <label className="b2b-field">
             <span className="b2b-field-label">탈리 폼</span>
@@ -154,11 +160,11 @@ export default function FormSmsPage() {
         <div className="fs-head">
           <span className="fs-num">{qty(data.pending.length)}명</span>
           <span className="fs-sub">
-            {data.rule.on && data.rule.since ? `대기 중 · ${dateTime(data.rule.since)} 이후 신청자 · 다음 ${hh}:00에 발송` : "자동 발송이 꺼져 있습니다"}
+            {data.rule.on && data.rule.since ? `대기 중 · ${dateTime(data.rule.since)} 이후 신청자 · ${whenOf(data.rule)} 발송` : "자동 발송이 꺼져 있습니다"}
           </span>
           <button type="button" className="b2b-btn-secondary fs-end" onClick={sendNow} disabled={!!busy || !data.rule.on || dirty || data.pending.length === 0}>{busy === "send" ? "보내는 중" : "지금 보내기"}</button>
         </div>
-        {data.pending.length > data.autoCap && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>대기가 {qty(data.autoCap)}명을 넘으면 {hh}:00 자동 발송을 멈춥니다. 대상이 맞는지 확인한 뒤 [지금 보내기]를 누르세요.</div>}
+        {data.pending.length > data.autoCap && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>대기가 {qty(data.autoCap)}명을 넘으면 자동 발송을 멈춥니다. 대상이 맞는지 확인한 뒤 [지금 보내기]를 누르세요.</div>}
         {data.pending.length > 0 && (
           <div className="b2b-table-wrap">
             <table className="b2b-table fs-table">

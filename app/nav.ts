@@ -112,7 +112,7 @@ const NAV_ALL: NavCategory[] = [
       },
       { href: "/crm", label: "CRM 메시지맵", icon: "megaphone" },
       { href: "/audience", label: "오디언스 추출", icon: "user", beta: true }, // 베타 표시 = 정기배송 고객 탭이 실데이터 확인 전(2026-11-13 대표 지시). 2026-11-13 조건으로 고객을 찾아 이름·전화번호를 엑셀로(발송은 사람이 따로) — 검색·추출 기록이 화면에 남는다
-      { href: "/form-sms", label: "신청자 문자", icon: "chat", beta: true }, // 2026-11-14 탈리 폼 신청자에게 매일 13시에 문자(솔라피) — 재피어·구글시트 흐름 대체. 실제 발송 확인 전이라 BETA
+      { href: "/form-sms", label: "신청자 문자", icon: "chat", beta: true }, // 2026-11-14 탈리 폼 신청자에게 매일 정한 시각 또는 즉시 문자(솔라피) — 재피어·구글시트 흐름 대체. 실제 발송 확인 전이라 BETA
       { href: "/instagram", label: "인스타 자동 DM", icon: "chat" },
     ],
   },
