@@ -23,7 +23,8 @@
 .aud-export { margin-left: auto; }
 .aud-cond { font-size: var(--sm-fs-base); color: var(--sm-text-mid); margin-bottom: var(--sm-space-3); }
 
-.b2b-table.aud-table { min-width: 900px; }
+.b2b-table.aud-table { min-width: 1040px; }
+.aud-codes { white-space: normal; min-width: 120px; max-width: 220px; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-body); }
 .aud-items { white-space: normal; min-width: 220px; max-width: 360px; line-height: var(--sm-lh-body); }
 .b2b-table.aud-history { min-width: 820px; }
 .aud-cond-cell { white-space: normal; min-width: 280px; line-height: var(--sm-lh-body); }

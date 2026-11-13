@@ -19,8 +19,8 @@ export type AudienceCond = {
   minAmount?: number;                    // 전체 기간 누적 구매 금액(원)
   lastFrom?: string; lastTo?: string;    // 마지막 구매일
 };
-// items·order_names·channels = 조건(구매 기간·채널·상품)에 맞은 주문의 것 — 그 고객이 왜 뽑혔는지가 엑셀에 보인다(2026-11-13 대표: "추출시 적용된 필터가 나오면 좋겠음")
-export type AudienceRow = { customer_key: string; orders: number; amount: number; first_date: string; last_date: string; items: string; order_names: string; channels: string };
+// items·codes·order_names·channels = 조건(구매 기간·채널·상품)에 맞은 주문의 것 — 그 고객이 왜 뽑혔는지가 엑셀에 보인다(2026-11-13 대표: "추출시 적용된 필터가 나오면 좋겠음")
+export type AudienceRow = { customer_key: string; orders: number; amount: number; first_date: string; last_date: string; items: string; codes: string; order_names: string; channels: string };
 export type AudienceFound = { rows: AudienceRow[]; excluded: number; capped: boolean };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -112,13 +112,14 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
   if (c.lastTo) h.push(`a.last_date <= ${lit(c.lastTo)}`);
   const q = `
     with m as (
-      select o.customer_key, o.product_name, o.channel,
+      select o.customer_key, o.product_name, o.channel, upper(o.sku_code) as code,
              coalesce(nullif(concat_ws(' ', p.name, p.spec), ''), o.product_name) as item
       from sales_orders o left join products p on o.sku_code <> '' and upper(p.sku) = upper(o.sku_code)
       where ${w.join(" and ")}
     ),
     hit as (
       select customer_key, left(string_agg(distinct item, ' / '), 500) as items,
+             left(string_agg(distinct code, ', ') filter (where code <> ''), 300) as codes,
              left(string_agg(distinct product_name, ' / '), 800) as order_names, string_agg(distinct channel, ', ') as channels
       from m group by customer_key
     ),
@@ -127,7 +128,7 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
              min(o.order_date)::text as first_date, max(o.order_date)::text as last_date
       from sales_orders o join hit using (customer_key) group by o.customer_key
     )
-    select a.customer_key, a.orders, a.amount, a.first_date, a.last_date, h.items, h.order_names, h.channels, (s.customer_key is not null) as reachable
+    select a.customer_key, a.orders, a.amount, a.first_date, a.last_date, h.items, h.codes, h.order_names, h.channels, (s.customer_key is not null) as reachable
     from a join hit h on h.customer_key = a.customer_key left join sales_customer_summary s on s.customer_key = a.customer_key
     ${h.length ? `where ${h.join(" and ")}` : ""}
     order by a.last_date desc, a.customer_key`;
@@ -135,7 +136,7 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
   const all = await runSql<R>(sb, q, MAX_AUDIENCE + 1);
   const capped = all.length > MAX_AUDIENCE;
   const list = capped ? all.slice(0, MAX_AUDIENCE) : all;
-  const rows = list.filter((r) => r.reachable).map((r) => ({ customer_key: r.customer_key, orders: Number(r.orders) || 0, amount: Number(r.amount) || 0, first_date: r.first_date, last_date: r.last_date, items: r.items || "", order_names: r.order_names || "", channels: r.channels || "" }));
+  const rows = list.filter((r) => r.reachable).map((r) => ({ customer_key: r.customer_key, orders: Number(r.orders) || 0, amount: Number(r.amount) || 0, first_date: r.first_date, last_date: r.last_date, items: r.items || "", codes: r.codes || "", order_names: r.order_names || "", channels: r.channels || "" }));
   return { rows, excluded: list.length - rows.length, capped };
 }
 
