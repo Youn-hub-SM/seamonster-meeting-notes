@@ -86,7 +86,7 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 // ── 주제 보고서(2026-11-16) ── 주제 하나(예: 체험단)의 구매·광고 효율·페이지 전환·재구매를 한 화면에서 본다.
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
-export const TOPIC_VERSION = 2;
+export const TOPIC_VERSION = 3;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
@@ -111,7 +111,7 @@ export const TOPIC_REPEAT_DAYS = 30;   // 재구매율을 재는 창 — 처음 
 export type TopicSales = {
   ok: true;
   channels: { name: string; rev: number[]; orders: number[]; qty: number[] }[];        // 날짜 × 채널(주문 건수는 주문 1건 키)
-  items: { name: string; channel: string; rev: number[]; orders: number[]; qty: number[] }[]; // 날짜 × 채널 × 주문 상품명
+  items: { name: string; channel: string; rev: number[]; orders: number[]; qty: number[] }[]; // 날짜 × 채널 × '주문 상품명 / 옵션'
 };
 // 고객 — 그 상품을 '처음 산 날'로 센다(한 고객은 하루에만 들어가므로 기간으로 더해도 겹치지 않는다)
 export type TopicCust = {

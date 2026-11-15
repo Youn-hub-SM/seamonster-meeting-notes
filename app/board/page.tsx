@@ -578,7 +578,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   ];
   type IRow = TopicView["itemRows"][number];
   const iCols: Col<IRow>[] = [
-    { key: "name", label: "주문 상품명", w: 45, sort: (r) => r.name, cell: (r) => r.name },
+    { key: "name", label: "주문 상품명 / 옵션", w: 45, sort: (r) => r.name, cell: (r) => r.name },
     { key: "channel", label: "채널", sort: (r) => r.channel, cell: (r) => r.channel },
     { key: "rev", label: "매출(원)", num: true, bar: true, sort: (r) => r.rev, cell: (r) => won(r.rev) },
     { key: "orders", label: "주문 건수", num: true, sort: (r) => r.orders, cell: (r) => r.orders.toLocaleString() },
@@ -618,7 +618,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
       <Card w={6} title="페이지 방문 추이" right={tv.ga ? <CompareLegend v={tv} /> : undefined}>
         {tv.ga ? <CompareLine v={tv} values={tv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
       </Card>
-      <Card w={6} title="주문 상품명별">
+      <Card w={6} title="상품·옵션별 주문">
         <DataTable rows={tv.itemRows} cols={iCols} rowKey={(r) => r.key} sortKey="rev" empty={noSales}
           foot={["합계", "", won(tv.revS?.cur ?? 0), (tv.ordS?.cur ?? 0).toLocaleString()]} />
       </Card>

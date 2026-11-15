@@ -50,7 +50,7 @@ async function salesSection(sb: SupabaseClient, def: TopicDef, days: string[], b
   type R = { d: string; channel: string; rev: number; orders: number; qty: number };
   const [ch, it] = await Promise.all([
     runQ<R>(sb, `select o.order_date::text as d, o.channel, ${sums} from sales_orders o where ${where} group by 1, 2`),
-    runQ<R & { item: string }>(sb, `select o.order_date::text as d, o.channel, o.product_name as item, ${sums} from sales_orders o where ${where} group by 1, 2, 3`, ITEM_LIMIT),
+    runQ<R & { item: string }>(sb, `select o.order_date::text as d, o.channel, case when o.option_name <> '' then o.product_name || ' / ' || o.option_name else o.product_name end as item, ${sums} from sales_orders o where ${where} group by 1, 2, 3`, ITEM_LIMIT),   // 상품명 / 옵션 — 어떤 구성이 팔리는지
   ]);
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
   type Cell = { rev: number[]; orders: number[]; qty: number[] };
