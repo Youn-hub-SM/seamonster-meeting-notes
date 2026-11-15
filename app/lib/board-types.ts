@@ -82,3 +82,51 @@ export function lastKnown(xs: Nullable, i: number): number | null {
   for (let k = Math.min(i, xs.length - 1); k >= 0; k--) if (xs[k] != null) return xs[k] as number;
   return null;
 }
+
+// ── 주제 보고서(2026-11-16) ── 시기마다 달라지는 관심사(예: 체험단)를 조건 세 가지로 정의해 같은 틀로 본다.
+//  조건은 '이름에 든 말'(쉼표로 여러 개 = 그중 하나라도). 빈 조건의 구역은 계산하지 않는다(null).
+export const TOPIC_VERSION = 1;
+export const TOPIC_MAX = 12;
+export type BoardTopic = {
+  id: string; name: string;
+  products: string;   // 주문 상품명·옵션·상품코드에 든 말
+  pages: string;      // GA4 페이지 제목·주소에 든 말
+  ads: string;        // 메타 캠페인·광고 세트·광고 이름에 든 말
+};
+export type TopicSales = {
+  ok: true;
+  channels: { name: string; rev: number[]; orders: number[]; qty: number[] }[];        // 날짜 × 채널(주문 건수는 주문 1건 키)
+  items: { name: string; channel: string; rev: number[]; orders: number[]; qty: number[] }[]; // 날짜 × 채널 × 상품
+};
+// 고객 — 그 주제 상품을 '처음 산 날'로 센다(한 고객은 하루에만 들어가므로 기간으로 더해도 겹치지 않는다)
+export type TopicCust = {
+  ok: true;
+  first: number[];     // 그날 처음 산 고객 수
+  fresh: number[];     // 그중 씨몬스터 첫 주문이 그날인 고객(신규)
+  conv: number[];      // 그중 그 뒤(다음 날부터 기준일까지) 다른 상품을 산 고객
+  convRev: number[];   // 그 뒤 다른 상품 구매 매출
+};
+export type TopicGa = {
+  ok: true;
+  pages: { name: string; views: number[]; sessions: number[] }[];   // 조회가 많은 주소 + 기타
+  sources: { name: string; sessions: number[] }[];                  // 소스/매체 + 기타
+  truncated: boolean;
+};
+export type TopicMeta = {
+  ok: true;
+  ads: { id: string; campaign: string; adset: string; name: string; spend: number[]; impressions: number[]; clicks: number[]; purchases: number[]; value: number[] }[];
+  campaignOnly: boolean;   // true = 이름 조건을 캠페인 이름에만 적용함(광고 단위 조회가 거절돼 캠페인 단위로 받음)
+};
+export type TopicSnapshot = {
+  v: typeof TOPIC_VERSION;
+  id: string; cond: string;          // cond = 계산에 쓴 조건(달라지면 다시 계산)
+  base: string; builtAt: string; builtDay: string;
+  days: string[];
+  sales: TopicSales | Fail | null;   // null = 조건 없음
+  cust: TopicCust | Fail | null;
+  ga: TopicGa | Fail | null;         // null = 조건 없음 또는 연결 안 됨
+  meta: TopicMeta | Fail | null;
+};
+export const topicCond = (t: Pick<BoardTopic, "products" | "pages" | "ads">) => [t.products, t.pages, t.ads].join("\u0001");
+/** 쉼표로 나눈 조건어(앞뒤 공백 제거, 빈 것 제외, 5개까지) */
+export const topicWords = (s: string) => [...new Set(String(s || "").split(",").map((x) => x.trim()).filter(Boolean))].slice(0, 5);

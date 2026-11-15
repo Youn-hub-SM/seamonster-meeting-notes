@@ -191,6 +191,41 @@ export async function getAccountDaily(range: { since: string; until: string }): 
     .filter((d) => d.date).sort((x, y) => x.date.localeCompare(y.date));
 }
 
+// ── 이름에 든 말로 고른 광고의 일별 성과 ── 주요 지표 주제 보고서용(2026-11-16).
+//  캠페인·광고 세트·광고 이름 가운데 하나라도 그 말을 포함하면 그 광고를 넣는다(필드마다 한 번씩 조회해 광고·날짜로 합침 — 같은 행은 한 번만).
+//  광고 단위 조회가 거절되면(계정에 따라 데이터 과다·필터 미지원) 캠페인 단위로 받아 캠페인 이름만 본다 → campaignOnly = true.
+export type MetaNamedDay = { id: string; campaign: string; adset: string; name: string; date: string; spend: number; impressions: number; clicks: number; purchases: number; purchaseValue: number };
+export async function getDailyByName(range: { since: string; until: string }, words: string[]): Promise<{ rows: MetaNamedDay[]; campaignOnly: boolean }> {
+  const { accountId } = creds();
+  const kws = [...new Set(words.map((w) => w.trim()).filter(Boolean))];
+  if (!kws.length) return { rows: [], campaignOnly: false };
+  const base = { time_increment: 1, time_range: JSON.stringify({ since: range.since, until: range.until }) };
+  const metrics = "spend,impressions,inline_link_clicks,actions,action_values,purchase_roas";
+  const toRow = (r: InsightRow, id: string, adset: string, name: string): MetaNamedDay => {
+    const ins = parseInsight(r);
+    return { id, campaign: String(r.campaign_name || ""), adset, name, date: String(r.date_start || ""), spend: ins.spend, impressions: ins.impressions, clicks: ins.linkClicks || 0, purchases: ins.purchases, purchaseValue: ins.purchaseValue };
+  };
+  try {
+    const calls: Promise<InsightRow[]>[] = [];
+    for (const kw of kws) for (const field of ["campaign.name", "adset.name", "ad.name"])
+      calls.push(metaList<InsightRow>(`/${accountId}/insights`, { ...base, level: "ad", fields: `campaign_name,adset_name,ad_id,ad_name,${metrics}`, filtering: JSON.stringify([{ field, operator: "CONTAIN", value: kw }]) }, 200));
+    const seen = new Map<string, MetaNamedDay>();
+    for (const r of (await Promise.all(calls)).flat()) {
+      const id = String(r.ad_id || ""), date = String(r.date_start || "");
+      if (id && date && !seen.has(`${id}|${date}`)) seen.set(`${id}|${date}`, toRow(r, id, String(r.adset_name || ""), String(r.ad_name || "")));
+    }
+    return { rows: [...seen.values()], campaignOnly: false };
+  } catch {
+    const rows = await metaList<InsightRow>(`/${accountId}/insights`, { ...base, level: "campaign", fields: `campaign_id,campaign_name,${metrics}` }, 100);
+    const low = kws.map((k) => k.toLowerCase());
+    return {
+      rows: rows.filter((r) => { const n = String(r.campaign_name || "").toLowerCase(); return low.some((k) => n.includes(k)); })
+        .map((r) => toRow(r, String(r.campaign_id || ""), "", "")).filter((r) => r.id && r.date),
+      campaignOnly: true,
+    };
+  }
+}
+
 // ── 광고 켜기/끄기 ── campaign/adset/ad 공통(엔티티 id 로 status 변경).
 export async function setEntityStatus(id: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
   const { token } = creds();

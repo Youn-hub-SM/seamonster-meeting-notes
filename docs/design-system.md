@@ -284,6 +284,8 @@
 | `StackedBar` | 누적 세로막대 (기간 x 카테고리) | `periods` `series` **`colors`(색 지도)** `fmtAxis` `unit` |
 | `ComboBarLine` | 누적막대 + 선, 좌우 2축 | `barColors` **`barFmt`**(금액이면 `moneyCompact`) `lineFmt` `lineColor`(기본 `CHART_LINE` 보라) |
 | `BarList` | 가로 순위막대 카드 | `title` `caption` `accent` `fmt` `sub` `minPct` `sorted` |
+| `LineChart` | 선 그래프(시계열) — 여러 선, 값 없는 구간은 끊김 | `periods` `series: {key, values, color, dashed?}[]`(dashed = 비교 기간 같은 참고 선) `fmtAxis` `fmtTip` `unit` `height` |
+| `Sparkline` | 축·글자 없는 작은 추세선(스코어카드 안) | `values` `color` `height` |
 | `ChartLegend` | 범례 | `items: [라벨, 색][]` — 인라인 범례 재구현 금지 |
 | 헬퍼 | `moneyCompact`(억/만 축약) · `niceCeil`(축 상한) · `PIE_COLORS` · `CHART_LINE` | |
 

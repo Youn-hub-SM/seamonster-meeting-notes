@@ -95,3 +95,8 @@
   .bd-pop-custom { padding-left: 0; border-left: 0; padding-top: var(--sm-space-3); border-top: 1px solid var(--sm-border); }
   .bd-score-value { font-size: var(--sm-fs-xl); }
 }
+
+/* 주제 보고서 — 이름이 긴 열은 넓게(표가 열 폭을 똑같이 나누므로), 긴 페이지 주소는 한 줄로 줄인다(전체는 title) */
+.bd-table-wrap th.bd-w30 { width: 30%; }
+.bd-table-wrap th.bd-w45 { width: 45%; }
+.bd-path { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

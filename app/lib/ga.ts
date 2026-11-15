@@ -182,7 +182,8 @@ const RATE_METRICS = new Set<GaMetricKey>(["bounce_rate", "engagement_rate"]); /
 //  extraDimension = 사용자 정의 측정기준 API 이름(customEvent:sm_label 등, 속성 메타데이터에 있는 것만) — 열 이름은 ':' 뒤 부분
 const CUSTOM_DIM_RE = /^custom(Event|User|Item):[A-Za-z0-9_]{1,40}$/;
 //  scope: "all" = 추가 속성(GA4_EXTRA_PROPERTY_IDS)도 돌려 같은 차원 값끼리 측정항목을 더한다(CRM 캠페인 집계용). 기본 "main" = 본 속성만.
-export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number; filter?: GaFilter | null; extraDimension?: string | null; scope?: "main" | "all" }): Promise<GaReportResult> {
+//  filterAny = 조건 여러 개 중 하나라도 맞는 행(OR). filter 와 함께 주면 filterAny 를 쓴다(2026-11-16 주요 지표 주제 보고서: 페이지 제목 또는 주소).
+export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number; filter?: GaFilter | null; filterAny?: GaFilter[] | null; extraDimension?: string | null; scope?: "main" | "all" }): Promise<GaReportResult> {
   const dims = [...new Set(p.dimensions)].filter((d) => d in GA_DIMENSIONS);
   const extra = p.extraDimension && CUSTOM_DIM_RE.test(p.extraDimension) ? p.extraDimension : null;
   const extraLabel = extra ? extra.split(":")[1] : "";
@@ -194,6 +195,9 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
   if (itemDim && mets.some((m) => !m.startsWith("item"))) throw new Error("차원 item_name 에는 상품 측정항목(item_views·items_purchased·item_revenue)만 함께 씁니다.");
   const limit = Math.min(5000, Math.max(1, Math.round(p.limit || 200)));
   const f = p.filter && p.filter.dimension in GA_DIMENSIONS && String(p.filter.value || "").trim() ? p.filter : null;
+  const anyF = (p.filterAny || []).filter((x) => x && x.dimension in GA_DIMENSIONS && String(x.value || "").trim()).slice(0, 20);
+  const leaf = (x: GaFilter) => ({ filter: { fieldName: GA_DIMENSIONS[x.dimension].api, stringFilter: { matchType: MATCH_API[x.match] || "EXACT", value: String(x.value).trim(), caseSensitive: false } } });
+  const dimensionFilter = anyF.length > 1 ? { orGroup: { expressions: anyF.map(leaf) } } : anyF.length === 1 ? leaf(anyF[0]) : f ? leaf(f) : null;
   const { propertyId } = creds();
   const token = await accessToken();
   const pids = p.scope === "all" ? [propertyId, ...extraPropertyIds()] : [propertyId];
@@ -207,7 +211,7 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
       dateRanges: [{ startDate: p.since, endDate: p.until }],
       dimensions: [...dims.map((d) => ({ name: GA_DIMENSIONS[d].api })), ...(extra ? [{ name: extra }] : [])],
       metrics: mets.map((m) => ({ name: GA_METRICS[m].api })),
-      ...(f ? { dimensionFilter: { filter: { fieldName: GA_DIMENSIONS[f.dimension].api, stringFilter: { matchType: MATCH_API[f.match] || "EXACT", value: String(f.value).trim(), caseSensitive: false } } } } : {}),
+      ...(dimensionFilter ? { dimensionFilter } : {}),
       orderBys: dims.includes("date") ? [{ dimension: { dimensionName: "date" } }] : [{ metric: { metricName: GA_METRICS[mets[0]].api }, desc: true }],
       limit: String(limit + 1), // 한 줄 더 읽어 잘림을 안다
       keepEmptyRows: false,

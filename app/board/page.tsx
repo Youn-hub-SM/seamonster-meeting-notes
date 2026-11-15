@@ -4,11 +4,12 @@
 //  서버가 저장해 둔 180일치 묶음(/api/board, app/lib/board.ts)을 한 번 받아, 기간·필터를 바꿔도 여기서 잘라 계산한다(board-types.ts).
 //  날마다 더할 수 없는 값(신규·재구매 고객 수)과 상품별 표만 기간이 바뀔 때 /api/board/detail 로 받는다.
 //  비율(객단가·ROAS·전환율)은 기간 합계끼리 나눈다. 비교는 언제나 '직전 같은 길이 기간'.
+//  주제 보고서(2026-11-16): 고정 네 쪽 뒤에 주제 탭 — 조건(상품·페이지·광고 이름에 든 말)으로 정의한 주제의 묶음을 /api/board/topic 에서 받아 같은 기간으로 자른다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { StackedBar, LineChart, Sparkline, Donut, ChartLegend, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 import { won } from "@/app/lib/format";
-import { spanOf, spanSum, addSeries, cut, sumOf, pctChange, ratio, lastKnown, shiftDay, daysBetween, type BoardSnapshot, type BoardDetail, type Span } from "@/app/lib/board-types";
+import { spanOf, spanSum, addSeries, cut, sumOf, pctChange, ratio, lastKnown, shiftDay, daysBetween, topicWords, type BoardSnapshot, type BoardDetail, type Span, type BoardTopic, type TopicSnapshot } from "@/app/lib/board-types";
 
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
@@ -84,7 +85,7 @@ function Score({ label, value, delta, note, spark }: { label: string; value: str
 }
 
 // 표 — 열 제목을 눌러 정렬, 막대 열은 그 열의 최댓값 대비 폭. 합계 줄은 정렬과 무관하게 맨 아래.
-type Col<R> = { key: string; label: string; num?: boolean; bar?: boolean; sort: (r: R) => number | string; cell: (r: R) => React.ReactNode };
+type Col<R> = { key: string; label: string; num?: boolean; bar?: boolean; w?: 30 | 45; sort: (r: R) => number | string; cell: (r: R) => React.ReactNode };
 function DataTable<R>({ rows, cols, rowKey, sortKey, foot, empty }: { rows: R[]; cols: Col<R>[]; rowKey: (r: R) => string; sortKey: string; foot?: React.ReactNode[]; empty: string }) {
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({ key: sortKey, desc: true });
   const col = cols.find((c) => c.key === sort.key) || cols[0];
@@ -100,7 +101,7 @@ function DataTable<R>({ rows, cols, rowKey, sortKey, foot, empty }: { rows: R[];
       <table className="b2b-table is-compact">
         <thead>
           <tr>{cols.map((c) => (
-            <th key={c.key} className={c.num ? "num" : undefined} aria-sort={sort.key === c.key ? (sort.desc ? "descending" : "ascending") : undefined}>
+            <th key={c.key} className={[c.num ? "num" : "", c.w ? `bd-w${c.w}` : ""].filter(Boolean).join(" ") || undefined} aria-sort={sort.key === c.key ? (sort.desc ? "descending" : "ascending") : undefined}>
               <button type="button" className="bd-th-btn" onClick={() => setSort((s) => ({ key: c.key, desc: s.key === c.key ? !s.desc : true }))}>
                 {c.label}<span className="bd-th-arrow">{sort.key === c.key ? (sort.desc ? "▼" : "▲") : ""}</span>
               </button>
@@ -256,14 +257,15 @@ type View = ReturnType<typeof buildView>;
 const why = (x: BoardSnapshot["meta"] | BoardSnapshot["naver"] | BoardSnapshot["ga"]) => (x == null ? "연결 안 됨" : x.ok ? undefined : "조회 실패");
 
 // 이번 기간(실선)과 직전 기간(점선) — 같은 자리의 날끼리 겹쳐 그린다
-function CompareLine({ v, values, fmtAxis, fmtTip, unit }: { v: View; values: (number | null)[]; fmtAxis?: (n: number) => string; fmtTip?: (n: number) => string; unit: string }) {
+type Win = Pick<View, "labels" | "win" | "prevWin" | "hasPrev">;
+function CompareLine({ v, values, fmtAxis, fmtTip, unit }: { v: Win; values: (number | null)[]; fmtAxis?: (n: number) => string; fmtTip?: (n: number) => string; unit: string }) {
   const prev = v.prevWin(values);
   return (
     <LineChart periods={v.labels} fmtAxis={fmtAxis} fmtTip={fmtTip} unit={unit}
       series={[{ key: "이번 기간", values: v.win(values), color: C_CUR }, ...(prev ? [{ key: "직전 기간", values: prev, color: C_PREV, dashed: true }] : [])]} />
   );
 }
-const CompareLegend = ({ v }: { v: View }) => <ChartLegend items={[["이번 기간", C_CUR], ...(v.hasPrev ? [["직전 기간", C_PREV] as [string, string]] : [])]} />;
+const CompareLegend = ({ v }: { v: Win }) => <ChartLegend items={[["이번 기간", C_CUR], ...(v.hasPrev ? [["직전 기간", C_PREV] as [string, string]] : [])]} />;
 const mediaLegend = (v: View): [string, string][] => [...(v.meta ? [["메타", C_META] as [string, string]] : []), ...(v.naver ? [["네이버", C_NAVER] as [string, string]] : [])];
 function SpendLine({ v }: { v: View }) {
   if (!v.hasAds) return <div className="b2b-empty">광고 숫자가 없습니다.</div>;
@@ -460,21 +462,222 @@ function SubPage({ v, s, detail }: { v: View; s: BoardSnapshot; detail: DetailSt
   );
 }
 
+// ── 주제 보고서 ── 조건으로 정의한 주제 하나(예: 체험단)의 매출·고객·페이지·광고를 같은 기간으로 본다.
+const mondayOf = (ymd: string) => shiftDay(ymd, -((new Date(`${ymd}T00:00:00Z`).getUTCDay() + 6) % 7));
+function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
+  const N = t.days.length;
+  const win = <T,>(xs: T[]): T[] => cut(xs, sp.i0, sp.i1);
+  const prevWin = (xs: (number | null)[]): (number | null)[] | null => (sp.prev ? cut(xs, sp.prev.i0, sp.prev.i1) : null);
+  const labels = win(t.days).map(md);
+  const on = (name: string) => !salesCh || salesCh.includes(name);
+
+  // 매출 — 판매 채널 필터가 걸린다
+  const sales = t.sales?.ok ? t.sales : null;
+  const chSel = sales ? sales.channels.filter((c) => on(c.name)) : [];
+  const rev = addSeries(chSel.map((c) => c.rev), N), orders = addSeries(chSel.map((c) => c.orders), N), qty = addSeries(chSel.map((c) => c.qty), N);
+  const revS = sales ? spanSum(rev, sp) : null, ordS = sales ? spanSum(orders, sp) : null, qtyS = sales ? spanSum(qty, sp) : null;
+  const itemRows = (sales ? sales.items.filter((x) => on(x.channel)) : []).map((x) => { const r = spanSum(x.rev, sp); return { key: `${x.channel}|${x.name}`, name: x.name, channel: x.channel, rev: r.cur, prevRev: r.prev, qty: sumOf(win(x.qty)), orders: sumOf(win(x.orders)) }; })
+    .filter((r) => r.rev !== 0 || r.orders > 0).sort((a, b) => b.rev - a.rev);
+
+  // 고객 — 처음 산 날 기준(채널 필터 없음). 기간이 14일을 넘으면 주(월~일)로 묶는다
+  const cust = t.cust?.ok ? t.cust : null;
+  const firstS = cust ? spanSum(cust.first, sp) : null, freshS = cust ? spanSum(cust.fresh, sp) : null, convS = cust ? spanSum(cust.conv, sp) : null, convRevS = cust ? spanSum(cust.convRev, sp) : null;
+  const byWeek = sp.n > 14;
+  const cohort: { key: string; from: string; to: string; first: number; fresh: number; conv: number; convRev: number }[] = [];
+  if (cust) for (let i = sp.i0; i <= sp.i1; i++) {
+    const d = t.days[i], key = byWeek ? mondayOf(d) : d;
+    let row = cohort[cohort.length - 1];
+    if (!row || row.key !== key) { row = { key, from: d, to: d, first: 0, fresh: 0, conv: 0, convRev: 0 }; cohort.push(row); }
+    row.to = d; row.first += cust.first[i] || 0; row.fresh += cust.fresh[i] || 0; row.conv += cust.conv[i] || 0; row.convRev += cust.convRev[i] || 0;
+  }
+
+  // 페이지(GA4) — 조회는 주소별 합, 방문은 소스/매체별 합(한 방문은 소스 하나)
+  const ga = t.ga?.ok ? t.ga : null;
+  const views = addSeries(ga ? ga.pages.map((x) => x.views) : [], N), sessions = addSeries(ga ? ga.sources.map((x) => x.sessions) : [], N);
+  const viewsS = ga ? spanSum(views, sp) : null, sesS = ga ? spanSum(sessions, sp) : null;
+  const pageRows = (ga ? ga.pages : []).map((x) => { const r = spanSum(x.views, sp); return { name: x.name, views: r.cur, prevViews: r.prev, sessions: sumOf(win(x.sessions)) }; }).filter((r) => r.views > 0 || r.sessions > 0).sort((a, b) => b.views - a.views);
+  const sourceRows = (ga ? ga.sources : []).map((x) => ({ name: x.name, sessions: sumOf(win(x.sessions)) })).filter((r) => r.sessions > 0).sort((a, b) => b.sessions - a.sessions);
+
+  // 메타 광고
+  const meta = t.meta?.ok ? t.meta : null;
+  const pick = (k: "spend" | "value" | "purchases") => addSeries(meta ? meta.ads.map((a) => a[k]) : [], N);
+  const spend = pick("spend"), value = pick("value"), purchases = pick("purchases");
+  const spendS = meta ? spanSum(spend, sp) : null, valueS = meta ? spanSum(value, sp) : null, purS = meta ? spanSum(purchases, sp) : null;
+  const adRows = (meta ? meta.ads : []).map((a) => {
+    const sp1 = sumOf(win(a.spend)), val = sumOf(win(a.value));
+    return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: sumOf(win(a.impressions)), clicks: sumOf(win(a.clicks)), purchases: sumOf(win(a.purchases)), value: val, roas: ratio(val, sp1) };
+  }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
+
+  return { win, prevWin, hasPrev: !!sp.prev, labels, sales, rev, orders, revS, ordS, qtyS, itemRows, cust, firstS, freshS, convS, convRevS, byWeek, cohort,
+    ga, views, viewsS, sesS, pageRows, sourceRows, meta, spend, value, spendS, valueS, purS, adRows };
+}
+type TopicView = ReturnType<typeof buildTopicView>;
+
+function TopicPage({ tv, t, topic }: { tv: TopicView; t: TopicSnapshot; topic: BoardTopic }) {
+  // 숫자가 비는 까닭 — 조건을 안 넣었거나, 연결이 없거나, 조회가 실패했다
+  const whyT = (x: { ok: boolean } | null, cond: string) => (x == null ? (cond ? "연결 안 됨" : "조건 없음") : x.ok ? undefined : "조회 실패");
+  const convRate = tv.firstS && tv.convS ? ratio(tv.convS.cur * 100, tv.firstS.cur) : null;
+  const roas = tv.spendS && tv.valueS ? ratio(tv.valueS.cur, tv.spendS.cur) : null;
+  const fresh = tv.freshS?.cur ?? 0, first = tv.firstS?.cur ?? 0;
+  type CRow = TopicView["cohort"][number];
+  const cCols: Col<CRow>[] = [
+    { key: "key", label: tv.byWeek ? "처음 산 주" : "처음 산 날", sort: (r) => r.key, cell: (r) => (tv.byWeek ? `${md(r.from)}~${md(r.to)}` : `${md(r.from)} (${weekday(r.from)})`) },
+    { key: "first", label: "처음 산 고객", num: true, bar: true, sort: (r) => r.first, cell: (r) => r.first.toLocaleString() },
+    { key: "fresh", label: "신규", num: true, sort: (r) => r.fresh, cell: (r) => r.fresh.toLocaleString() },
+    { key: "conv", label: "이후 구매", num: true, sort: (r) => r.conv, cell: (r) => r.conv.toLocaleString() },
+    { key: "rate", label: "이후 구매율", num: true, sort: (r) => ratio(r.conv, r.first) ?? -1, cell: (r) => pct1(ratio(r.conv * 100, r.first)) ?? "-" },
+    { key: "convRev", label: "이후 구매 매출(원)", num: true, sort: (r) => r.convRev, cell: (r) => won(r.convRev) },
+  ];
+  type IRow = TopicView["itemRows"][number];
+  const iCols: Col<IRow>[] = [
+    { key: "name", label: "주문 상품명", w: 45, sort: (r) => r.name, cell: (r) => r.name },
+    { key: "channel", label: "채널", sort: (r) => r.channel, cell: (r) => r.channel },
+    { key: "rev", label: "매출(원)", num: true, bar: true, sort: (r) => r.rev, cell: (r) => won(r.rev) },
+    { key: "qty", label: "수량", num: true, sort: (r) => r.qty, cell: (r) => r.qty.toLocaleString() },
+    { key: "orders", label: "주문 건수", num: true, sort: (r) => r.orders, cell: (r) => r.orders.toLocaleString() },
+  ];
+  type PRow = TopicView["pageRows"][number];
+  const pCols: Col<PRow>[] = [
+    { key: "name", label: "페이지 주소", w: 45, sort: (r) => r.name, cell: (r) => <span className="bd-path" title={r.name}>{r.name}</span> },
+    { key: "views", label: "조회", num: true, bar: true, sort: (r) => r.views, cell: (r) => r.views.toLocaleString() },
+    { key: "sessions", label: "방문", num: true, sort: (r) => r.sessions, cell: (r) => r.sessions.toLocaleString() },
+    { key: "delta", label: "직전 대비", num: true, sort: (r) => pctChange(r.views, r.prevViews) ?? -Infinity, cell: (r) => <DeltaText d={pctDelta(r.views, r.prevViews, "up")} /> },
+  ];
+  type SRow = TopicView["sourceRows"][number];
+  const sesTotal = tv.sesS?.cur ?? 0;
+  const sCols: Col<SRow>[] = [
+    { key: "name", label: "소스/매체", sort: (r) => r.name, cell: (r) => r.name },
+    { key: "sessions", label: "방문", num: true, bar: true, sort: (r) => r.sessions, cell: (r) => r.sessions.toLocaleString() },
+    { key: "share", label: "비중", num: true, sort: (r) => r.sessions, cell: (r) => (sesTotal > 0 ? `${(Math.round((r.sessions / sesTotal) * 1000) / 10).toFixed(1)}%` : "-") },
+  ];
+  type ARow = TopicView["adRows"][number];
+  const aCols: Col<ARow>[] = [
+    { key: "name", label: "광고", w: 30, sort: (r) => r.name, cell: (r) => <span title={r.path || undefined}>{r.name}</span> },
+    { key: "spend", label: "광고비(원)", num: true, bar: true, sort: (r) => r.spend, cell: (r) => won(r.spend) },
+    { key: "imp", label: "노출", num: true, sort: (r) => r.impressions, cell: (r) => r.impressions.toLocaleString() },
+    { key: "clicks", label: "클릭", num: true, sort: (r) => r.clicks, cell: (r) => r.clicks.toLocaleString() },
+    { key: "purchases", label: "구매", num: true, sort: (r) => r.purchases, cell: (r) => r.purchases.toLocaleString() },
+    { key: "value", label: "구매액(원)", num: true, sort: (r) => r.value, cell: (r) => won(r.value) },
+    { key: "roas", label: "ROAS", num: true, sort: (r) => r.roas ?? 0, cell: (r) => fix2(r.roas) ?? "-" },
+  ];
+  const noSales = topic.products ? "조건에 맞는 주문이 없습니다." : "상품 조건이 없습니다.";
+  const noPages = topic.pages ? "조건에 맞는 페이지 조회가 없습니다." : "페이지 조건이 없습니다.";
+  const noAds = topic.ads ? "조건에 맞는 광고 숫자가 없습니다." : "광고 조건이 없습니다.";
+  return (
+    <>
+      <Errors list={[failOf("매출", t.sales), failOf("고객", t.cust), failOf("GA4", t.ga), failOf("메타 광고", t.meta),
+        t.ga?.ok && t.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다. 페이지 조건을 좁히세요." : "",
+        t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 이름에만 조건을 적용했습니다." : ""].filter(Boolean)} />
+      <Score label="매출" value={wonS(tv.revS?.cur)} delta={pctDelta(tv.revS?.cur ?? null, tv.revS?.prev ?? null, "up")} note={tv.sales ? prevNote(tv.revS?.prev != null ? `${moneyCompact(tv.revS.prev)}원` : null) : whyT(t.sales, topic.products)} spark={tv.sales ? tv.win(tv.rev) : undefined} />
+      <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `수량 ${(tv.qtyS?.cur ?? 0).toLocaleString()}개` : whyT(t.sales, topic.products)} spark={tv.sales ? tv.win(tv.orders) : undefined} />
+      <Score label="처음 산 고객" value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명` : whyT(t.cust, topic.products)} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />
+      <Score label="이후 다른 상품 구매" value={pct1(convRate)} note={tv.cust ? `${(tv.convS?.cur ?? 0).toLocaleString()}명 · ${moneyCompact(tv.convRevS?.cur ?? 0)}원` : whyT(t.cust, topic.products)} />
+      <Score label="페이지 조회" value={cnt(tv.viewsS?.cur, "회")} delta={pctDelta(tv.viewsS?.cur ?? null, tv.viewsS?.prev ?? null, "up")} note={tv.ga ? `방문 ${sesTotal.toLocaleString()}회` : whyT(t.ga, topic.pages)} spark={tv.ga ? tv.win(tv.views) : undefined} />
+      <Score label="메타 광고비" value={wonS(tv.spendS?.cur)} delta={pctDelta(tv.spendS?.cur ?? null, tv.spendS?.prev ?? null, "none")} note={tv.meta ? `ROAS ${fix2(roas) ?? "-"} · 구매 ${(tv.purS?.cur ?? 0).toLocaleString()}건` : whyT(t.meta, topic.ads)} spark={tv.meta ? tv.win(tv.spend) : undefined} />
+      <Card w={8} title="처음 산 고객 추이" right={tv.cust ? <CompareLegend v={tv} /> : undefined}>
+        {tv.cust ? <CompareLine v={tv} values={tv.cust.first} unit="명" /> : <div className="b2b-empty">{noSales}</div>}
+      </Card>
+      <Card w={4} title="신규·기존 고객">
+        {first > 0 ? <DonutCard data={[["신규", fresh], ["기존", Math.max(0, first - fresh)]]} colors={[C_CUR, C_NAVER]} center={first.toLocaleString()} centerSub="명" fmt={(n) => `${n.toLocaleString()}명`} />
+          : <div className="b2b-empty">{tv.cust ? "이 기간에 처음 산 고객이 없습니다." : noSales}</div>}
+      </Card>
+      <Card w={6} title="매출 추이" right={tv.sales ? <CompareLegend v={tv} /> : undefined}>
+        {tv.sales ? <CompareLine v={tv} values={tv.rev} fmtAxis={moneyCompact} fmtTip={won} unit="원" /> : <div className="b2b-empty">{noSales}</div>}
+      </Card>
+      <Card w={6} title="페이지 조회 추이" right={tv.ga ? <CompareLegend v={tv} /> : undefined}>
+        {tv.ga ? <CompareLine v={tv} values={tv.views} unit="회" /> : <div className="b2b-empty">{noPages}</div>}
+      </Card>
+      <Card w={6} title={tv.byWeek ? "처음 산 주별 고객" : "처음 산 날별 고객"}>
+        <DataTable rows={tv.cohort.filter((r) => r.first > 0)} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty={tv.cust ? "이 기간에 처음 산 고객이 없습니다." : noSales}
+          foot={["합계", first.toLocaleString(), fresh.toLocaleString(), (tv.convS?.cur ?? 0).toLocaleString(), pct1(convRate) ?? "-", won(tv.convRevS?.cur ?? 0)]} />
+      </Card>
+      <Card w={6} title="상품별">
+        <DataTable rows={tv.itemRows} cols={iCols} rowKey={(r) => r.key} sortKey="rev" empty={noSales}
+          foot={["합계", "", won(tv.revS?.cur ?? 0), (tv.qtyS?.cur ?? 0).toLocaleString(), (tv.ordS?.cur ?? 0).toLocaleString()]} />
+      </Card>
+      <Card w={8} title="페이지별"><DataTable rows={tv.pageRows} cols={pCols} rowKey={(r) => r.name} sortKey="views" empty={noPages} /></Card>
+      <Card w={4} title="유입 경로별"><DataTable rows={tv.sourceRows} cols={sCols} rowKey={(r) => r.name} sortKey="sessions" empty={noPages} /></Card>
+      <Card w={6} title="메타 광고비와 구매액" right={tv.meta ? <ChartLegend items={[["광고비", C_CUR], ["구매액", C_NAVER]]} /> : undefined}>
+        {tv.meta ? <LineChart periods={tv.labels} fmtAxis={moneyCompact} fmtTip={won} unit="원" series={[{ key: "광고비", values: tv.win(tv.spend), color: C_CUR }, { key: "구매액", values: tv.win(tv.value), color: C_NAVER }]} />
+          : <div className="b2b-empty">{noAds}</div>}
+      </Card>
+      <Card w={6} title="광고별"><DataTable rows={tv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
+    </>
+  );
+}
+
+// 주제 만들기·조건 바꾸기 — 조건은 '이름에 든 말'(쉼표로 여러 개 = 그중 하나라도)
+function TopicForm({ topic, onClose, onDone }: { topic: BoardTopic | null; onClose: () => void; onDone: (topics: BoardTopic[], saved: BoardTopic | null) => void }) {
+  const [f, setF] = useState({ name: topic?.name ?? "", products: topic?.products ?? "", pages: topic?.pages ?? "", ads: topic?.ads ?? "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [ask, setAsk] = useState(false); // [주제 삭제]를 한 번 눌러 확인을 기다리는 중
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [onClose]);
+  async function post(body: Record<string, unknown>, fallback: string) {
+    setBusy(true); setErr("");
+    try {
+      const r = await fetch("/api/board/topic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; topics?: BoardTopic[]; topic?: BoardTopic };
+      if (!r.ok || !j.ok || !j.topics) throw new Error(j.error || fallback);
+      onDone(j.topics, j.topic ?? null);
+    } catch (e) { setErr(e instanceof Error ? e.message : fallback); setBusy(false); }
+  }
+  const field = (k: "name" | "products" | "pages" | "ads", label: string, placeholder: string, max: number) => (
+    <label className="b2b-field"><span className="b2b-field-label">{label}</span>
+      <input className="b2b-input" value={f[k]} maxLength={max} placeholder={placeholder} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value }))} /></label>
+  );
+  const empty = !f.name.trim() || !(topicWords(f.products).length || topicWords(f.pages).length || topicWords(f.ads).length);
+  return (
+    <div className="b2b-modal-backdrop">
+      <form className="b2b-modal" onSubmit={(e) => { e.preventDefault(); if (!empty && !busy) post({ action: "save", topic: { id: topic?.id, ...f } }, "주제를 저장하지 못했습니다"); }}>
+        <div className="b2b-modal-head">
+          <h2 className="b2b-modal-title">{topic ? "주제 조건 바꾸기" : "주제 추가"}</h2>
+          <button type="button" className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
+        </div>
+        <div className="b2b-modal-body">
+          {err && <div className="b2b-error">{err}</div>}
+          {field("name", "주제 이름", "체험단", 20)}
+          {field("products", "상품 이름에 든 말", "쉼표로 여러 개", 220)}
+          {field("pages", "페이지 제목·주소에 든 말", "쉼표로 여러 개", 220)}
+          {field("ads", "광고 이름에 든 말", "쉼표로 여러 개", 220)}
+        </div>
+        <div className="b2b-modal-foot">
+          {topic ? <button type="button" className="b2b-btn-danger" disabled={busy} onClick={() => (ask ? post({ action: "delete", id: topic.id }, "주제를 삭제하지 못했습니다") : setAsk(true))}>{ask ? "삭제 확인" : "주제 삭제"}</button> : <span />}
+          <div className="b2b-modal-foot-right">
+            <button type="button" className="b2b-btn-secondary" onClick={onClose}>닫기</button>
+            <button type="submit" className="b2b-btn-primary" disabled={busy || empty}>{busy ? "저장 중..." : "주제 저장"}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function BoardPage() {
   const [snap, setSnap] = useState<BoardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false); // 서버가 응답 뒤에 새 묶음을 계산하는 중
   const [busy, setBusy] = useState(false);             // [다시 계산] 진행 중
   const [error, setError] = useState("");
-  const [page, setPage] = useState<PageKey>("summary");
+  const [page, setPage] = useState<PageKey | `t:${string}`>("summary");   // t:<id> = 주제 보고서
   const [range, setRange] = useState<Range | null>(null);
   const [filters, setFilters] = useState<Filters>({ salesCh: null, media: null, gaCh: null });
   const [detail, setDetail] = useState<DetailState>({ key: "", data: null, loading: false, error: "" });
+  const [topics, setTopics] = useState<BoardTopic[]>([]);
+  const [topicState, setTopicState] = useState<{ key: string; data: TopicSnapshot | null; loading: boolean; error: string }>({ key: "", data: null, loading: false, error: "" });
+  const [form, setForm] = useState<{ topic: BoardTopic | null } | null>(null);   // 주제 추가·조건 바꾸기 창
+  const [nonce, setNonce] = useState(0);                                          // 조건을 저장하면 올려 그 주제를 다시 받는다
   const tries = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    // 주제 목록 — 본 묶음을 받을 때마다 같이(다른 사람이 주제를 만들거나 지워도 따라온다). 실패해도 화면은 그대로
+    fetch("/api/board/topic", { cache: "no-store" }).then((r) => r.json()).then((j: { ok?: boolean; topics?: BoardTopic[] }) => { if (j.ok && j.topics) setTopics(j.topics); }).catch(() => {});
     try {
       const r = await fetch("/api/board", { cache: "no-store" });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; snapshot?: BoardSnapshot | null; refreshing?: boolean };
@@ -497,6 +700,29 @@ export default function BoardPage() {
     const hourly = setInterval(() => { tries.current = 0; load(); }, HOURLY_MS);
     return () => { clearInterval(hourly); if (timer.current) clearTimeout(timer.current); };
   }, [load]);
+
+  // 주제 묶음 — 그 주제 탭을 볼 때만. 본 묶음이 새로 계산됐거나(builtAt) 조건을 저장하면(nonce) 다시 받는다
+  const topicId = page.startsWith("t:") ? page.slice(2) : "";
+  const topicKey = topicId && snap ? `${topicId}|${snap.builtAt}|${nonce}` : "";
+  const haveTopicKey = topicState.key;
+  useEffect(() => {
+    if (!topicKey || haveTopicKey === topicKey) return;
+    const ac = new AbortController();
+    setTopicState((x) => ({ ...x, loading: true, error: "" }));
+    (async () => {
+      try {
+        const r = await fetch(`/api/board/topic?id=${encodeURIComponent(topicId)}`, { cache: "no-store", signal: ac.signal });
+        const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; data?: TopicSnapshot };
+        if (!r.ok || !j.ok || !j.data) throw new Error(j.error || "주제 숫자를 불러오지 못했습니다");
+        setTopicState({ key: topicKey, data: j.data, loading: false, error: "" });
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        setTopicState({ key: topicKey, data: null, loading: false, error: e instanceof Error ? e.message : "주제 숫자를 불러오지 못했습니다" });
+      }
+    })();
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topicKey, haveTopicKey]);
 
   // 기간 — 프리셋은 기준일이 바뀌면 따라 움직이고, 직접 고른 기간은 묶음 범위 안으로만 맞춘다
   const base = snap?.base ?? "", minDay = snap?.days[0] ?? "";
@@ -540,6 +766,16 @@ export default function BoardPage() {
 
   async function rebuild() {
     setBusy(true); setError("");
+    if (topicId) {
+      try {
+        const r = await fetch("/api/board/topic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "rebuild", id: topicId }) });
+        const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; data?: TopicSnapshot };
+        if (!r.ok || !j.ok || !j.data) throw new Error(j.error || "주제 숫자를 다시 계산하지 못했습니다");
+        setTopicState({ key: topicKey, data: j.data, loading: false, error: "" });
+      } catch (e) { setError(e instanceof Error ? e.message : "주제 숫자를 다시 계산하지 못했습니다"); }
+      finally { setBusy(false); }
+      return;
+    }
     try {
       const r = await fetch("/api/board", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "rebuild" }) });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; snapshot?: BoardSnapshot };
@@ -558,6 +794,14 @@ export default function BoardPage() {
   const n = range ? daysBetween(range.from, range.to) : 0;
   // 기간이 바뀌어 아직 새 상세를 못 받았으면 옛 상세를 보여 주지 않는다
   const shownDetail: DetailState = detail.key === detailKey ? detail : { key: detailKey, data: null, loading: true, error: "" };
+  // 주제 — 다른 주제·옛 조건의 묶음은 보여 주지 않는다
+  const curTopic = topicId ? topics.find((t) => t.id === topicId) ?? null : null;
+  const tData = topicId && topicState.key === topicKey ? topicState.data : null;
+  const tError = topicId && topicState.key === topicKey ? topicState.error : "";
+  const tSpan = tData && range ? spanOf(tData.days, range.from, range.to) : null;
+  const tView = tData && tSpan ? buildTopicView(tData, tSpan, filters.salesCh) : null;
+  const quote = (s: string) => topicWords(s).map((w) => `'${w}'`).join("·");
+  const topicBasis = curTopic ? [curTopic.products && `상품 ${quote(curTopic.products)}`, curTopic.pages && `페이지 ${quote(curTopic.pages)}`, curTopic.ads && `광고 ${quote(curTopic.ads)}`].filter(Boolean).join(" · ") : "";
   return (
     <div className="bd-root">
       <header className="bd-bar">
@@ -569,7 +813,9 @@ export default function BoardPage() {
           <h1 className="bd-title">주요 지표</h1>
           <div className="sm-tabs bd-pages">
             {PAGES.map(([k, label]) => <button key={k} type="button" className={`sm-tab ${page === k ? "is-active" : ""}`} onClick={() => setPage(k)}>{label}</button>)}
+            {topics.map((t) => <button key={t.id} type="button" className={`sm-tab ${page === `t:${t.id}` ? "is-active" : ""}`} onClick={() => setPage(`t:${t.id}`)}>{t.name}</button>)}
           </div>
+          <button type="button" className="b2b-link-btn" onClick={() => setForm({ topic: null })}>주제 추가</button>
           <div className="bd-bar-right">
             {snap && <span className="bd-state">{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
             <button type="button" className="b2b-btn-secondary" onClick={rebuild} disabled={busy || loading}>{busy ? "계산 중..." : "다시 계산"}</button>
@@ -579,9 +825,12 @@ export default function BoardPage() {
           <div className="bd-controls">
             <DateControl range={range} base={snap.base} min={snap.days[0]} onChange={setRange} />
             <FilterControl label="판매 채널" options={salesOptions} value={filters.salesCh} onChange={(x) => setFilters((f) => ({ ...f, salesCh: x }))} />
-            <FilterControl label="광고 매체" options={mediaOptions} value={filters.media} onChange={(x) => setFilters((f) => ({ ...f, media: x }))} />
-            <FilterControl label="유입 채널" options={gaOptions} value={filters.gaCh} onChange={(x) => setFilters((f) => ({ ...f, gaCh: x }))} />
-            <span className="bd-basis">기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</span>
+            {!topicId && <FilterControl label="광고 매체" options={mediaOptions} value={filters.media} onChange={(x) => setFilters((f) => ({ ...f, media: x }))} />}
+            {!topicId && <FilterControl label="유입 채널" options={gaOptions} value={filters.gaCh} onChange={(x) => setFilters((f) => ({ ...f, gaCh: x }))} />}
+            {curTopic && <button type="button" className="b2b-btn-secondary" onClick={() => setForm({ topic: curTopic })}>조건 바꾸기</button>}
+            {topicId
+              ? <span className="bd-basis">기준일 {snap.base} ({weekday(snap.base)}) · {topicBasis ? `${topicBasis} 포함 · ` : ""}고객은 그 상품을 처음 산 날 기준 · 이후 구매는 기준일까지</span>
+              : <span className="bd-basis">기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</span>}
           </div>
         )}
       </header>
@@ -589,12 +838,26 @@ export default function BoardPage() {
         {error && <div className="b2b-error bd-c12">{error}</div>}
         {loading && !snap ? <div className="b2b-loading bd-c12">불러오는 중...</div>
           : !snap ? (refreshing ? <div className="b2b-loading bd-c12">처음 계산하는 중...</div> : null)
+          : topicId ? (
+            !curTopic ? <div className="b2b-empty bd-c12">없는 주제입니다.</div>
+              : tError ? <div className="b2b-error bd-c12">{tError}</div>
+              : !tData ? <div className="b2b-loading bd-c12">주제 숫자를 계산하는 중...</div>
+              : !tView ? <div className="b2b-empty bd-c12">고른 기간에 숫자가 없습니다.</div>
+              : <TopicPage tv={tView} t={tData} topic={curTopic} />
+          )
           : !view ? <div className="b2b-empty bd-c12">고른 기간에 숫자가 없습니다.</div>
           : page === "summary" ? <SummaryPage v={view} s={snap} />
           : page === "sales" ? <SalesPage v={view} s={snap} detail={shownDetail} />
           : page === "ads" ? <AdsPage v={view} s={snap} />
           : <SubPage v={view} s={snap} detail={shownDetail} />}
       </main>
+      {form && (
+        <TopicForm topic={form.topic} onClose={() => setForm(null)} onDone={(list, saved) => {
+          setTopics(list); setForm(null);
+          if (saved) { setPage(`t:${saved.id}`); setNonce((x) => x + 1); }   // 저장 = 그 주제로 가서 새 조건으로 다시 받는다
+          else setPage((cur) => (cur.startsWith("t:") && !list.some((t) => `t:${t.id}` === cur) ? "summary" : cur));
+        }} />
+      )}
     </div>
   );
 }
