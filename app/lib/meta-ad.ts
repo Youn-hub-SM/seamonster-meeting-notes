@@ -193,9 +193,10 @@ export async function getAccountDaily(range: { since: string; until: string }): 
 
 // ── 이름에 든 말로 고른 광고의 일별 성과 ── 주요 지표 주제 보고서용(2026-11-16).
 //  캠페인·광고 세트·광고 이름 가운데 하나라도 그 말을 포함하면 그 광고를 넣는다(필드마다 한 번씩 조회해 광고·날짜로 합침 — 같은 행은 한 번만).
+//  nameFields 로 볼 이름을 좁힌다(예: 캠페인 이름만).
 //  광고 단위 조회가 거절되면(계정에 따라 데이터 과다·필터 미지원) 캠페인 단위로 받아 캠페인 이름만 본다 → campaignOnly = true.
 export type MetaNamedDay = { id: string; campaign: string; adset: string; name: string; date: string; spend: number; impressions: number; clicks: number; purchases: number; purchaseValue: number };
-export async function getDailyByName(range: { since: string; until: string }, words: string[]): Promise<{ rows: MetaNamedDay[]; campaignOnly: boolean }> {
+export async function getDailyByName(range: { since: string; until: string }, words: string[], nameFields: ("campaign.name" | "adset.name" | "ad.name")[] = ["campaign.name", "adset.name", "ad.name"]): Promise<{ rows: MetaNamedDay[]; campaignOnly: boolean }> {
   const { accountId } = creds();
   const kws = [...new Set(words.map((w) => w.trim()).filter(Boolean))];
   if (!kws.length) return { rows: [], campaignOnly: false };
@@ -207,7 +208,7 @@ export async function getDailyByName(range: { since: string; until: string }, wo
   };
   try {
     const calls: Promise<InsightRow[]>[] = [];
-    for (const kw of kws) for (const field of ["campaign.name", "adset.name", "ad.name"])
+    for (const kw of kws) for (const field of nameFields)
       calls.push(metaList<InsightRow>(`/${accountId}/insights`, { ...base, level: "ad", fields: `campaign_name,adset_name,ad_id,ad_name,${metrics}`, filtering: JSON.stringify([{ field, operator: "CONTAIN", value: kw }]) }, 200));
     const seen = new Map<string, MetaNamedDay>();
     for (const r of (await Promise.all(calls)).flat()) {

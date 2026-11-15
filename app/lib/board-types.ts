@@ -83,50 +83,67 @@ export function lastKnown(xs: Nullable, i: number): number | null {
   return null;
 }
 
-// ── 주제 보고서(2026-11-16) ── 시기마다 달라지는 관심사(예: 체험단)를 조건 세 가지로 정의해 같은 틀로 본다.
-//  조건은 '이름에 든 말'(쉼표로 여러 개 = 그중 하나라도). 빈 조건의 구역은 계산하지 않는다(null).
-export const TOPIC_VERSION = 1;
-export const TOPIC_MAX = 12;
-export type BoardTopic = {
+// ── 주제 보고서(2026-11-16) ── 주제 하나(예: 체험단)의 구매·광고 효율·페이지 전환·재구매를 한 화면에서 본다.
+//  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
+//  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
+export const TOPIC_VERSION = 2;
+export type TopicDef = {
   id: string; name: string;
-  products: string;   // 주문 상품명·옵션·상품코드에 든 말
-  pages: string;      // GA4 페이지 제목·주소에 든 말
-  ads: string;        // 메타 캠페인·광고 세트·광고 이름에 든 말
+  basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
+  productLike: string[];              // 주문 상품명에 든 구절(그중 하나라도) — 그 상품만 잡히게 충분히 길게
+  landing: { label: string; paths: string[]; scroll: [label: string, event: string][] } | null;   // 랜딩 페이지 주소(정확히)와 스크롤 깊이 이벤트
+  gaItemNames: string[];              // GA4 상품명(정확히) — 주문서 진입 수
+  metaCampaignLike: string[];         // 메타 캠페인 이름에 든 말
 };
+export const TOPICS: TopicDef[] = [
+  {
+    // 체험단 = 공식몰 상품번호 172(이유식 생선 체험단). 페이지 seamonster.kr/baby, 메타 '이유식 체험단' 캠페인. 네이버 광고 없음.
+    id: "trial", name: "체험단",
+    basis: "공식몰 상품번호 172 주문 · 페이지 /baby · 메타 '이유식 체험단' 캠페인",
+    productLike: ["이유식 생선 체험단 패키지", "첫 생선일기 전용 패키지"],   // 172 의 지금 이름과 예전 이름
+    landing: { label: "/baby", paths: ["/baby", "/baby/", "/baby/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
+    gaItemNames: ["씨몬스터 이유식 생선 체험단 패키지", "우리 아이 첫 생선일기 전용 패키지"],
+    metaCampaignLike: ["이유식 체험단"],
+  },
+];
+export const TOPIC_REPEAT_DAYS = 30;   // 재구매율을 재는 창 — 처음 산 날부터 30일 안
+
 export type TopicSales = {
   ok: true;
   channels: { name: string; rev: number[]; orders: number[]; qty: number[] }[];        // 날짜 × 채널(주문 건수는 주문 1건 키)
-  items: { name: string; channel: string; rev: number[]; orders: number[]; qty: number[] }[]; // 날짜 × 채널 × 상품
+  items: { name: string; channel: string; rev: number[]; orders: number[]; qty: number[] }[]; // 날짜 × 채널 × 주문 상품명
 };
-// 고객 — 그 주제 상품을 '처음 산 날'로 센다(한 고객은 하루에만 들어가므로 기간으로 더해도 겹치지 않는다)
+// 고객 — 그 상품을 '처음 산 날'로 센다(한 고객은 하루에만 들어가므로 기간으로 더해도 겹치지 않는다)
 export type TopicCust = {
   ok: true;
   first: number[];     // 그날 처음 산 고객 수
   fresh: number[];     // 그중 씨몬스터 첫 주문이 그날인 고객(신규)
   conv: number[];      // 그중 그 뒤(다음 날부터 기준일까지) 다른 상품을 산 고객
+  conv30: number[];    // 그중 30일 안에 다른 상품을 산 고객
   convRev: number[];   // 그 뒤 다른 상품 구매 매출
+  after: { name: string; customers: number[]; rev: number[] }[];   // 그 뒤에 산 상품(처음 산 날 기준 배열) — 고객 수가 많은 15개
 };
+// 랜딩 페이지(GA4) — 단계는 세션 수(그 페이지에서 그 이벤트가 있었던 방문), 주문서 진입은 그 상품의 결제 시작 수량
 export type TopicGa = {
   ok: true;
-  pages: { name: string; views: number[]; sessions: number[] }[];   // 조회가 많은 주소 + 기타
-  sources: { name: string; sessions: number[] }[];                  // 소스/매체 + 기타
+  visits: number[];                                   // 페이지를 본 방문
+  scroll: { label: string; sessions: number[] }[];    // 스크롤 깊이 단계
+  checkout: number[];                                 // 주문서 진입(GA4 상품 결제 시작)
+  sources: { name: string; sessions: number[] }[];    // 소스/매체 + 기타
   truncated: boolean;
 };
 export type TopicMeta = {
   ok: true;
   ads: { id: string; campaign: string; adset: string; name: string; spend: number[]; impressions: number[]; clicks: number[]; purchases: number[]; value: number[] }[];
-  campaignOnly: boolean;   // true = 이름 조건을 캠페인 이름에만 적용함(광고 단위 조회가 거절돼 캠페인 단위로 받음)
+  campaignOnly: boolean;   // true = 광고 단위로 받지 못해 캠페인 단위로 받음
 };
 export type TopicSnapshot = {
   v: typeof TOPIC_VERSION;
-  id: string; cond: string;          // cond = 계산에 쓴 조건(달라지면 다시 계산)
+  id: string; cond: string;          // cond = 계산에 쓴 정의(달라지면 다시 계산)
   base: string; builtAt: string; builtDay: string;
   days: string[];
-  sales: TopicSales | Fail | null;   // null = 조건 없음
-  cust: TopicCust | Fail | null;
-  ga: TopicGa | Fail | null;         // null = 조건 없음 또는 연결 안 됨
+  sales: TopicSales | Fail;
+  cust: TopicCust | Fail;
+  ga: TopicGa | Fail | null;         // null = 정의에 없음 또는 연결 안 됨
   meta: TopicMeta | Fail | null;
 };
-export const topicCond = (t: Pick<BoardTopic, "products" | "pages" | "ads">) => [t.products, t.pages, t.ads].join("\u0001");
-/** 쉼표로 나눈 조건어(앞뒤 공백 제거, 빈 것 제외, 5개까지) */
-export const topicWords = (s: string) => [...new Set(String(s || "").split(",").map((x) => x.trim()).filter(Boolean))].slice(0, 5);

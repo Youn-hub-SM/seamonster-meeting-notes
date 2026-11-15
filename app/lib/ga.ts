@@ -165,6 +165,7 @@ export const GA_METRICS = {
   key_events: { api: "keyEvents", label: "주요 이벤트" },                      // GA 에서 '주요 이벤트(전환)'로 표시한 이벤트 수
   item_views: { api: "itemsViewed", label: "상품 조회" },
   items_purchased: { api: "itemsPurchased", label: "상품 구매 수량" },
+  items_checked_out: { api: "itemsCheckedOut", label: "상품 결제 시작 수량" },    // 2026-11-16 주문서 진입(begin_checkout)에 담긴 그 상품 수량
   item_revenue: { api: "itemRevenue", label: "상품 구매액(원)" },
 } as const;
 export type GaDimensionKey = keyof typeof GA_DIMENSIONS;
