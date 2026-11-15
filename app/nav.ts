@@ -140,6 +140,7 @@ const NAV_ALL: NavCategory[] = [
     tools: [
       { href: "/briefing", label: "종합 리포트", icon: "bulb" }, // 2026-09-30 모두 열람, 일일·주간·월간 탭(매출 업로드 뒤 담당자가 생성·발송)
       { href: "/sales/report", label: "매출 리포트", icon: "trend" },
+      { href: "/board", label: "주요 지표", icon: "bars", beta: true }, // 2026-11-15 메뉴 없는 독립 화면(AppShell 이 /board 에서 셸을 뺀다) — 매출·광고·유입·정기배송·고객을 한 화면에, 하루 한 번 계산. 운영 실데이터 확인 전이라 BETA
       { href: "/voc/manufacturer", label: "월간 VOC 리포트", icon: "megaphone" },
     ],
   },

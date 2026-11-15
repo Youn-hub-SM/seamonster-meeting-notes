@@ -176,6 +176,20 @@ export async function getInsightSeries(range: { since: string; until: string }, 
   return out;
 }
 
+// ── 계정 합계 일별 ── 주요 지표(/board)용(2026-11-15). 캠페인으로 나누지 않고 하루 한 행 — 56일도 요청 한 번.
+export type MetaAccountDay = { date: string; spend: number; purchases: number; purchaseValue: number };
+export async function getAccountDaily(range: { since: string; until: string }): Promise<MetaAccountDay[]> {
+  const { accountId } = creds();
+  const rows = await metaList<InsightRow>(`/${accountId}/insights`, {
+    level: "account",
+    time_increment: 1,
+    time_range: JSON.stringify({ since: range.since, until: range.until }),
+    fields: "spend,actions,action_values,purchase_roas",
+  }, 100);
+  return rows.map((r) => { const ins = parseInsight(r); return { date: String(r.date_start || ""), spend: ins.spend, purchases: ins.purchases, purchaseValue: ins.purchaseValue }; })
+    .filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ── 광고 켜기/끄기 ── campaign/adset/ad 공통(엔티티 id 로 status 변경).
 export async function setEntityStatus(id: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
   const { token } = creds();

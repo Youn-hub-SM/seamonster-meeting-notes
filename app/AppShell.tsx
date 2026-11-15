@@ -48,6 +48,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === "/b2b/login") return <>{children}</>;
   // 파도소리(/factory)는 별도 사이트처럼 자체 셸을 쓴다 — app/factory/layout.tsx
   if (pathname.startsWith("/factory")) return <>{children}</>;
+  // 주요 지표(/board)는 메뉴 없이 숫자만 있는 독립 화면 — app/board/layout.tsx
+  if (pathname === "/board" || pathname.startsWith("/board/")) return <>{children}</>;
 
   const isCollapsed = collapsed && desktop;
 

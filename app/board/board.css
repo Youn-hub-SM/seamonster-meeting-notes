@@ -1,0 +1,35 @@
+/* 주요 지표(/board) 전용 — 접두사 .bd-. 타일·탭·배지·차트는 공용(.b2b-stat-card·.sm-tab·.b2b-status-pill·charts.tsx)을 그대로 쓴다. */
+.bd-brand { display: flex; align-items: center; margin-bottom: var(--sm-space-5); }
+.bd-brand img { height: 18px; width: auto; display: block; }
+.bd-actions { align-items: center; }
+.bd-state { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.bd-actions .sm-tabs { flex-wrap: nowrap; }
+.bd-actions .sm-tab { white-space: nowrap; }
+/* 좁은 화면 — 공용 규칙이 액션을 같은 폭으로 늘린다. 계산 시각은 한 줄을 통째로, 탭과 버튼은 제 폭으로 */
+@media (max-width: 900px) {
+  .bd-actions > .bd-state { flex: 0 0 100%; text-align: left; padding: 0; }
+  .bd-actions > .sm-tabs, .bd-actions > button { flex: 0 0 auto; }
+}
+
+.bd-sec { margin-bottom: var(--sm-space-6); }
+.bd-basis { margin-top: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+
+/* KPI 띠 — 타일 폭이 190 아래로 내려가면 줄을 바꾼다(11자리 금액 한 줄) */
+.bd-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sm-space-3); margin: var(--sm-space-4) 0 var(--sm-space-5); }
+.bd-kpi .b2b-stat-card { padding: var(--sm-space-4); min-width: 0; }
+.bd-kpi .b2b-stat-card-value { margin-top: var(--sm-space-2); }
+.bd-kpi .b2b-stat-card-value.is-light { color: var(--sm-text-light); }
+.bd-delta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-1) var(--sm-space-2); margin-top: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
+
+/* 차트 줄 — 넓은 추세 + 좁은 순위 */
+.bd-charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sm-space-5); align-items: start; }
+.bd-charts.is-half { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.bd-chart-head { flex-wrap: wrap; gap: var(--sm-space-2); }
+.bd-charts .b2b-card-head { padding-top: 0; margin-bottom: var(--sm-space-3); }
+/* 구역 제목은 차트 제목(15)보다 한 단계 크게 */
+.bd-sec > .b2b-card-head .b2b-card-title { font-size: var(--sm-fs-xl); }
+
+/* 차트는 폭 480 아래에서 옆으로 밀린다(charts.tsx) — 두 칸이 그보다 좁아지기 전에 한 줄로 */
+@media (max-width: 1100px) {
+  .bd-charts, .bd-charts.is-half { grid-template-columns: 1fr; }
+}
