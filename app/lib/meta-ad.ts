@@ -176,18 +176,19 @@ export async function getInsightSeries(range: { since: string; until: string }, 
   return out;
 }
 
-// ── 계정 합계 일별 ── 주요 지표(/board)용(2026-11-15). 캠페인으로 나누지 않고 하루 한 행 — 56일도 요청 한 번.
-export type MetaAccountDay = { date: string; spend: number; purchases: number; purchaseValue: number };
+// ── 계정 합계 일별 ── 주요 지표(/board)용(2026-11-15). 캠페인으로 나누지 않고 하루 한 행 — 긴 기간도 요청 몇 번.
+//  clicks = 링크 클릭(광고관리자 기본) — 종합 리포트와 같은 기준.
+export type MetaAccountDay = { date: string; spend: number; purchases: number; purchaseValue: number; impressions: number; clicks: number };
 export async function getAccountDaily(range: { since: string; until: string }): Promise<MetaAccountDay[]> {
   const { accountId } = creds();
   const rows = await metaList<InsightRow>(`/${accountId}/insights`, {
     level: "account",
     time_increment: 1,
     time_range: JSON.stringify({ since: range.since, until: range.until }),
-    fields: "spend,actions,action_values,purchase_roas",
+    fields: "spend,impressions,inline_link_clicks,actions,action_values,purchase_roas",
   }, 100);
-  return rows.map((r) => { const ins = parseInsight(r); return { date: String(r.date_start || ""), spend: ins.spend, purchases: ins.purchases, purchaseValue: ins.purchaseValue }; })
-    .filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date));
+  return rows.map((r) => { const ins = parseInsight(r); return { date: String(r.date_start || ""), spend: ins.spend, purchases: ins.purchases, purchaseValue: ins.purchaseValue, impressions: ins.impressions, clicks: ins.linkClicks || 0 }; })
+    .filter((d) => d.date).sort((x, y) => x.date.localeCompare(y.date));
 }
 
 // ── 광고 켜기/끄기 ── campaign/adset/ad 공통(엔티티 id 로 status 변경).

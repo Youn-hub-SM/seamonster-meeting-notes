@@ -1,35 +1,97 @@
-/* 주요 지표(/board) 전용 — 접두사 .bd-. 타일·탭·배지·차트는 공용(.b2b-stat-card·.sm-tab·.b2b-status-pill·charts.tsx)을 그대로 쓴다. */
-.bd-brand { display: flex; align-items: center; margin-bottom: var(--sm-space-5); }
-.bd-brand img { height: 18px; width: auto; display: block; }
-.bd-actions { align-items: center; }
-.bd-state { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-.bd-actions .sm-tabs { flex-wrap: nowrap; }
-.bd-actions .sm-tab { white-space: nowrap; }
-/* 좁은 화면 — 공용 규칙이 액션을 같은 폭으로 늘린다. 계산 시각은 한 줄을 통째로, 탭과 버튼은 제 폭으로 */
-@media (max-width: 900px) {
-  .bd-actions > .bd-state { flex: 0 0 100%; text-align: left; padding: 0; }
-  .bd-actions > .sm-tabs, .bd-actions > button { flex: 0 0 auto; }
+/* 주요 지표(/board) 전용 — 접두사 .bd-. 루커 스튜디오식 보고서 틀: 위에 붙는 제목·컨트롤 띠 + 옅은 바탕 위 흰 칸 12열 격자.
+   탭·버튼·표·배너·차트는 공용(.sm-tab·.b2b-btn-*·.b2b-table·.b2b-error·charts.tsx)을 그대로 쓴다. */
+.bd-root { min-height: 100vh; min-height: 100dvh; background: var(--sm-bg-subtle); }
+
+/* 위 띠 — 제목·쪽 탭·계산 시각, 그 아래 기간·필터 */
+.bd-bar { position: sticky; top: 0; z-index: 30; background: var(--sm-white); border-bottom: 1px solid var(--sm-border); }
+.bd-bar-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-3) var(--sm-space-4); padding: var(--sm-space-3) var(--sm-space-5); }
+.bd-logo img { height: 18px; width: auto; display: block; }
+.bd-title { font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-black); }
+.bd-pages { flex-wrap: nowrap; }
+.bd-pages .sm-tab { white-space: nowrap; }
+.bd-bar-right { margin-left: auto; display: flex; align-items: center; gap: var(--sm-space-3); }
+.bd-state { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); white-space: nowrap; }
+.bd-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-2); padding: 0 var(--sm-space-5) var(--sm-space-3); }
+.bd-basis { margin-left: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+
+/* 컨트롤 — 누르면 아래로 열리는 작은 창(떠 있는 면) */
+.bd-ctl { position: relative; }
+.bd-ctl-btn { display: inline-flex; align-items: center; gap: var(--sm-space-2); min-height: 36px; padding: 6px var(--sm-space-3); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius); background: var(--sm-white); font-family: inherit; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-black); cursor: pointer; white-space: nowrap; }
+.bd-ctl-btn:hover { background: var(--sm-bg-subtle); }
+.bd-ctl-btn:disabled { opacity: 0.5; cursor: default; }
+.bd-ctl-btn.is-on { background: var(--sm-orange-light); }
+.bd-ctl-btn strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bd-ctl-k { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.bd-ctl-caret { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.bd-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; min-width: 220px; max-width: calc(100vw - 24px); padding: var(--sm-space-3); background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card); box-shadow: var(--sm-shadow-float); }
+.bd-pop-date { display: flex; gap: var(--sm-space-4); }
+.bd-pop-list { display: flex; flex-direction: column; gap: 2px; min-width: 130px; }
+.bd-pop-item { text-align: left; padding: var(--sm-space-2) var(--sm-space-3); border: 0; border-radius: var(--sm-radius); background: transparent; font-family: inherit; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-black); cursor: pointer; }
+.bd-pop-item:hover { background: var(--sm-bg-subtle); }
+.bd-pop-item.is-active { background: var(--sm-orange-light); font-weight: 600; }
+.bd-pop-custom { display: flex; flex-direction: column; gap: var(--sm-space-3); min-width: 180px; padding-left: var(--sm-space-4); border-left: 1px solid var(--sm-border); }
+.bd-pop-tools { display: flex; gap: var(--sm-space-3); padding-bottom: var(--sm-space-2); margin-bottom: var(--sm-space-2); border-bottom: 1px solid var(--sm-border); }
+.bd-pop-checks { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+.bd-check { display: flex; align-items: center; gap: var(--sm-space-2); padding: 6px var(--sm-space-1); font-size: var(--sm-fs-base); cursor: pointer; white-space: nowrap; }
+.bd-check:hover { background: var(--sm-bg-subtle); }
+
+/* 격자와 칸 */
+.bd-canvas { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--sm-space-3); align-items: start; max-width: 1800px; margin: 0 auto; padding: var(--sm-space-4) var(--sm-space-5) var(--sm-space-6); }
+.bd-card { min-width: 0; padding: var(--sm-space-4); background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); }
+.bd-c2 { grid-column: span 2; }
+.bd-c4 { grid-column: span 4; }
+.bd-c6 { grid-column: span 6; }
+.bd-c8 { grid-column: span 8; }
+.bd-c12 { grid-column: 1 / -1; }
+.bd-card-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sm-space-2); margin-bottom: var(--sm-space-3); }
+.bd-card-title { font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-black); }
+.bd-canvas > .b2b-error, .bd-canvas > .b2b-loading, .bd-canvas > .b2b-empty { margin: 0; }
+
+/* 스코어카드 — 이름·큰 숫자·증감·작은 추세선 */
+.bd-score { align-self: stretch; display: flex; flex-direction: column; }
+.bd-score-label { font-size: var(--sm-fs-xs); font-weight: 500; color: var(--sm-text-mid); }
+.bd-score-value { margin-top: var(--sm-space-1); font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-kpi); color: var(--sm-black); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bd-score-value.is-light { color: var(--sm-text-light); }
+.bd-score-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--sm-space-2); min-height: 18px; margin-top: var(--sm-space-1); font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.bd-score-spark { margin-top: auto; padding-top: var(--sm-space-2); }
+.bd-delta { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bd-delta.is-good { color: var(--sm-success); }
+.bd-delta.is-bad { color: var(--sm-danger); }
+.bd-delta.is-flat { color: var(--sm-text-mid); }
+
+/* 표 — 열 제목 정렬 버튼, 칸 안 막대, 합계 줄 */
+.bd-table-wrap { max-height: 440px; overflow-y: auto; }
+.bd-table-wrap thead th { position: sticky; top: 0; z-index: 1; background: var(--sm-bg-subtle); }
+.bd-th-btn { display: inline-flex; align-items: center; gap: var(--sm-space-1); padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+.bd-th-arrow { display: inline-block; width: 10px; font-size: 10px; color: var(--sm-text-mid); }
+.bd-cellbar { position: relative; display: block; min-width: 96px; }
+.bd-cellbar > i { position: absolute; left: 0; top: 50%; height: 18px; transform: translateY(-50%); background: var(--sm-orange-border); border-radius: 3px; }
+.bd-cellbar > span { position: relative; }
+.bd-table-wrap td:first-child { overflow-wrap: normal; min-width: 96px; }
+.bd-foot td { position: sticky; bottom: 0; background: var(--sm-bg-subtle); font-weight: 600; border-top: 1px solid var(--sm-border); }
+
+/* 도넛 + 범례 */
+.bd-donut { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-4); }
+.bd-donut-legend { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 6px; font-size: var(--sm-fs-base); }
+.bd-donut-name { gap: 6px; min-width: 0; }
+.bd-donut-legend .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 좁아지면 — 스코어카드는 한 줄 3개, 그다음 2개. 차트·표는 한 줄 통째로 */
+@media (max-width: 1500px) {
+  .bd-c2 { grid-column: span 4; }
 }
-
-.bd-sec { margin-bottom: var(--sm-space-6); }
-.bd-basis { margin-top: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-
-/* KPI 띠 — 타일 폭이 190 아래로 내려가면 줄을 바꾼다(11자리 금액 한 줄) */
-.bd-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sm-space-3); margin: var(--sm-space-4) 0 var(--sm-space-5); }
-.bd-kpi .b2b-stat-card { padding: var(--sm-space-4); min-width: 0; }
-.bd-kpi .b2b-stat-card-value { margin-top: var(--sm-space-2); }
-.bd-kpi .b2b-stat-card-value.is-light { color: var(--sm-text-light); }
-.bd-delta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-1) var(--sm-space-2); margin-top: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
-
-/* 차트 줄 — 넓은 추세 + 좁은 순위 */
-.bd-charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sm-space-5); align-items: start; }
-.bd-charts.is-half { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.bd-chart-head { flex-wrap: wrap; gap: var(--sm-space-2); }
-.bd-charts .b2b-card-head { padding-top: 0; margin-bottom: var(--sm-space-3); }
-/* 구역 제목은 차트 제목(15)보다 한 단계 크게 */
-.bd-sec > .b2b-card-head .b2b-card-title { font-size: var(--sm-fs-xl); }
-
-/* 차트는 폭 480 아래에서 옆으로 밀린다(charts.tsx) — 두 칸이 그보다 좁아지기 전에 한 줄로 */
 @media (max-width: 1100px) {
-  .bd-charts, .bd-charts.is-half { grid-template-columns: 1fr; }
+  .bd-bar { position: static; }   /* 좁은 화면에서는 띠가 여러 줄이 돼 화면을 가린다 — 붙이지 않는다 */
+  .bd-c4, .bd-c6, .bd-c8 { grid-column: 1 / -1; }
+  .bd-bar-right { margin-left: 0; }
+  .bd-basis { margin-left: 0; flex-basis: 100%; }
+}
+@media (max-width: 700px) {
+  .bd-c2 { grid-column: span 6; }
+  .bd-bar-row, .bd-controls { padding-left: var(--sm-space-3); padding-right: var(--sm-space-3); }
+  .bd-canvas { padding: var(--sm-space-3); gap: var(--sm-space-2); }
+  .bd-pages { overflow-x: auto; max-width: 100%; }
+  .bd-pop-date { flex-direction: column; }
+  .bd-pop-custom { padding-left: 0; border-left: 0; padding-top: var(--sm-space-3); border-top: 1px solid var(--sm-border); }
+  .bd-score-value { font-size: var(--sm-fs-xl); }
 }

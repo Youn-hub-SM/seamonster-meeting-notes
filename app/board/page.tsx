@@ -1,196 +1,462 @@
 "use client";
 
-// 주요 지표 — 매출·주문 / 광고·유입 / 정기배송·고객을 한 화면에(메뉴 없는 독립 화면, 2026-11-15).
-//  서버가 저장해 둔 하루치 묶음(/api/board, app/lib/board.ts)을 받아, 최근 7일·28일 값과 직전 같은 기간 대비를 여기서 계산한다.
-//  계산은 board-types.ts 한 곳 — 비율(객단가·ROAS·전환율)은 기간 합계끼리 나눈다.
-import { useCallback, useEffect, useRef, useState } from "react";
+// 주요 지표 — 루커 스튜디오식 보고서 화면(2026-11-15 개편): 위에 기간 선택기·필터, 아래에 스코어카드·선 그래프·표를 칸칸이 배치.
+//  서버가 저장해 둔 180일치 묶음(/api/board, app/lib/board.ts)을 한 번 받아, 기간·필터를 바꿔도 여기서 잘라 계산한다(board-types.ts).
+//  날마다 더할 수 없는 값(신규·재구매 고객 수)과 상품별 표만 기간이 바뀔 때 /api/board/detail 로 받는다.
+//  비율(객단가·ROAS·전환율)은 기간 합계끼리 나눈다. 비교는 언제나 '직전 같은 길이 기간'.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { StackedBar, ComboBarLine, TrendChart, BarList, ChartLegend, PIE_COLORS, CHART_LINE, moneyCompact } from "@/app/components/charts";
+import { StackedBar, LineChart, Sparkline, Donut, ChartLegend, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 import { won } from "@/app/lib/format";
-import { KPI_TONE_COLOR, type KpiTone } from "@/app/lib/report-kpi";
-import { BOARD_WINDOWS, windowSum, tailOf, pctChange, ratio, lastKnown, type BoardSnapshot, type BoardWindow } from "@/app/lib/board-types";
+import { spanOf, spanSum, addSeries, cut, sumOf, pctChange, ratio, lastKnown, shiftDay, daysBetween, type BoardSnapshot, type BoardDetail, type Span } from "@/app/lib/board-types";
 
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 const weekday = (ymd: string) => WD[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
 const POLL_MS = 40_000, POLL_MAX = 4, HOURLY_MS = 60 * 60_000;
+const C_CUR = PIE_COLORS[1], C_PREV = "var(--sm-text-light)", C_META = PIE_COLORS[1], C_NAVER = PIE_COLORS[2];
 
-// ── 증감 배지 ── good = 어느 쪽이 좋은가(없음 = 판정하지 않는 숫자: 광고비 등)
+// ── 기간 ──
+type Preset = { key: string; label: string; range: (base: string) => [string, string] };
+const lastN = (n: number) => (base: string): [string, string] => [shiftDay(base, -(n - 1)), base];
+const PRESETS: Preset[] = [
+  { key: "d1", label: "기준일 하루", range: lastN(1) },
+  { key: "d7", label: "최근 7일", range: lastN(7) },
+  { key: "d14", label: "최근 14일", range: lastN(14) },
+  { key: "d28", label: "최근 28일", range: lastN(28) },
+  { key: "d90", label: "최근 90일", range: lastN(90) },
+  { key: "mtd", label: "이번 달", range: (b) => [`${b.slice(0, 8)}01`, b] },
+  { key: "lm", label: "지난달", range: (b) => { const to = shiftDay(`${b.slice(0, 8)}01`, -1); return [`${to.slice(0, 8)}01`, to]; } },
+];
+type Range = { preset: string; from: string; to: string };
+type Filters = { salesCh: string[] | null; media: string[] | null; gaCh: string[] | null }; // null = 전체
+const PAGES = [["summary", "요약"], ["sales", "매출"], ["ads", "광고·유입"], ["sub", "정기배송·고객"]] as const;
+type PageKey = (typeof PAGES)[number][0];
+
+// ── 증감 ── good = 어느 쪽이 좋은가(none = 판정하지 않는 숫자: 광고비 등)
 type Good = "up" | "down" | "none";
-type Delta = { text: string; tone: KpiTone } | null;
-const toneOf = (diff: number, flat: boolean, good: Good): KpiTone => (good === "none" || flat ? "neutral" : (diff > 0) === (good === "up") ? "success" : "danger");
-const sign = (n: number) => (n > 0 ? "+" : "");
+type Delta = { text: string; tone: "good" | "bad" | "flat" } | null;
+const arrow = (d: number) => (d > 0 ? "▲" : d < 0 ? "▼" : "");
+const toneOf = (diff: number, flat: boolean, good: Good): "good" | "bad" | "flat" => (good === "none" || flat ? "flat" : (diff > 0) === (good === "up") ? "good" : "bad");
 function pctDelta(cur: number | null, prev: number | null, good: Good): Delta {
-  if (cur == null || prev == null) return null;
   const p = pctChange(cur, prev);
   if (p == null) return null;
   const r = Math.round(p * 10) / 10;
-  return { text: `${sign(r)}${r}%`, tone: toneOf(r, Math.abs(r) < 1, good) };
+  return { text: `${arrow(r)} ${Math.abs(r)}%`.trim(), tone: toneOf(r, Math.abs(r) < 1, good) };
 }
 function ppDelta(cur: number | null, prev: number | null, good: Good): Delta { // 비율(%)끼리의 차 — %p
   if (cur == null || prev == null) return null;
   const r = Math.round((cur - prev) * 10) / 10;
-  return { text: `${sign(r)}${r}%p`, tone: toneOf(r, r === 0, good) };
+  return { text: `${arrow(r)} ${Math.abs(r)}%p`.trim(), tone: toneOf(r, r === 0, good) };
 }
 function absDelta(cur: number | null, prev: number | null, unit: string, good: Good): Delta {
   if (cur == null || prev == null) return null;
   const r = cur - prev;
-  return { text: `${sign(r)}${r.toLocaleString()}${unit}`, tone: toneOf(r, r === 0, good) };
+  return { text: `${arrow(r)} ${Math.abs(r).toLocaleString()}${unit}`.trim(), tone: toneOf(r, r === 0, good) };
+}
+const DeltaText = ({ d }: { d: Delta }) => (d ? <span className={`bd-delta is-${d.tone}`}>{d.text}</span> : <span className="bd-delta is-flat">-</span>);
+
+const wonS = (n: number | null | undefined) => (n == null ? null : `${won(n)}원`);
+const cnt = (n: number | null | undefined, unit: string) => (n == null ? null : `${Math.round(n).toLocaleString()}${unit}`);
+const fix2 = (v: number | null | undefined) => (v == null ? null : v.toFixed(2));
+const pct1 = (v: number | null | undefined) => (v == null ? null : `${v.toFixed(1)}%`);
+const pct2 = (v: number | null | undefined) => (v == null ? null : `${v.toFixed(2)}%`);
+const prevNote = (text: string | null | undefined) => (text ? `직전 ${text}` : undefined);
+
+// ── 부품 ──
+function Card({ w, title, right, children }: { w: 4 | 6 | 8 | 12; title: string; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className={`bd-card bd-c${w}`}>
+      <div className="bd-card-head"><span className="bd-card-title">{title}</span>{right}</div>
+      {children}
+    </section>
+  );
+}
+function Score({ label, value, delta, note, spark }: { label: string; value: string | null; delta?: Delta; note?: string; spark?: (number | null)[] }) {
+  return (
+    <div className="bd-card bd-score bd-c2">
+      <div className="bd-score-label">{label}</div>
+      <div className={`bd-score-value${value == null ? " is-light" : ""}`}>{value ?? "-"}</div>
+      <div className="bd-score-sub">{delta && <DeltaText d={delta} />}{note && <span>{note}</span>}</div>
+      {spark && <div className="bd-score-spark"><Sparkline values={spark} color={C_CUR} /></div>}
+    </div>
+  );
 }
 
-function Tile({ label, value, delta, note }: { label: string; value: string | null; delta?: Delta; note?: string }) {
+// 표 — 열 제목을 눌러 정렬, 막대 열은 그 열의 최댓값 대비 폭. 합계 줄은 정렬과 무관하게 맨 아래.
+type Col<R> = { key: string; label: string; num?: boolean; bar?: boolean; sort: (r: R) => number | string; cell: (r: R) => React.ReactNode };
+function DataTable<R>({ rows, cols, rowKey, sortKey, foot, empty }: { rows: R[]; cols: Col<R>[]; rowKey: (r: R) => string; sortKey: string; foot?: React.ReactNode[]; empty: string }) {
+  const [sort, setSort] = useState<{ key: string; desc: boolean }>({ key: sortKey, desc: true });
+  const col = cols.find((c) => c.key === sort.key) || cols[0];
+  const sorted = [...rows].sort((a, b) => {
+    const x = col.sort(a), y = col.sort(b);
+    const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "ko");
+    return sort.desc ? -c : c;
+  });
+  const maxOf = (c: Col<R>) => Math.max(1, ...rows.map((r) => Number(c.sort(r)) || 0));
+  if (!rows.length) return <div className="b2b-empty">{empty}</div>;
   return (
-    <div className="b2b-stat-card">
-      <div className="b2b-stat-card-label">{label}</div>
-      <div className={`b2b-stat-card-value b2b-money${value == null ? " is-light" : ""}`}>{value ?? "-"}</div>
-      {(delta || note) && (
-        <div className="bd-delta">
-          {delta && <span className="b2b-status-pill" style={{ background: KPI_TONE_COLOR[delta.tone].bg, color: KPI_TONE_COLOR[delta.tone].fg }}>{delta.text}</span>}
-          {note && <span>{note}</span>}
+    <div className="b2b-table-wrap bd-table-wrap">
+      <table className="b2b-table is-compact">
+        <thead>
+          <tr>{cols.map((c) => (
+            <th key={c.key} className={c.num ? "num" : undefined} aria-sort={sort.key === c.key ? (sort.desc ? "descending" : "ascending") : undefined}>
+              <button type="button" className="bd-th-btn" onClick={() => setSort((s) => ({ key: c.key, desc: s.key === c.key ? !s.desc : true }))}>
+                {c.label}<span className="bd-th-arrow">{sort.key === c.key ? (sort.desc ? "▼" : "▲") : ""}</span>
+              </button>
+            </th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => (
+            <tr key={rowKey(r)}>{cols.map((c) => (
+              <td key={c.key} className={c.num ? "num" : undefined}>
+                {c.bar ? <span className="bd-cellbar"><i style={{ width: `${Math.max(0, Math.min(100, ((Number(c.sort(r)) || 0) / maxOf(c)) * 100))}%` }} /><span>{c.cell(r)}</span></span> : c.cell(r)}
+              </td>
+            ))}</tr>
+          ))}
+        </tbody>
+        {foot && <tfoot><tr className="bd-foot">{foot.map((x, i) => <td key={i} className={cols[i]?.num ? "num" : undefined}>{x}</td>)}</tr></tfoot>}
+      </table>
+    </div>
+  );
+}
+
+// 위쪽 컨트롤(기간·필터) — 누르면 아래로 열리는 작은 창. 바깥을 누르거나 Esc 로 닫는다.
+function usePop() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", down); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key); };
+  }, [open]);
+  return { open, setOpen, ref };
+}
+function DateControl({ range, base, min, onChange }: { range: Range; base: string; min: string; onChange: (r: Range) => void }) {
+  const { open, setOpen, ref } = usePop();
+  const [from, setFrom] = useState(range.from), [to, setTo] = useState(range.to);
+  useEffect(() => { setFrom(range.from); setTo(range.to); }, [range.from, range.to]);
+  const label = PRESETS.find((p) => p.key === range.preset)?.label || "직접 고름";
+  const bad = !from || !to || from > to || from < min || to > base;
+  return (
+    <div className="bd-ctl" ref={ref}>
+      <button type="button" className="bd-ctl-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="bd-ctl-k">기간</span><strong>{range.from} ~ {range.to}</strong><span className="bd-ctl-k">{label}</span><span className="bd-ctl-caret">▾</span>
+      </button>
+      {open && (
+        <div className="bd-pop bd-pop-date">
+          <div className="bd-pop-list">
+            {PRESETS.map((p) => (
+              <button key={p.key} type="button" className={`bd-pop-item${range.preset === p.key ? " is-active" : ""}`}
+                onClick={() => { const [f, t] = p.range(base); onChange({ preset: p.key, from: f < min ? min : f, to: t }); setOpen(false); }}>{p.label}</button>
+            ))}
+          </div>
+          <div className="bd-pop-custom">
+            <label className="b2b-field"><span className="b2b-field-label">시작일</span><input type="date" className="b2b-input" value={from} min={min} max={base} onChange={(e) => setFrom(e.target.value)} /></label>
+            <label className="b2b-field"><span className="b2b-field-label">종료일</span><input type="date" className="b2b-input" value={to} min={min} max={base} onChange={(e) => setTo(e.target.value)} /></label>
+            <button type="button" className="b2b-btn-primary" disabled={bad} onClick={() => { onChange({ preset: "custom", from, to }); setOpen(false); }}>기간 적용</button>
+          </div>
         </div>
       )}
     </div>
   );
 }
-function Section({ title, basis, children }: { title: string; basis?: string; children: React.ReactNode }) {
+function FilterControl({ label, options, value, onChange }: { label: string; options: string[]; value: string[] | null; onChange: (v: string[] | null) => void }) {
+  const { open, setOpen, ref } = usePop();
+  const sel = value ?? options;
+  const toggle = (o: string) => {
+    const next = sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o];
+    onChange(next.length === options.length ? null : next);
+  };
+  const text = value == null ? "전체" : value.length === 0 ? "없음" : value.length === 1 ? value[0] : `${value.length}개`;
   return (
-    <section className="b2b-card bd-sec">
-      <div className="b2b-card-head"><span className="b2b-card-title">{title}</span></div>
-      {basis && <div className="bd-basis">{basis}</div>}
-      {children}
-    </section>
-  );
-}
-const wonS = (n: number | null) => (n == null ? null : `${won(n)}원`);
-const cnt = (n: number | null, unit: string) => (n == null ? null : `${Math.round(n).toLocaleString()}${unit}`);
-const prevNote = (text: string | null) => (text ? `직전 ${text}` : undefined);
-
-// ── 매출·주문 ──
-function SalesSection({ s, n }: { s: BoardSnapshot; n: BoardWindow }) {
-  const sales = s.sales;
-  if (!sales.ok) return <Section title="매출·주문"><div className="b2b-error" style={{ marginTop: 16 }}>매출을 불러오지 못했습니다. {sales.error}</div></Section>;
-  const rev = windowSum(sales.rev, n), ord = windowSum(sales.orders, n);
-  const aov = ratio(rev.cur, ord.cur), aovPrev = ratio(rev.prev, ord.prev);
-  const labels = tailOf(s.days, n).map(md);
-  // 채널 — 기간 매출이 큰 5곳 + 나머지는 '기타'
-  const ranked = sales.channels.map((c) => ({ name: c.name, values: tailOf(c.rev, n), total: windowSum(c.rev, n).cur })).filter((c) => c.total !== 0).sort((a, b) => b.total - a.total);
-  const top = ranked.slice(0, 5), rest = ranked.slice(5);
-  const series = top.map((c) => ({ key: c.name, values: c.values }));
-  if (rest.length) series.push({ key: "기타", values: labels.map((_, i) => rest.reduce((a, c) => a + (c.values[i] || 0), 0)) });
-  const m = sales.mtd;
-  return (
-    <Section title="매출·주문" basis="주문일 기준 · 도매 포함">
-      <div className="bd-kpi">
-        <Tile label="매출" value={wonS(rev.cur)} delta={pctDelta(rev.cur, rev.prev, "up")} note={prevNote(`${moneyCompact(rev.prev)}원`)} />
-        <Tile label="주문 건수" value={cnt(ord.cur, "건")} delta={pctDelta(ord.cur, ord.prev, "up")} note={prevNote(cnt(ord.prev, "건"))} />
-        <Tile label="객단가" value={wonS(aov)} delta={pctDelta(aov, aovPrev, "up")} note={prevNote(wonS(aovPrev))} />
-        <Tile label={`${Number(m.to.slice(5, 7))}월 누적 매출`} value={wonS(m.rev)} delta={pctDelta(m.rev, m.prevRev, "up")} note={`전월 같은 기간 ${moneyCompact(m.prevRev)}원`} />
-      </div>
-      <div className="bd-charts">
-        <div>
-          <div className="b2b-card-head bd-chart-head"><span className="b2b-card-title">일별 매출</span><ChartLegend items={series.map((x, i) => [x.key, PIE_COLORS[i % PIE_COLORS.length]])} /></div>
-          <StackedBar periods={labels} series={series} fmtAxis={moneyCompact} unit="원" />
-        </div>
-        <BarList title="채널별 매출" data={ranked.map((c) => [c.name, c.total])} fmt={(v) => `${won(v)}원`}
-          sub={(_, v) => (rev.cur > 0 ? `${Math.round((v / rev.cur) * 1000) / 10}%` : null)} empty="매출이 없습니다." />
-      </div>
-    </Section>
-  );
-}
-
-// ── 광고·유입 ──
-function AdsSection({ s, n }: { s: BoardSnapshot; n: BoardWindow }) {
-  const meta = s.meta?.ok ? s.meta : null, naver = s.naver?.ok ? s.naver : null, ga = s.ga?.ok ? s.ga : null;
-  const why = (x: BoardSnapshot["meta"] | BoardSnapshot["naver"] | BoardSnapshot["ga"]) => (x == null ? "연결 안 됨" : x.ok ? undefined : "조회 실패");
-  const errors = [s.meta && !s.meta.ok ? `메타 광고: ${s.meta.error}` : "", s.naver && !s.naver.ok ? `네이버 광고: ${s.naver.error}` : "", s.ga && !s.ga.ok ? `GA4: ${s.ga.error}` : ""].filter(Boolean);
-  const labels = tailOf(s.days, n).map(md);
-
-  const mSpend = meta ? windowSum(meta.spend, n) : null, mValue = meta ? windowSum(meta.value, n) : null;
-  const nCostRaw = naver ? windowSum(naver.cost, n) : null;
-  const nCost = nCostRaw ? { cur: nCostRaw.cur / 1.1, prev: nCostRaw.prev / 1.1 } : null; // VAT 제외
-  const nSales = naver ? windowSum(naver.purchaseSales, n) : null;
-  const spend = mSpend || nCost ? { cur: (mSpend?.cur || 0) + (nCost?.cur || 0), prev: (mSpend?.prev || 0) + (nCost?.prev || 0) } : null;
-  const mRoas = mSpend && mValue ? { cur: ratio(mValue.cur, mSpend.cur), prev: ratio(mValue.prev, mSpend.prev) } : null;
-  const nRoas = nCost && nSales ? { cur: ratio(nSales.cur, nCost.cur), prev: ratio(nSales.prev, nCost.prev) } : null;
-  const ses = ga ? windowSum(ga.sessions, n) : null, pur = ga ? windowSum(ga.purchases, n) : null;
-  const rate = ses && pur ? { cur: ratio(pur.cur * 100, ses.cur), prev: ratio(pur.prev * 100, ses.prev) } : null;
-  const roasS = (v: number | null | undefined) => (v == null ? null : v.toFixed(2));
-  const rateS = (v: number | null | undefined) => (v == null ? null : `${v.toFixed(2)}%`);
-
-  const bars = [
-    ...(meta ? [{ key: "메타", values: tailOf(meta.spend, n) }] : []),
-    ...(naver ? [{ key: "네이버", values: tailOf(naver.cost, n).map((v) => Math.round(v / 1.1)) }] : []),
-  ];
-  const barColors = [PIE_COLORS[1], PIE_COLORS[2]].slice(meta ? 0 : 1);
-  const chans = ga ? ga.channels[n] : [];
-  return (
-    <Section title="광고·유입" basis="광고비는 VAT 제외 · 방문과 구매 전환율은 GA4 기준">
-      {errors.length > 0 && <div className="b2b-error" style={{ marginTop: 16 }}>{errors.length === 1 ? errors[0] : <ul>{errors.map((e) => <li key={e}>{e}</li>)}</ul>}</div>}
-      <div className="bd-kpi">
-        <Tile label="광고비" value={wonS(spend ? spend.cur : null)} delta={spend ? pctDelta(spend.cur, spend.prev, "none") : null} note={spend ? prevNote(`${moneyCompact(Math.round(spend.prev))}원`) : (why(s.meta) ?? why(s.naver))} />
-        <Tile label="메타 ROAS" value={roasS(mRoas?.cur)} delta={mRoas ? pctDelta(mRoas.cur, mRoas.prev, "up") : null} note={meta ? prevNote(roasS(mRoas?.prev)) : why(s.meta)} />
-        <Tile label="네이버 ROAS" value={roasS(nRoas?.cur)} delta={nRoas && naver?.purchaseOk ? pctDelta(nRoas.cur, nRoas.prev, "up") : null}
-          note={naver ? (naver.purchaseOk ? prevNote(roasS(nRoas?.prev)) : "구매 전환 미확정") : why(s.naver)} />
-        <Tile label="방문" value={cnt(ses ? ses.cur : null, "회")} delta={ses ? pctDelta(ses.cur, ses.prev, "up") : null} note={ga ? prevNote(cnt(ses!.prev, "회")) : why(s.ga)} />
-        <Tile label="구매 전환율" value={rateS(rate?.cur)} delta={rate ? ppDelta(rate.cur, rate.prev, "up") : null} note={ga ? prevNote(rateS(rate?.prev)) : why(s.ga)} />
-      </div>
-      <div className="bd-charts">
-        <div>
-          <div className="b2b-card-head bd-chart-head">
-            <span className="b2b-card-title">{ga ? "일별 광고비와 방문" : "일별 광고비"}</span>
-            {bars.length > 0 && <ChartLegend items={[...bars.map((b, i): [string, string] => [b.key, barColors[i]]), ...(ga ? [["방문", CHART_LINE] as [string, string]] : [])]} />}
+    <div className="bd-ctl" ref={ref}>
+      <button type="button" className={`bd-ctl-btn${value != null ? " is-on" : ""}`} aria-expanded={open} disabled={!options.length} onClick={() => setOpen(!open)}>
+        <span className="bd-ctl-k">{label}</span><strong>{text}</strong><span className="bd-ctl-caret">▾</span>
+      </button>
+      {open && (
+        <div className="bd-pop">
+          <div className="bd-pop-tools">
+            <button type="button" className="b2b-link-btn" onClick={() => onChange(null)}>전체 선택</button>
+            <button type="button" className="b2b-link-btn" onClick={() => onChange([])}>모두 해제</button>
           </div>
-          {bars.length === 0 ? <div className="b2b-empty">광고 숫자가 없습니다.</div>
-            : ga ? <ComboBarLine periods={labels} barSeries={bars} barColors={barColors} lineValues={tailOf(ga.sessions, n)} lineLabel="방문" lineFmt={(v) => v.toLocaleString()} lineUnit="회" barFmt={moneyCompact} barUnit="원" />
-            : <StackedBar periods={labels} series={bars} colors={barColors} fmtAxis={moneyCompact} unit="원" />}
-        </div>
-        <BarList title="유입 채널별 방문" data={chans.map((c) => [c.name, c.sessions])} fmt={(v) => `${v.toLocaleString()}회`}
-          sub={(name) => { const c = chans.find((x) => x.name === name); return c && c.sessions > 0 ? `구매 ${c.purchases.toLocaleString()}건 · 전환율 ${((c.purchases / c.sessions) * 100).toFixed(2)}%` : null; }}
-          empty="방문 숫자가 없습니다." />
-      </div>
-    </Section>
-  );
-}
-
-// ── 정기배송·고객 ──
-function CustomerSection({ s, n }: { s: BoardSnapshot; n: BoardWindow }) {
-  const sub = s.sub.ok ? s.sub : null, voc = s.voc.ok ? s.voc : null, sales = s.sales.ok ? s.sales : null;
-  const errors = [!s.sub.ok ? `정기배송: ${s.sub.error}` : "", !s.voc.ok ? `VOC: ${s.voc.error}` : ""].filter(Boolean);
-  const labels = tailOf(s.days, n).map(md);
-  const active = sub ? lastKnown(sub.active) : null, activePrev = sub ? lastKnown(sub.active, n) : null;
-  const pause = sub ? lastKnown(sub.pause) : null;
-  const nw = sub ? windowSum(sub.newCnt, n) : null, cc = sub ? windowSum(sub.cancelCnt, n) : null;
-  const sr = sub ? windowSum(sub.subRev, n) : null, rev = sales ? windowSum(sales.rev, n) : null;
-  const share = sr && rev ? ratio(sr.cur * 100, rev.cur) : null;
-  const cust = sales ? sales.cust[n] : null;
-  const rep = cust ? { cur: ratio(cust.cur.repeatCust * 100, cust.cur.total), prev: ratio(cust.prev.repeatCust * 100, cust.prev.total) } : null;
-  const vc = voc ? windowSum(voc.counts, n) : null;
-  const pctS = (v: number | null | undefined) => (v == null ? null : `${v.toFixed(1)}%`);
-  const activeDays = sub ? tailOf(s.days, n).map((d, i) => ({ label: md(d), value: tailOf(sub.active, n)[i] })).filter((x): x is { label: string; value: number } => x.value != null) : [];
-  return (
-    <Section title="정기배송·고객" basis={`신규 신청과 해지는 신청 단위 · 재구매 고객 = 기간 전에 주문한 적이 있는 고객${sub && sub.asOf !== s.base ? ` · 정기배송 회원 수는 ${sub.asOf.slice(5)} 기준` : ""}`}>
-      {errors.length > 0 && <div className="b2b-error" style={{ marginTop: 16 }}>{errors.length === 1 ? errors[0] : <ul>{errors.map((e) => <li key={e}>{e}</li>)}</ul>}</div>}
-      <div className="bd-kpi">
-        <Tile label="정기배송 이용중" value={cnt(active, "명")} delta={absDelta(active, activePrev, "명", "up")} note={pause != null ? `일시정지 ${pause.toLocaleString()}명` : undefined} />
-        <Tile label="신규 신청" value={cnt(nw ? nw.cur : null, "건")} delta={nw ? pctDelta(nw.cur, nw.prev, "up") : null} note={nw ? prevNote(cnt(nw.prev, "건")) : undefined} />
-        <Tile label="해지" value={cnt(cc ? cc.cur : null, "건")} delta={cc ? pctDelta(cc.cur, cc.prev, "down") : null} note={cc ? prevNote(cnt(cc.prev, "건")) : undefined} />
-        <Tile label="정기배송 매출" value={wonS(sr ? sr.cur : null)} delta={sr ? pctDelta(sr.cur, sr.prev, "up") : null} note={share != null ? `전체의 ${share.toFixed(1)}%` : undefined} />
-        <Tile label="재구매 고객 비율" value={pctS(rep?.cur)} delta={rep ? ppDelta(rep.cur, rep.prev, "up") : null} note={cust ? `신규 ${cust.cur.newCust.toLocaleString()}명 · 재구매 ${cust.cur.repeatCust.toLocaleString()}명` : undefined} />
-        <Tile label="VOC 접수" value={cnt(vc ? vc.cur : null, "건")} delta={vc ? pctDelta(vc.cur, vc.prev, "down") : null} note={vc ? prevNote(cnt(vc.prev, "건")) : undefined} />
-      </div>
-      {sub && (
-        <div className="bd-charts is-half">
-          <div>
-            <div className="b2b-card-head bd-chart-head"><span className="b2b-card-title">정기배송 신규 신청과 해지</span><ChartLegend items={[["신규 신청", "var(--sm-success)"], ["해지", "var(--sm-danger)"]]} /></div>
-            <StackedBar periods={labels} series={[{ key: "신규 신청", values: tailOf(sub.newCnt, n) }, { key: "해지", values: tailOf(sub.cancelCnt, n) }]} colors={["var(--sm-success)", "var(--sm-danger)"]} />
-          </div>
-          <div>
-            <div className="b2b-card-head bd-chart-head"><span className="b2b-card-title">정기배송 이용중 회원</span></div>
-            <TrendChart data={activeDays} fmtAxis={(v) => v.toLocaleString()} />
+          <div className="bd-pop-checks">
+            {options.map((o) => (
+              <label key={o} className="bd-check"><input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} /><span>{o}</span></label>
+            ))}
           </div>
         </div>
       )}
-    </Section>
+    </div>
+  );
+}
+
+// ── 묶음 → 화면 값(기간·필터 적용) ──
+function buildView(s: BoardSnapshot, sp: Span, f: Filters) {
+  const N = s.days.length;
+  const win = <T,>(xs: T[]): T[] => cut(xs, sp.i0, sp.i1);
+  const prevWin = (xs: (number | null)[]): (number | null)[] | null => (sp.prev ? cut(xs, sp.prev.i0, sp.prev.i1) : null);
+  const days = win(s.days), labels = days.map(md);
+  const on = (list: string[] | null, name: string) => !list || list.includes(name);
+
+  // 매출
+  const sales = s.sales.ok ? s.sales : null;
+  const chSel = sales ? sales.channels.filter((c) => on(f.salesCh, c.name)) : [];
+  const rev = addSeries(chSel.map((c) => c.rev), N), orders = addSeries(chSel.map((c) => c.orders), N);
+  const revS = sales ? spanSum(rev, sp) : null, ordS = sales ? spanSum(orders, sp) : null;
+  const aov = revS && ordS ? { cur: ratio(revS.cur, ordS.cur), prev: ratio(revS.prev, ordS.prev) } : null;
+  const aovSeries = rev.map((v, i) => (orders[i] > 0 ? v / orders[i] : null));
+  const chRows = chSel.map((c) => { const r = spanSum(c.rev, sp), o = spanSum(c.orders, sp); return { name: c.name, rev: r.cur, prevRev: r.prev, orders: o.cur, aov: ratio(r.cur, o.cur), series: win(c.rev) }; })
+    .filter((r) => r.rev !== 0 || r.orders > 0).sort((a, b) => b.rev - a.rev);
+
+  // 광고
+  const meta = s.meta?.ok && on(f.media, "메타") ? s.meta : null, naver = s.naver?.ok && on(f.media, "네이버") ? s.naver : null;
+  const naverEx: (number | null)[] = naver ? naver.cost.map((v) => (v == null ? null : v / 1.1)) : []; // VAT 제외
+  const spend = addSeries([meta ? meta.spend : [], naverEx], N);
+  const hasAds = !!(meta || naver);
+  const spendS = hasAds ? spanSum(spend, sp) : null;
+  const mSpend = meta ? spanSum(meta.spend, sp) : null, mValue = meta ? spanSum(meta.value, sp) : null;
+  const nCost = naver ? spanSum(naverEx, sp) : null, nSales = naver ? spanSum(naver.purchaseSales, sp) : null;
+  const mRoas = mSpend && mValue ? { cur: ratio(mValue.cur, mSpend.cur), prev: ratio(mValue.prev, mSpend.prev) } : null;
+  const nRoas = nCost && nSales ? { cur: ratio(nSales.cur, nCost.cur), prev: ratio(nSales.prev, nCost.prev) } : null;
+  const naverPending = !!naver && [...win(naver.cost), ...(prevWin(naver.cost) || [])].some((v) => v == null);
+  const mediaRows = [
+    ...(meta && mSpend && mValue ? [{ name: "메타", spend: mSpend.cur, prevSpend: mSpend.prev, impressions: sumOf(win(meta.impressions)), clicks: sumOf(win(meta.clicks)), purchases: sumOf(win(meta.purchases)), value: mValue.cur, roas: mRoas?.cur ?? null }] : []),
+    ...(naver && nCost && nSales ? [{ name: "네이버", spend: nCost.cur, prevSpend: nCost.prev, impressions: sumOf(win(naver.impressions)), clicks: sumOf(win(naver.clicks)), purchases: sumOf(win(naver.purchases)), value: nSales.cur, roas: naver.purchaseOk ? (nRoas?.cur ?? null) : null }] : []),
+  ];
+
+  // 유입(GA4)
+  const ga = s.ga?.ok ? s.ga : null;
+  const gaSel = ga ? ga.channels.filter((c) => on(f.gaCh, c.name)) : [];
+  const sessions = addSeries(gaSel.map((c) => c.sessions), N), gaPurchases = addSeries(gaSel.map((c) => c.purchases), N);
+  const sesS = ga ? spanSum(sessions, sp) : null, purS = ga ? spanSum(gaPurchases, sp) : null;
+  const conv = sesS && purS ? { cur: ratio(purS.cur * 100, sesS.cur), prev: ratio(purS.prev == null ? null : purS.prev * 100, sesS.prev) } : null;
+  const gaRows = gaSel.map((c) => { const x = spanSum(c.sessions, sp), p = spanSum(c.purchases, sp); return { name: c.name, sessions: x.cur, prevSessions: x.prev, purchases: p.cur, conv: ratio(p.cur * 100, x.cur) }; })
+    .filter((r) => r.sessions > 0).sort((a, b) => b.sessions - a.sessions);
+
+  // 정기배송·VOC
+  const sub = s.sub.ok ? s.sub : null, voc = s.voc.ok ? s.voc : null;
+  const active = sub ? { cur: lastKnown(sub.active, sp.i1), prev: sp.prev ? lastKnown(sub.active, sp.prev.i1) : null } : null;
+  const pause = sub ? lastKnown(sub.pause, sp.i1) : null;
+  const newS = sub ? spanSum(sub.newCnt, sp) : null, cancelS = sub ? spanSum(sub.cancelCnt, sp) : null, subRevS = sub ? spanSum(sub.subRev, sp) : null;
+  const allRev = sales ? spanSum(addSeries(sales.channels.map((c) => c.rev), N), sp) : null; // 정기배송 매출 비중의 분모는 전체 채널
+  const vocS = voc ? spanSum(voc.counts, sp) : null;
+
+  return {
+    win, prevWin, hasPrev: !!sp.prev, days, labels, sales, rev, orders, revS, ordS, aov, aovSeries, chRows,
+    meta, naver, naverEx, spend, hasAds, spendS, mRoas, nRoas, naverPending, mediaRows,
+    ga, sessions, gaPurchases, sesS, purS, conv, gaRows,
+    sub, voc, active, pause, newS, cancelS, subRevS, allRev, vocS,
+  };
+}
+type View = ReturnType<typeof buildView>;
+const why = (x: BoardSnapshot["meta"] | BoardSnapshot["naver"] | BoardSnapshot["ga"]) => (x == null ? "연결 안 됨" : x.ok ? undefined : "조회 실패");
+
+// 이번 기간(실선)과 직전 기간(점선) — 같은 자리의 날끼리 겹쳐 그린다
+function CompareLine({ v, values, fmtAxis, fmtTip, unit }: { v: View; values: (number | null)[]; fmtAxis?: (n: number) => string; fmtTip?: (n: number) => string; unit: string }) {
+  const prev = v.prevWin(values);
+  return (
+    <LineChart periods={v.labels} fmtAxis={fmtAxis} fmtTip={fmtTip} unit={unit}
+      series={[{ key: "이번 기간", values: v.win(values), color: C_CUR }, ...(prev ? [{ key: "직전 기간", values: prev, color: C_PREV, dashed: true }] : [])]} />
+  );
+}
+const CompareLegend = ({ v }: { v: View }) => <ChartLegend items={[["이번 기간", C_CUR], ...(v.hasPrev ? [["직전 기간", C_PREV] as [string, string]] : [])]} />;
+const mediaLegend = (v: View): [string, string][] => [...(v.meta ? [["메타", C_META] as [string, string]] : []), ...(v.naver ? [["네이버", C_NAVER] as [string, string]] : [])];
+function SpendLine({ v }: { v: View }) {
+  if (!v.hasAds) return <div className="b2b-empty">광고 숫자가 없습니다.</div>;
+  return (
+    <LineChart periods={v.labels} fmtAxis={moneyCompact} fmtTip={won} unit="원"
+      series={[...(v.meta ? [{ key: "메타", values: v.win(v.meta.spend) as (number | null)[], color: C_META }] : []), ...(v.naver ? [{ key: "네이버", values: v.win(v.naverEx).map((x) => (x == null ? null : Math.round(x))), color: C_NAVER }] : [])]} />
+  );
+}
+
+// ── 스코어카드 묶음(여러 쪽에서 같이 쓴다) ──
+const ScoreRev = ({ v }: { v: View }) => <Score label="매출" value={wonS(v.revS?.cur)} delta={pctDelta(v.revS?.cur ?? null, v.revS?.prev ?? null, "up")} note={prevNote(v.revS?.prev != null ? `${moneyCompact(v.revS.prev)}원` : null)} spark={v.win(v.rev)} />;
+const ScoreOrders = ({ v }: { v: View }) => <Score label="주문 건수" value={cnt(v.ordS?.cur, "건")} delta={pctDelta(v.ordS?.cur ?? null, v.ordS?.prev ?? null, "up")} note={prevNote(cnt(v.ordS?.prev, "건"))} spark={v.win(v.orders)} />;
+const ScoreAov = ({ v }: { v: View }) => <Score label="객단가" value={wonS(v.aov?.cur)} delta={pctDelta(v.aov?.cur ?? null, v.aov?.prev ?? null, "up")} note={prevNote(wonS(v.aov?.prev))} spark={v.win(v.aovSeries)} />;
+const ScoreSpend = ({ v, s }: { v: View; s: BoardSnapshot }) => (
+  <Score label="광고비" value={wonS(v.spendS ? Math.round(v.spendS.cur) : null)} delta={pctDelta(v.spendS?.cur ?? null, v.spendS?.prev ?? null, "none")}
+    note={v.hasAds ? (v.naverPending ? "네이버 광고비 일부 받는 중" : prevNote(v.spendS?.prev != null ? `${moneyCompact(Math.round(v.spendS.prev))}원` : null)) : (why(s.meta) ?? why(s.naver))} spark={v.hasAds ? v.win(v.spend) : undefined} />
+);
+const ScoreSessions = ({ v, s }: { v: View; s: BoardSnapshot }) => <Score label="방문" value={cnt(v.sesS?.cur, "회")} delta={pctDelta(v.sesS?.cur ?? null, v.sesS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.sesS?.prev, "회")) : why(s.ga)} spark={v.ga ? v.win(v.sessions) : undefined} />;
+const ScoreActive = ({ v }: { v: View }) => <Score label="정기배송 이용중" value={cnt(v.active?.cur, "명")} delta={absDelta(v.active?.cur ?? null, v.active?.prev ?? null, "명", "up")} note={v.pause != null ? `일시정지 ${v.pause.toLocaleString()}명` : undefined} spark={v.sub ? v.win(v.sub.active) : undefined} />;
+const ScoreSubRev = ({ v }: { v: View }) => {
+  const share = v.subRevS && v.allRev ? ratio(v.subRevS.cur * 100, v.allRev.cur) : null;
+  return <Score label="정기배송 매출" value={wonS(v.subRevS?.cur)} delta={pctDelta(v.subRevS?.cur ?? null, v.subRevS?.prev ?? null, "up")} note={share != null ? `전체의 ${share.toFixed(1)}%` : undefined} spark={v.sub ? v.win(v.sub.subRev) : undefined} />;
+};
+
+function Errors({ list }: { list: string[] }) {
+  if (!list.length) return null;
+  return <div className="b2b-error bd-c12">{list.length === 1 ? list[0] : <ul>{list.map((e) => <li key={e}>{e}</li>)}</ul>}</div>;
+}
+const failOf = (label: string, x: { ok: boolean; error?: string } | null) => (x && !x.ok ? `${label}: ${x.error}` : "");
+function DonutCard({ data, colors, center, centerSub, fmt }: { data: [string, number][]; colors: string[]; center: string; centerSub: string; fmt: (n: number, total: number) => string }) {
+  const total = data.reduce((a, [, n]) => a + n, 0);
+  return (
+    <div className="bd-donut">
+      <Donut data={data} colors={colors} size={148} center={center} centerSub={centerSub} />
+      <div className="bd-donut-legend">
+        {data.map(([name, n], i) => (
+          <div key={name} className="sm-between"><span className="sm-row bd-donut-name"><span className="sm-stat-hero-dot" style={{ background: colors[i] }} /><span className="sm-ellipsis">{name}</span></span><span className="num">{fmt(n, total)}</span></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 채널별 매출 비중 — 큰 6곳 + 기타. 가운데 숫자는 고리 안에 들어가게 '만원'·'억원' 단위로 줄인다
+function ChannelDonut({ v }: { v: View }) {
+  const top = v.chRows.slice(0, 6), restRev = v.chRows.slice(6).reduce((a, r) => a + r.rev, 0);
+  const donut: [string, number][] = [...top.map((r): [string, number] => [r.name, Math.max(0, r.rev)]), ...(restRev > 0 ? [["기타", restRev] as [string, number]] : [])];
+  const total = donut.reduce((a, [, n]) => a + n, 0);
+  if (total <= 0) return <div className="b2b-empty">매출이 없습니다.</div>;
+  const [center, unit] = total >= 1e8 ? [(total / 1e8).toFixed(1), "억원"] : [Math.round(total / 1e4).toLocaleString(), "만원"];
+  return <DonutCard data={donut} colors={donut.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])} center={center} centerSub={unit} fmt={(n, t) => `${(Math.round((n / t) * 1000) / 10).toFixed(1)}%`} />;
+}
+
+// ── 쪽 ──
+function SummaryPage({ v, s }: { v: View; s: BoardSnapshot }) {
+  return (
+    <>
+      <Errors list={[failOf("매출", s.sales), failOf("메타 광고", s.meta), failOf("네이버 광고", s.naver), failOf("GA4", s.ga), failOf("정기배송", s.sub)].filter(Boolean)} />
+      <ScoreRev v={v} /><ScoreOrders v={v} /><ScoreAov v={v} /><ScoreSpend v={v} s={s} /><ScoreSessions v={v} s={s} /><ScoreActive v={v} />
+      <Card w={8} title="매출 추이" right={<CompareLegend v={v} />}><CompareLine v={v} values={v.rev} fmtAxis={moneyCompact} fmtTip={won} unit="원" /></Card>
+      <Card w={4} title="채널별 매출 비중"><ChannelDonut v={v} /></Card>
+      <Card w={6} title="광고비 추이" right={<ChartLegend items={mediaLegend(v)} />}><SpendLine v={v} /></Card>
+      <Card w={6} title="방문 추이" right={v.ga ? <CompareLegend v={v} /> : undefined}>
+        {v.ga ? <CompareLine v={v} values={v.sessions} unit="회" /> : <div className="b2b-empty">방문 숫자가 없습니다.</div>}
+      </Card>
+    </>
+  );
+}
+
+type DetailState = { key: string; data: BoardDetail | null; loading: boolean; error: string };
+function SalesPage({ v, s, detail }: { v: View; s: BoardSnapshot; detail: DetailState }) {
+  const top = v.chRows.slice(0, 5), rest = v.chRows.slice(5);
+  const series = top.map((c) => ({ key: c.name, values: c.series }));
+  if (rest.length) series.push({ key: "기타", values: v.labels.map((_, i) => rest.reduce((a, c) => a + (c.series[i] || 0), 0)) });
+  const total = v.revS?.cur ?? 0;
+  const cust = detail.data?.cust ?? null;
+  const rep = cust ? { cur: ratio(cust.cur.repeatCust * 100, cust.cur.total), prev: ratio(cust.prev.repeatCust * 100, cust.prev.total) } : null;
+  type ChRow = View["chRows"][number];
+  const chCols: Col<ChRow>[] = [
+    { key: "name", label: "채널", sort: (r) => r.name, cell: (r) => r.name },
+    { key: "rev", label: "매출(원)", num: true, bar: true, sort: (r) => r.rev, cell: (r) => won(r.rev) },
+    { key: "share", label: "비중", num: true, sort: (r) => r.rev, cell: (r) => (total > 0 ? `${(Math.round((r.rev / total) * 1000) / 10).toFixed(1)}%` : "-") },
+    { key: "orders", label: "주문 건수", num: true, sort: (r) => r.orders, cell: (r) => r.orders.toLocaleString() },
+    { key: "aov", label: "객단가(원)", num: true, sort: (r) => r.aov ?? 0, cell: (r) => won(r.aov) },
+    { key: "delta", label: "직전 대비", num: true, sort: (r) => pctChange(r.rev, r.prevRev) ?? -Infinity, cell: (r) => <DeltaText d={pctDelta(r.rev, r.prevRev, "up")} /> },
+  ];
+  type PRow = BoardDetail["products"][number];
+  const pCols: Col<PRow>[] = [
+    { key: "name", label: "상품", sort: (r) => r.name, cell: (r) => <span title={r.code}>{r.name}</span> },
+    { key: "rev", label: "매출(원)", num: true, bar: true, sort: (r) => r.rev, cell: (r) => won(r.rev) },
+    { key: "qty", label: "수량", num: true, sort: (r) => r.qty, cell: (r) => r.qty.toLocaleString() },
+    { key: "orders", label: "주문 건수", num: true, sort: (r) => r.orders, cell: (r) => r.orders.toLocaleString() },
+    { key: "delta", label: "직전 대비", num: true, sort: (r) => pctChange(r.rev, r.prevRev) ?? -Infinity, cell: (r) => <DeltaText d={pctDelta(r.rev, r.prevRev, "up")} /> },
+  ];
+  const waiting = detail.loading ? "불러오는 중..." : undefined;
+  return (
+    <>
+      <Errors list={[failOf("매출", s.sales), failOf("정기배송", s.sub), detail.error ? `상품·고객: ${detail.error}` : ""].filter(Boolean)} />
+      <ScoreRev v={v} /><ScoreOrders v={v} /><ScoreAov v={v} /><ScoreSubRev v={v} />
+      <Score label="신규 고객" value={cnt(cust?.cur.newCust, "명")} delta={cust ? pctDelta(cust.cur.newCust, cust.prev.newCust, "up") : null} note={cust ? prevNote(cnt(cust.prev.newCust, "명")) : waiting} />
+      <Score label="재구매 고객 비율" value={pct1(rep?.cur)} delta={rep ? ppDelta(rep.cur, rep.prev, "up") : null} note={cust ? `재구매 ${cust.cur.repeatCust.toLocaleString()}명` : waiting} />
+      <Card w={8} title="일별 매출" right={<ChartLegend items={series.map((x, i) => [x.key, PIE_COLORS[i % PIE_COLORS.length]])} />}>
+        <StackedBar periods={v.labels} series={series} fmtAxis={moneyCompact} unit="원" />
+      </Card>
+      <Card w={4} title="채널별 매출 비중"><ChannelDonut v={v} /></Card>
+      <Card w={6} title="채널별">
+        <DataTable rows={v.chRows} cols={chCols} rowKey={(r) => r.name} sortKey="rev" empty="매출이 없습니다."
+          foot={["합계", won(total), total > 0 ? "100.0%" : "-", (v.ordS?.cur ?? 0).toLocaleString(), won(v.aov?.cur), <DeltaText key="d" d={pctDelta(v.revS?.cur ?? null, v.revS?.prev ?? null, "up")} />]} />
+      </Card>
+      <Card w={6} title="상품별 상위 30">
+        {detail.loading && !detail.data ? <div className="b2b-loading">불러오는 중...</div>
+          : <DataTable rows={detail.data?.products ?? []} cols={pCols} rowKey={(r) => r.code} sortKey="rev" empty="매출이 없습니다." />}
+      </Card>
+    </>
+  );
+}
+
+function AdsPage({ v, s }: { v: View; s: BoardSnapshot }) {
+  type MRow = View["mediaRows"][number];
+  const mCols: Col<MRow>[] = [
+    { key: "name", label: "매체", sort: (r) => r.name, cell: (r) => r.name },
+    { key: "spend", label: "광고비(원)", num: true, bar: true, sort: (r) => r.spend, cell: (r) => won(r.spend) },
+    { key: "imp", label: "노출", num: true, sort: (r) => r.impressions, cell: (r) => r.impressions.toLocaleString() },
+    { key: "clicks", label: "클릭", num: true, sort: (r) => r.clicks, cell: (r) => r.clicks.toLocaleString() },
+    { key: "ctr", label: "CTR", num: true, sort: (r) => ratio(r.clicks, r.impressions) ?? 0, cell: (r) => pct2(ratio(r.clicks * 100, r.impressions)) ?? "-" },
+    { key: "cpc", label: "CPC(원)", num: true, sort: (r) => ratio(r.spend, r.clicks) ?? 0, cell: (r) => won(ratio(r.spend, r.clicks)) },
+    { key: "purchases", label: "구매", num: true, sort: (r) => r.purchases, cell: (r) => r.purchases.toLocaleString() },
+    { key: "value", label: "구매액(원)", num: true, sort: (r) => r.value, cell: (r) => won(r.value) },
+    { key: "roas", label: "ROAS", num: true, sort: (r) => r.roas ?? 0, cell: (r) => fix2(r.roas) ?? "미확정" },
+    { key: "delta", label: "광고비 직전 대비", num: true, sort: (r) => pctChange(r.spend, r.prevSpend) ?? -Infinity, cell: (r) => <DeltaText d={pctDelta(r.spend, r.prevSpend, "none")} /> },
+  ];
+  type GRow = View["gaRows"][number];
+  const sesTotal = v.sesS?.cur ?? 0;
+  const gCols: Col<GRow>[] = [
+    { key: "name", label: "유입 채널", sort: (r) => r.name, cell: (r) => r.name },
+    { key: "sessions", label: "방문", num: true, bar: true, sort: (r) => r.sessions, cell: (r) => r.sessions.toLocaleString() },
+    { key: "share", label: "비중", num: true, sort: (r) => r.sessions, cell: (r) => (sesTotal > 0 ? `${(Math.round((r.sessions / sesTotal) * 1000) / 10).toFixed(1)}%` : "-") },
+    { key: "purchases", label: "구매", num: true, sort: (r) => r.purchases, cell: (r) => r.purchases.toLocaleString() },
+    { key: "conv", label: "전환율", num: true, sort: (r) => r.conv ?? 0, cell: (r) => pct2(r.conv) ?? "-" },
+    { key: "delta", label: "직전 대비", num: true, sort: (r) => pctChange(r.sessions, r.prevSessions) ?? -Infinity, cell: (r) => <DeltaText d={pctDelta(r.sessions, r.prevSessions, "up")} /> },
+  ];
+  return (
+    <>
+      <Errors list={[failOf("메타 광고", s.meta), failOf("네이버 광고", s.naver), failOf("GA4", s.ga), s.ga?.ok && s.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다." : ""].filter(Boolean)} />
+      <ScoreSpend v={v} s={s} />
+      <Score label="메타 ROAS" value={fix2(v.mRoas?.cur)} delta={pctDelta(v.mRoas?.cur ?? null, v.mRoas?.prev ?? null, "up")} note={v.meta ? prevNote(fix2(v.mRoas?.prev)) : why(s.meta)} />
+      <Score label="네이버 ROAS" value={v.naver && !v.naver.purchaseOk ? null : fix2(v.nRoas?.cur)} delta={v.naver?.purchaseOk ? pctDelta(v.nRoas?.cur ?? null, v.nRoas?.prev ?? null, "up") : null}
+        note={v.naver ? (v.naver.purchaseOk ? prevNote(fix2(v.nRoas?.prev)) : "구매 전환 미확정") : why(s.naver)} />
+      <ScoreSessions v={v} s={s} />
+      <Score label="구매(GA4)" value={cnt(v.purS?.cur, "건")} delta={pctDelta(v.purS?.cur ?? null, v.purS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.purS?.prev, "건")) : why(s.ga)} spark={v.ga ? v.win(v.gaPurchases) : undefined} />
+      <Score label="구매 전환율" value={pct2(v.conv?.cur)} delta={ppDelta(v.conv?.cur ?? null, v.conv?.prev ?? null, "up")} note={v.ga ? prevNote(pct2(v.conv?.prev)) : why(s.ga)} />
+      <Card w={6} title="광고비 추이" right={<ChartLegend items={mediaLegend(v)} />}><SpendLine v={v} /></Card>
+      <Card w={6} title="방문 추이" right={v.ga ? <CompareLegend v={v} /> : undefined}>
+        {v.ga ? <CompareLine v={v} values={v.sessions} unit="회" /> : <div className="b2b-empty">방문 숫자가 없습니다.</div>}
+      </Card>
+      <Card w={12} title="매체별"><DataTable rows={v.mediaRows} cols={mCols} rowKey={(r) => r.name} sortKey="spend" empty="광고 숫자가 없습니다." /></Card>
+      <Card w={12} title="유입 채널별">
+        <DataTable rows={v.gaRows} cols={gCols} rowKey={(r) => r.name} sortKey="sessions" empty="방문 숫자가 없습니다."
+          foot={["합계", sesTotal.toLocaleString(), sesTotal > 0 ? "100.0%" : "-", (v.purS?.cur ?? 0).toLocaleString(), pct2(v.conv?.cur) ?? "-", <DeltaText key="d" d={pctDelta(v.sesS?.cur ?? null, v.sesS?.prev ?? null, "up")} />]} />
+      </Card>
+    </>
+  );
+}
+
+function SubPage({ v, s, detail }: { v: View; s: BoardSnapshot; detail: DetailState }) {
+  const cust = detail.data?.cust ?? null;
+  const rep = cust ? { cur: ratio(cust.cur.repeatCust * 100, cust.cur.total), prev: ratio(cust.prev.repeatCust * 100, cust.prev.total) } : null;
+  return (
+    <>
+      <Errors list={[failOf("정기배송", s.sub), failOf("VOC", s.voc), detail.error ? `고객: ${detail.error}` : ""].filter(Boolean)} />
+      <ScoreActive v={v} />
+      <Score label="신규 신청" value={cnt(v.newS?.cur, "건")} delta={pctDelta(v.newS?.cur ?? null, v.newS?.prev ?? null, "up")} note={prevNote(cnt(v.newS?.prev, "건"))} spark={v.sub ? v.win(v.sub.newCnt) : undefined} />
+      <Score label="해지" value={cnt(v.cancelS?.cur, "건")} delta={pctDelta(v.cancelS?.cur ?? null, v.cancelS?.prev ?? null, "down")} note={prevNote(cnt(v.cancelS?.prev, "건"))} spark={v.sub ? v.win(v.sub.cancelCnt) : undefined} />
+      <ScoreSubRev v={v} />
+      <Score label="재구매 고객 비율" value={pct1(rep?.cur)} delta={rep ? ppDelta(rep.cur, rep.prev, "up") : null}
+        note={cust ? `신규 ${cust.cur.newCust.toLocaleString()}명 · 재구매 ${cust.cur.repeatCust.toLocaleString()}명` : detail.loading ? "불러오는 중..." : undefined} />
+      <Score label="VOC 접수" value={cnt(v.vocS?.cur, "건")} delta={pctDelta(v.vocS?.cur ?? null, v.vocS?.prev ?? null, "down")} note={prevNote(cnt(v.vocS?.prev, "건"))} spark={v.voc ? v.win(v.voc.counts) : undefined} />
+      <Card w={6} title="정기배송 회원" right={<ChartLegend items={[["이용중", C_CUR], ["일시정지", C_PREV]]} />}>
+        {v.sub ? <LineChart periods={v.labels} unit="명" series={[{ key: "이용중", values: v.win(v.sub.active), color: C_CUR }, { key: "일시정지", values: v.win(v.sub.pause), color: C_PREV, dashed: true }]} />
+          : <div className="b2b-empty">정기배송 숫자가 없습니다.</div>}
+      </Card>
+      <Card w={6} title="신규 신청과 해지" right={<ChartLegend items={[["신규 신청", "var(--sm-success)"], ["해지", "var(--sm-danger)"]]} />}>
+        {v.sub ? <StackedBar periods={v.labels} series={[{ key: "신규 신청", values: v.win(v.sub.newCnt) }, { key: "해지", values: v.win(v.sub.cancelCnt) }]} colors={["var(--sm-success)", "var(--sm-danger)"]} />
+          : <div className="b2b-empty">정기배송 숫자가 없습니다.</div>}
+      </Card>
+      <Card w={8} title="VOC 접수 추이" right={v.voc ? <CompareLegend v={v} /> : undefined}>
+        {v.voc ? <CompareLine v={v} values={v.voc.counts} unit="건" /> : <div className="b2b-empty">VOC 숫자가 없습니다.</div>}
+      </Card>
+      <Card w={4} title="신규·재구매 고객">
+        {!cust ? <div className={detail.loading ? "b2b-loading" : "b2b-empty"}>{detail.loading ? "불러오는 중..." : "고객 숫자가 없습니다."}</div>
+          : <DonutCard data={[["신규", cust.cur.newCust], ["재구매", cust.cur.repeatCust]]} colors={[C_CUR, C_NAVER]} center={cust.cur.total.toLocaleString()} centerSub="명" fmt={(n) => `${n.toLocaleString()}명`} />}
+      </Card>
+    </>
   );
 }
 
@@ -200,7 +466,10 @@ export default function BoardPage() {
   const [refreshing, setRefreshing] = useState(false); // 서버가 응답 뒤에 새 묶음을 계산하는 중
   const [busy, setBusy] = useState(false);             // [다시 계산] 진행 중
   const [error, setError] = useState("");
-  const [win, setWin] = useState<BoardWindow>(7);
+  const [page, setPage] = useState<PageKey>("summary");
+  const [range, setRange] = useState<Range | null>(null);
+  const [filters, setFilters] = useState<Filters>({ salesCh: null, media: null, gaCh: null });
+  const [detail, setDetail] = useState<DetailState>({ key: "", data: null, loading: false, error: "" });
   const tries = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -229,6 +498,46 @@ export default function BoardPage() {
     return () => { clearInterval(hourly); if (timer.current) clearTimeout(timer.current); };
   }, [load]);
 
+  // 기간 — 프리셋은 기준일이 바뀌면 따라 움직이고, 직접 고른 기간은 묶음 범위 안으로만 맞춘다
+  const base = snap?.base ?? "", minDay = snap?.days[0] ?? "";
+  useEffect(() => {
+    if (!base) return;
+    setRange((cur) => {
+      const preset = PRESETS.find((p) => p.key === (cur?.preset ?? "d7"));
+      if (preset) { const [f, t] = preset.range(base); return { preset: preset.key, from: f < minDay ? minDay : f, to: t }; }
+      if (!cur) return null;
+      const to = cur.to > base ? base : cur.to, from = cur.from < minDay ? minDay : cur.from;
+      return from > to ? { preset: "d7", from: shiftDay(base, -6), to: base } : { ...cur, from, to };
+    });
+  }, [base, minDay]);
+
+  const span = useMemo(() => (snap && range ? spanOf(snap.days, range.from, range.to) : null), [snap, range]);
+  const view = useMemo(() => (snap && span ? buildView(snap, span, filters) : null), [snap, span, filters]);
+
+  // 기간 상세(상품별 표·신규/재구매) — 그 숫자가 있는 쪽을 볼 때만, 기간·판매 채널이 바뀌면 다시 받는다
+  const needDetail = page === "sales" || page === "sub";
+  const detailKey = range ? `${range.from}|${range.to}|${(filters.salesCh ?? ["*"]).join(",")}` : "";
+  const haveKey = detail.key;
+  useEffect(() => {
+    if (!needDetail || !range || !detailKey || haveKey === detailKey) return;
+    const ac = new AbortController();
+    const t = setTimeout(async () => {
+      setDetail((d) => ({ ...d, loading: true, error: "" }));
+      try {
+        const qs = new URLSearchParams({ from: range.from, to: range.to, ...(filters.salesCh ? { ch: filters.salesCh.join(",") } : {}) });
+        const r = await fetch(`/api/board/detail?${qs}`, { cache: "no-store", signal: ac.signal });
+        const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: BoardDetail };
+        if (!r.ok || !j.ok || !j.detail) throw new Error(j.error || "기간 상세를 불러오지 못했습니다");
+        setDetail({ key: detailKey, data: j.detail, loading: false, error: "" });
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        setDetail({ key: detailKey, data: null, loading: false, error: e instanceof Error ? e.message : "기간 상세를 불러오지 못했습니다" });
+      }
+    }, 250);
+    return () => { clearTimeout(t); ac.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needDetail, detailKey, haveKey]);
+
   async function rebuild() {
     setBusy(true); setError("");
     try {
@@ -236,46 +545,56 @@ export default function BoardPage() {
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; snapshot?: BoardSnapshot };
       if (!r.ok || !j.ok || !j.snapshot) throw new Error(j.error || "지표를 다시 계산하지 못했습니다");
       setSnap(j.snapshot); setRefreshing(false); tries.current = 0;
+      setDetail({ key: "", data: null, loading: false, error: "" });
       if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     } catch (e) { setError(e instanceof Error ? e.message : "지표를 다시 계산하지 못했습니다"); }
     finally { setBusy(false); }
   }
 
   const builtAt = snap ? new Date(Date.parse(snap.builtAt) + 9 * 3600e3).toISOString().slice(5, 16).replace("T", " ") : "";
-  const range = snap ? `${tailOf(snap.days, win)[0].slice(5)} ~ ${snap.base.slice(5)}` : "";
+  const salesOptions = snap?.sales.ok ? snap.sales.channels.map((c) => c.name) : [];
+  const mediaOptions = [...(snap?.meta?.ok ? ["메타"] : []), ...(snap?.naver?.ok ? ["네이버"] : [])];
+  const gaOptions = snap?.ga?.ok ? snap.ga.channels.map((c) => c.name) : [];
+  const n = range ? daysBetween(range.from, range.to) : 0;
+  // 기간이 바뀌어 아직 새 상세를 못 받았으면 옛 상세를 보여 주지 않는다
+  const shownDetail: DetailState = detail.key === detailKey ? detail : { key: detailKey, data: null, loading: true, error: "" };
   return (
-    <div className="b2b-container">
-      <div className="bd-brand">
-        <Link href="/" aria-label="업무도우미 홈">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="씨몬스터" />
-        </Link>
-      </div>
-      <div className="b2b-page-head">
-        <div>
-          <h1 className="b2b-page-title">주요 지표</h1>
-          {snap && <p className="b2b-page-subtitle">기준일 {snap.base} ({weekday(snap.base)}) · {range} · 직전 {win}일과 비교</p>}
-        </div>
-        <div className="b2b-page-actions bd-actions">
-          {snap && <span className="bd-state">{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
-          <div className="sm-tabs">
-            {BOARD_WINDOWS.map((w) => (
-              <button key={w} type="button" className={`sm-tab ${win === w ? "is-active" : ""}`} onClick={() => setWin(w)}>최근 {w}일</button>
-            ))}
+    <div className="bd-root">
+      <header className="bd-bar">
+        <div className="bd-bar-row">
+          <Link href="/" className="bd-logo" aria-label="업무도우미 홈">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="씨몬스터" />
+          </Link>
+          <h1 className="bd-title">주요 지표</h1>
+          <div className="sm-tabs bd-pages">
+            {PAGES.map(([k, label]) => <button key={k} type="button" className={`sm-tab ${page === k ? "is-active" : ""}`} onClick={() => setPage(k)}>{label}</button>)}
           </div>
-          <button type="button" className="b2b-btn-secondary" onClick={rebuild} disabled={busy || loading}>{busy ? "계산 중..." : "다시 계산"}</button>
+          <div className="bd-bar-right">
+            {snap && <span className="bd-state">{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
+            <button type="button" className="b2b-btn-secondary" onClick={rebuild} disabled={busy || loading}>{busy ? "계산 중..." : "다시 계산"}</button>
+          </div>
         </div>
-      </div>
-      {error && <div className="b2b-error" style={{ marginBottom: 16 }}>{error}</div>}
-      {loading && !snap ? <div className="b2b-loading">불러오는 중...</div>
-        : !snap ? (refreshing ? <div className="b2b-loading">처음 계산하는 중...</div> : null)
-        : (
-          <>
-            <SalesSection s={snap} n={win} />
-            <AdsSection s={snap} n={win} />
-            <CustomerSection s={snap} n={win} />
-          </>
+        {snap && range && (
+          <div className="bd-controls">
+            <DateControl range={range} base={snap.base} min={snap.days[0]} onChange={setRange} />
+            <FilterControl label="판매 채널" options={salesOptions} value={filters.salesCh} onChange={(x) => setFilters((f) => ({ ...f, salesCh: x }))} />
+            <FilterControl label="광고 매체" options={mediaOptions} value={filters.media} onChange={(x) => setFilters((f) => ({ ...f, media: x }))} />
+            <FilterControl label="유입 채널" options={gaOptions} value={filters.gaCh} onChange={(x) => setFilters((f) => ({ ...f, gaCh: x }))} />
+            <span className="bd-basis">기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</span>
+          </div>
         )}
+      </header>
+      <main className="bd-canvas">
+        {error && <div className="b2b-error bd-c12">{error}</div>}
+        {loading && !snap ? <div className="b2b-loading bd-c12">불러오는 중...</div>
+          : !snap ? (refreshing ? <div className="b2b-loading bd-c12">처음 계산하는 중...</div> : null)
+          : !view ? <div className="b2b-empty bd-c12">고른 기간에 숫자가 없습니다.</div>
+          : page === "summary" ? <SummaryPage v={view} s={snap} />
+          : page === "sales" ? <SalesPage v={view} s={snap} detail={shownDetail} />
+          : page === "ads" ? <AdsPage v={view} s={snap} />
+          : <SubPage v={view} s={snap} detail={shownDetail} />}
+      </main>
     </div>
   );
 }

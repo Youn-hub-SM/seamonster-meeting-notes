@@ -253,6 +253,80 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
   );
 }
 
+// 선 그래프(시계열) — 여러 선, 값 없는 구간(null)은 끊는다. dashed = 비교 기간처럼 '참고' 선.
+//  막대 3종과 같은 좌표계(GEOM)·격자·X축 솎음. 마우스오버 시 그 시점의 모든 선 값을 보여 준다.
+//  tipLabels = 툴팁 제목(기간 이름과 다르게 쓰고 싶을 때 — 예: 비교 선의 날짜를 함께 적기).
+export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height }: {
+  periods: string[];
+  series: { key: string; values: (number | null)[]; color: string; dashed?: boolean }[];
+  fmtAxis?: (n: number) => string;
+  fmtTip?: (n: number) => string;
+  unit?: string;
+  height?: number;                 // viewBox 높이(기본 GEOM.H) — 낮은 카드에 넣을 때만
+}) {
+  const [hi, setHi] = useState<number | null>(null);
+  if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
+  const fmt = fmtAxis || ((n: number) => n.toLocaleString());
+  const tip = fmtTip || ((n: number) => n.toLocaleString());
+  const { W, padL, padT, padB } = GEOM, H = height || GEOM.H, padR = 14;
+  const top = niceCeil(Math.max(...series.flatMap((s) => s.values.map((v) => v ?? 0)), 1));
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = periods.length;
+  const cx = (i: number) => (n === 1 ? padL + plotW / 2 : padL + (plotW * i) / (n - 1));
+  const y = (v: number) => padT + plotH - (v / top) * plotH;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
+  const segsOf = (vals: (number | null)[]) => {
+    const out: string[] = []; let seg: string[] = [];
+    for (let i = 0; i < n; i++) { const v = vals[i]; if (v == null) { if (seg.length) out.push(seg.join(" ")); seg = []; } else seg.push(`${cx(i)},${y(v)}`); }
+    if (seg.length) out.push(seg.join(" "));
+    return out;
+  };
+  const clamp = (v: number, lo: number, up: number) => Math.max(lo, Math.min(up, v));
+  const slot = n > 1 ? plotW / (n - 1) : plotW;
+  return (
+    <div style={{ position: "relative", overflowX: "auto" }} onMouseLeave={() => setHi(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", minWidth: 480 }}>
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--sm-border-light)" strokeWidth="1" />
+            <text x={padL - 6} y={y(t) + 3.5} textAnchor="end" fontSize={AXIS_FS.y} fill="var(--sm-text-light)">{fmt(Math.round(t))}</text>
+          </g>
+        ))}
+        {hi != null && <line x1={cx(hi)} x2={cx(hi)} y1={padT} y2={padT + plotH} stroke="var(--sm-border-strong)" strokeWidth="1" />}
+        {series.map((s) => segsOf(s.values).map((pts, k) => (
+          <polyline key={`${s.key}-${k}`} points={pts} fill="none" stroke={s.color} strokeWidth={s.dashed ? 1.5 : 2} strokeDasharray={s.dashed ? "4 4" : undefined} strokeLinejoin="round" strokeLinecap="round" opacity={s.dashed ? 0.7 : 1} />
+        )))}
+        {n <= 31 && series.filter((s) => !s.dashed).map((s) => s.values.map((v, i) => (v == null ? null : <circle key={`${s.key}-${i}`} cx={cx(i)} cy={y(v)} r={hi === i ? 4 : 2.4} fill={s.color} />)))}
+        {hi != null && n > 31 && series.map((s) => (s.values[hi] == null ? null : <circle key={s.key} cx={cx(hi)} cy={y(s.values[hi] as number)} r={4} fill={s.color} />))}
+        {periods.map((p, i) => (showLabel(i, n) ? <text key={i} x={cx(i)} y={H - 9} textAnchor={i === 0 ? "start" : "middle"} fontSize={AXIS_FS.x} fill="var(--sm-text-mid)">{p}</text> : null))}
+        {periods.map((_, i) => <rect key={i} x={cx(i) - slot / 2} y={padT} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHi(i)} />)}
+      </svg>
+      {hi != null && (
+        <div style={{ position: "absolute", left: `${clamp((cx(hi) / W) * 100, 10, 88)}%`, top: 6, transform: "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 12, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5 }}>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>{periods[hi]}</div>
+          {series.map((s) => <div key={s.key}><span style={{ color: s.color }}>●</span> {s.key} <strong>{s.values[hi] == null ? "-" : `${tip(s.values[hi] as number)}${unit}`}</strong></div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 작은 추세선(스코어카드 안) — 축·격자·글자 없음. 값이 2개 미만이면 그리지 않는다.
+export function Sparkline({ values, color = "var(--sm-text-mid)", height = 32 }: { values: (number | null)[]; color?: string; height?: number }) {
+  const pts = values.map((v, i) => [i, v] as const).filter((p): p is readonly [number, number] => p[1] != null);
+  if (pts.length < 2) return null;
+  const W = 120, H = 32, pad = 2;
+  const max = Math.max(...pts.map((p) => p[1])), min = Math.min(...pts.map((p) => p[1]));
+  const span = max - min || 1, n = values.length;
+  const x = (i: number) => pad + ((W - pad * 2) * i) / (n - 1);
+  const y = (v: number) => pad + (H - pad * 2) * (1 - (v - min) / span);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={height} preserveAspectRatio="none" style={{ display: "block" }} aria-hidden="true">
+      <polyline points={pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 // 분포 도넛 카드(도넛 + 값·비율 범례 행). 도넛 자체는 Donut 재사용 — 지오메트리·중앙표기가 한 벌이다.
 //  colors 미지정 시 PIE_COLORS 순환. 의미축(상태·귀책 등)은 그 색 지도를 넘길 것.
 export function PieCard({ title, data, fmt, colors, size = 132 }: {
