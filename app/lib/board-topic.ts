@@ -6,18 +6,25 @@
 //  · 고객은 '그 상품을 처음 산 날'로 센다 — 한 고객이 하루에만 들어가 기간으로 더해도 겹치지 않는다.
 //    신규 = 씨몬스터 첫 주문이 그날, 재구매 = 다음 날부터 주제 밖의 상품을 산 고객(30일 안 / 기준일까지).
 //  · 페이지 단계의 단위가 다르다: 방문·스크롤 = GA4 세션, 주문서 진입 = GA4 상품 결제 시작 수량, 구매 = 매출 원장의 주문 건수.
+//  · 폼 신청형 주제(def.forms — 다이어트 챌린지): 전환이 상품 주문이 아니라 탈리 폼 제출이다. 매출·고객 집계 대신 formsSection 이
+//    탈리 API 에서 신청·결과 제출을 받아 날짜별 건수로 만든다. 신청한 사람과 결과·구매는 전화번호로 잇는다(저장은 건수만).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "./supabase";
 import { readKvSoft, mutateKv } from "./production-kv";
 import { isMetaAdConfigured, getDailyByName } from "./meta-ad";
 import { isGaConfigured, runGaReport, type GaFilter } from "./ga";
 import { readBoard, salesFingerprint } from "./board";
-import { BOARD_DAYS, TOPIC_VERSION, TOPICS, TOPIC_REPEAT_DAYS, shiftDay as shift, type TopicDef, type TopicSnapshot, type TopicSales, type TopicCust, type TopicGa, type TopicMeta, type Fail } from "./board-types";
+import { BOARD_DAYS, TOPIC_VERSION, TOPICS, TOPIC_REPEAT_DAYS, shiftDay as shift, type TopicDef, type TopicSnapshot, type TopicSales, type TopicCust, type TopicGa, type TopicMeta, type TopicForms, type Fail } from "./board-types";
+import { getTallyApiKey, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "./voc-tally";
+import { findPhone } from "./form-sms";
+import { customerKey } from "./sales-normalize";
 
 const kvData = (id: string) => `board_topic_${id}`;
 const MANUAL_GAP_MS = 60_000;
 const ITEM_LIMIT = 20_000;      // 날짜 × 채널 × 상품 줄 수 상한(넘으면 정의가 너무 넓다)
 const TOP_ITEMS = 30, TOP_AFTER = 15, TOP_SOURCES = 12, TOP_ADS = 40;
+const FORM_PAGES = 30;          // 탈리 제출 100건씩 최대 30쪽(3,000건) — 넘으면 일부만 받았다고 알린다
+const KEY_CHUNK = 200;          // 고객 키를 한 번에 이만큼씩 조회
 
 export class TopicError extends Error { constructor(msg: string, public status = 400) { super(msg); this.name = "TopicError"; } }
 
@@ -169,15 +176,92 @@ async function metaSection(def: TopicDef, days: string[]): Promise<TopicMeta> {
   return { ok: true, ads, campaignOnly: res.some((x) => x.campaignOnly) };
 }
 
+// ── 탈리 폼(신청·결과) ── 180일 안의 제출을 받아 날짜별 건수로. 신청한 사람(전화번호)에 결과 제출과 주문을 잇는다.
+//  사람의 날짜 = 처음 신청한 날(한 사람은 하루에만 들어가 기간으로 더해도 겹치지 않는다). 구매 = 그날부터 기준일까지의 주문(모든 채널).
+type FormSub = { day: string; phone: string | null };
+const kstDay = (iso: string | undefined) => { const t = Date.parse(String(iso || "")); return Number.isFinite(t) ? new Date(t + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
+async function tallySubs(formId: string, startIso: string, apiKey: string): Promise<{ subs: FormSub[]; truncated: boolean }> {
+  const qmap = new Map<string, TallyQ>();
+  const subs: FormSub[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= FORM_PAGES; page++) {
+    const json = await tallyFetch(`/forms/${encodeURIComponent(formId)}/submissions?filter=completed&limit=100&page=${page}&startDate=${encodeURIComponent(startIso)}`, apiKey);
+    for (const q of (json.questions || []) as TallyQ[]) if (q.id) qmap.set(q.id, q);
+    const list = (json.submissions || []) as TallySub[];
+    for (const s of list) {
+      if (!s?.id || seen.has(s.id)) continue;
+      seen.add(s.id);
+      const day = kstDay(s.submittedAt);
+      if (day) subs.push({ day, phone: findPhone(mapTallySubmission(s, qmap, formId).answers) });
+    }
+    if (!json.hasMore || list.length === 0) return { subs, truncated: false };
+  }
+  return { subs, truncated: true };
+}
+async function formsSection(sb: SupabaseClient, def: TopicDef, days: string[], base: string): Promise<TopicForms> {
+  const f = def.forms!;
+  const apiKey = await getTallyApiKey();
+  if (!apiKey) throw new Error("탈리 API 키가 없습니다. VOC › 설정에서 탈리 API 키를 넣으세요.");
+  const startIso = new Date(`${days[0]}T00:00:00+09:00`).toISOString();
+  const [ap, rs] = await timeout(Promise.all([
+    tallySubs(f.apply.id, startIso, apiKey),
+    f.result ? tallySubs(f.result.id, startIso, apiKey) : Promise.resolve(null),
+  ]), 60_000, "탈리");
+  const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
+  const out: TopicForms = { ok: true, apply: zeros(n), people: zeros(n), result: rs ? zeros(n) : null, done: zeros(n), buy: { ok: true, people: zeros(n), rev: zeros(n) }, noPhone: 0, resultUnmatched: 0, truncated: ap.truncated || !!rs?.truncated };
+
+  // 신청 — 사람마다 처음 신청한 날
+  const firstDay = new Map<string, string>();   // 전화번호 → 처음 신청한 날
+  for (const s of ap.subs) {
+    const i = idx.get(s.day); if (i == null) continue;   // 기준일 뒤(오늘) 제출은 다음 계산에
+    out.apply[i]++;
+    if (!s.phone) { out.noPhone++; out.people[i]++; continue; }
+    const cur = firstDay.get(s.phone);
+    if (!cur || s.day < cur) firstDay.set(s.phone, s.day);
+  }
+  for (const d of firstDay.values()) out.people[idx.get(d)!]++;
+
+  // 결과 — 날짜별 제출 건수와, 신청한 사람 가운데 결과를 낸 사람(신청일 자리에)
+  if (rs && out.result) {
+    const doneBy = new Set<string>();
+    for (const s of rs.subs) {
+      const i = idx.get(s.day); if (i == null) continue;
+      out.result[i]++;
+      if (s.phone && firstDay.has(s.phone)) doneBy.add(s.phone); else out.resultUnmatched++;
+    }
+    for (const p of doneBy) out.done[idx.get(firstDay.get(p)!)!]++;
+  }
+
+  // 구매 — 신청한 사람의 고객 키로 주문 원장을 본다. 실패해도 신청·결과 숫자는 그대로 보여 준다.
+  try {
+    const byKey = new Map<string, string>();   // 고객 키 → 처음 신청한 날
+    for (const [phone, d] of firstDay) { const k = customerKey(phone); if (k) byKey.set(k, d); }
+    const keys = [...byKey.keys()];
+    const people = zeros(n), rev = zeros(n);
+    for (let c = 0; c < keys.length; c += KEY_CHUNK) {
+      const rows = await runQ<{ k: string; d: string; rev: number }>(sb,
+        `select o.customer_key as k, o.order_date::text as d, coalesce(sum(o.subtotal_amount), 0)::bigint as rev from sales_orders o `
+        + `where o.customer_key in (${keys.slice(c, c + KEY_CHUNK).map(lit).join(", ")}) and o.order_date between '${days[0]}' and '${base}' group by 1, 2`, ITEM_LIMIT);
+      const got = new Map<string, number>();   // 고객 키 → 신청한 날부터의 매출
+      for (const r of rows) { const d0 = byKey.get(String(r.k)); if (d0 && String(r.d) >= d0) got.set(String(r.k), (got.get(String(r.k)) || 0) + num(r.rev)); }
+      for (const [k, v] of got) { const i = idx.get(byKey.get(k)!)!; people[i]++; rev[i] += v; }
+    }
+    out.buy = { ok: true, people, rev };
+  } catch (e) { out.buy = fail(e); }
+  return out;
+}
+
 export async function buildTopic(sb: SupabaseClient, def: TopicDef, base: string): Promise<TopicSnapshot> {
   const days = Array.from({ length: BOARD_DAYS }, (_, i) => shift(base, i - (BOARD_DAYS - 1)));
-  const [sales, cust, ga, meta] = await Promise.all([
-    salesSection(sb, def, days, base).catch(fail),
-    custSection(sb, def, days, base).catch(fail),
+  const isForm = !!def.forms;   // 폼 신청형 — 상품 주문·고객 집계를 하지 않는다
+  const [sales, cust, ga, meta, forms] = await Promise.all([
+    isForm ? Promise.resolve(null) : salesSection(sb, def, days, base).catch(fail),
+    isForm ? Promise.resolve(null) : custSection(sb, def, days, base).catch(fail),
     def.landing && isGaConfigured() ? gaSection(def, days, base).catch(fail) : Promise.resolve(null),
     def.metaCampaignLike.length && isMetaAdConfigured() ? metaSection(def, days).catch(fail) : Promise.resolve(null),
+    isForm ? formsSection(sb, def, days, base).catch(fail) : Promise.resolve(null),
   ]);
-  return { v: TOPIC_VERSION, id: def.id, cond: JSON.stringify(def), base, builtAt: new Date().toISOString(), builtDay: kstToday(), days, sales, cust, ga, meta };
+  return { v: TOPIC_VERSION, id: def.id, cond: JSON.stringify(def), base, builtAt: new Date().toISOString(), builtDay: kstToday(), days, sales, cust, ga, meta, forms };
 }
 
 /** 주제 하나의 묶음 — 저장된 것이 오늘 계산됐고 정의·기준일이 같으면 그대로, 아니면 계산해 저장한다. force = [다시 계산](1분 안 연타 거절). */

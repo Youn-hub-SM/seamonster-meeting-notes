@@ -86,24 +86,39 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 // ── 주제 보고서(2026-11-16) ── 주제 하나(예: 체험단)의 구매·광고 효율·페이지 전환·재구매를 한 화면에서 본다.
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
-export const TOPIC_VERSION = 3;
+//  주제는 두 가지다(2026-11-16): 상품 주문이 전환인 주제(productLike)와, 탈리 폼 신청이 전환인 주제(forms — 상품 주문·고객 집계를 하지 않는다).
+export const TOPIC_VERSION = 4;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
-  productLike: string[];              // 주문 상품명에 든 구절(그중 하나라도) — 그 상품만 잡히게 충분히 길게
+  forms?: { apply: { id: string; label: string }; result: { id: string; label: string } | null };   // 탈리 폼 ID(신청·결과). result null = 결과 폼이 아직 정해지지 않음
+  productLike: string[];              // 주문 상품명에 든 구절(그중 하나라도) — 그 상품만 잡히게 충분히 길게. 폼 신청형은 빈 배열
   landing: { label: string; paths: string[]; scroll: [label: string, event: string][] } | null;   // 랜딩 페이지 주소(정확히)와 스크롤 깊이 이벤트
   gaItemNames: string[];              // GA4 상품명(정확히) — 주문서 진입 수
   metaCampaignLike: string[];         // 메타 캠페인 이름에 든 말
 };
 export const TOPICS: TopicDef[] = [
   {
-    // 체험단 = 공식몰 상품번호 172(이유식 생선 체험단). 페이지 seamonster.kr/baby, 메타 '이유식 체험단' 캠페인. 네이버 광고 없음.
-    id: "trial", name: "체험단",
+    // 이유식 체험단 = 공식몰 상품번호 172(이유식 생선 체험단). 페이지 seamonster.kr/baby, 메타 '이유식 체험단' 캠페인. 네이버 광고 없음.
+    //  2026-11-16 이름을 '체험단' → '이유식 체험단'으로(대표 — 다이어트 챌린지와 나란히 놓이므로).
+    id: "trial", name: "이유식 체험단",
     basis: "공식몰 상품번호 172 주문 · 페이지 /baby · 메타 '이유식 체험단' 캠페인",
     productLike: ["이유식 생선 체험단 패키지", "첫 생선일기 전용 패키지"],   // 172 의 지금 이름과 예전 이름
     landing: { label: "/baby", paths: ["/baby", "/baby/", "/baby/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
     gaItemNames: ["씨몬스터 이유식 생선 체험단 패키지", "우리 아이 첫 생선일기 전용 패키지"],
     metaCampaignLike: ["이유식 체험단"],
+  },
+  {
+    // 다이어트 챌린지(2026-11-16 대표) = seamonster.kr/diet 에서 탈리 폼으로 신청 → 미션을 마치면 탈리 폼으로 결과 제출. 주로 메타 '다이어트 챌린지' 캠페인으로 들어온다.
+    //  신청 폼 ArKkkW 는 /diet 페이지에 박혀 있는 폼이다. 결과 폼은 대표가 주소를 주면 result 에 적는다(그때까지 결과·완료율은 비어 있다).
+    //  상품이 정해져 있지 않다(선정된 뒤 원하는 제품을 산다) — 구매는 '신청한 사람이 신청한 날부터 산 주문'으로 본다(전화번호 → 고객 키).
+    id: "diet", name: "다이어트 챌린지",
+    basis: "페이지 /diet · 탈리 신청 폼 · 메타 '다이어트 챌린지' 캠페인",
+    forms: { apply: { id: "ArKkkW", label: "챌린지 신청" }, result: null },
+    productLike: [],
+    landing: { label: "/diet", paths: ["/diet", "/diet/", "/diet/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
+    gaItemNames: [],
+    metaCampaignLike: ["다이어트 챌린지"],
   },
 ];
 export const TOPIC_REPEAT_DAYS = 30;   // 재구매율을 재는 창 — 처음 산 날부터 30일 안
@@ -137,13 +152,27 @@ export type TopicMeta = {
   ads: { id: string; campaign: string; adset: string; name: string; spend: number[]; impressions: number[]; clicks: number[]; purchases: number[]; value: number[] }[];
   campaignOnly: boolean;   // true = 광고 단위로 받지 못해 캠페인 단위로 받음
 };
+// 탈리 폼(신청·결과) — 날짜는 제출 시각의 한국 날짜. 사람은 전화번호로 센다(번호를 못 찾은 제출은 1건을 1명으로 — 구매·결과와 잇지 못한다).
+//  묶음에는 건수만 담는다(이름·전화번호는 계산할 때만 쓰고 저장하지 않는다).
+export type TopicForms = {
+  ok: true;
+  apply: number[];              // 그날 신청 제출 건수
+  people: number[];             // 그날 처음 신청한 사람
+  result: number[] | null;      // 그날 결과 제출 건수(null = 결과 폼이 정해지지 않음)
+  done: number[];               // 신청일 기준 — 그날 처음 신청한 사람 중 지금까지 결과를 낸 사람
+  buy: { ok: true; people: number[]; rev: number[] } | Fail;   // 신청일 기준 — 신청한 날부터 기준일까지 주문이 있는 사람과 그 매출(모든 채널)
+  noPhone: number;              // 전화번호를 찾지 못한 신청 건수
+  resultUnmatched: number;      // 결과 제출 중 신청한 사람과 잇지 못한 건수
+  truncated: boolean;           // 제출이 많아 일부만 받음
+};
 export type TopicSnapshot = {
   v: typeof TOPIC_VERSION;
   id: string; cond: string;          // cond = 계산에 쓴 정의(달라지면 다시 계산)
   base: string; builtAt: string; builtDay: string;
   days: string[];
-  sales: TopicSales | Fail;
-  cust: TopicCust | Fail;
+  sales: TopicSales | Fail | null;   // null = 폼 신청형 주제(상품 주문을 세지 않는다)
+  cust: TopicCust | Fail | null;
   ga: TopicGa | Fail | null;         // null = 정의에 없음 또는 연결 안 됨
   meta: TopicMeta | Fail | null;
+  forms: TopicForms | Fail | null;   // null = 상품 주문형 주제
 };

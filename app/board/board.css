@@ -60,6 +60,7 @@
 .bd-c12 { grid-column: 1 / -1; }
 .bd-card-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sm-space-2); margin-bottom: var(--sm-space-4); }
 .bd-card-title { font-size: var(--sm-fs-lg); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-black); }
+.bd-card-note { font-size: var(--sm-fs-xs); color: var(--sm-text-light); }   /* 카드 머리 오른쪽의 작은 보조 글(잇지 못한 건수 등) */
 .bd-canvas > .b2b-error, .bd-canvas > .b2b-loading, .bd-canvas > .b2b-empty { margin: 0; }
 
 /* 숫자 줄 — 흰 판 하나 위에 테두리 없는 타일(이름 · 큰 숫자와 작은 단위 · 증감 배지와 직전 값 · 작은 추세선). 쪽마다 맨 위에 한 줄 */

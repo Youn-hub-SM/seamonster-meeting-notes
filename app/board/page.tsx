@@ -5,6 +5,7 @@
 //  날마다 더할 수 없는 값(신규·재구매 고객 수)과 상품별 표만 기간이 바뀔 때 /api/board/detail 로 받는다.
 //  비율(객단가·ROAS·전환율)은 기간 합계끼리 나눈다. 비교는 언제나 '직전 같은 길이 기간'.
 //  주제 보고서(2026-11-16): 고정 네 쪽 뒤에 주제 탭(board-types.ts TOPICS — 대표와 같이 정한 대상) — 그 주제의 묶음을 /api/board/topic 에서 받아 같은 기간으로 자른다.
+//   주제는 상품 주문형(TopicPage — 이유식 체험단)과 폼 신청형(FormTopicPage — 다이어트 챌린지, 탈리 폼 신청이 전환) 두 가지다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { StackedBar, LineChart, Sparkline, Donut, ChartLegend, PIE_COLORS, moneyCompact } from "@/app/components/charts";
@@ -486,7 +487,7 @@ function AdsPage({ v, s }: { v: View; s: BoardSnapshot }) {
   );
 }
 
-// ── 주제 보고서 ── 주제 하나(예: 체험단)의 구매·광고 효율·페이지 전환·재구매를 같은 기간으로 본다.
+// ── 주제 보고서(상품 주문형) ── 주제 하나(예: 이유식 체험단)의 구매·광고 효율·페이지 전환·재구매를 같은 기간으로 본다.
 const mondayOf = (ymd: string) => shiftDay(ymd, -((new Date(`${ymd}T00:00:00Z`).getUTCDay() + 6) % 7));
 function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
   const N = t.days.length;
@@ -496,7 +497,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
   const on = (name: string) => !salesCh || salesCh.includes(name);
 
   // ① 구매 — 판매 채널 필터가 걸린다
-  const sales = t.sales.ok ? t.sales : null;
+  const sales = t.sales?.ok ? t.sales : null;
   const chSel = sales ? sales.channels.filter((c) => on(c.name)) : [];
   const rev = addSeries(chSel.map((c) => c.rev), N), orders = addSeries(chSel.map((c) => c.orders), N), qty = addSeries(chSel.map((c) => c.qty), N);
   const revS = sales ? spanSum(rev, sp) : null, ordS = sales ? spanSum(orders, sp) : null, qtyS = sales ? spanSum(qty, sp) : null;
@@ -504,7 +505,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
     .filter((r) => r.rev !== 0 || r.orders > 0).sort((a, b) => b.rev - a.rev);
 
   // ④ 고객·재구매 — 처음 산 날 기준(채널 필터 없음). 30일 재구매율은 처음 산 지 30일이 지난 고객만으로 잰다
-  const cust = t.cust.ok ? t.cust : null;
+  const cust = t.cust?.ok ? t.cust : null;
   const firstS = cust ? spanSum(cust.first, sp) : null, freshS = cust ? spanSum(cust.fresh, sp) : null;
   const lastMature = N - 1 - TOPIC_REPEAT_DAYS;   // 이 자리까지가 30일을 다 채운 고객
   const mEnd = Math.min(sp.i1, lastMature);
@@ -647,6 +648,158 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
       <Card w={6} title="상품·옵션별 주문">
         <DataTable rows={tv.itemRows} cols={iCols} rowKey={(r) => r.key} sortKey="rev" empty={noSales}
           foot={["합계", "", won(tv.revS?.cur ?? 0), (tv.ordS?.cur ?? 0).toLocaleString()]} />
+      </Card>
+    </>
+  );
+}
+
+// ── 폼 신청형 주제(다이어트 챌린지) ── 전환이 상품 주문이 아니라 탈리 폼 신청이다. 신청 → (선정 뒤) 구매 → 결과 제출을 같은 기간으로 본다.
+//  날짜별 숫자(신청·결과 제출 건수)는 제출한 날, 사람 숫자(신청한 사람·구매·결과 제출)는 처음 신청한 날 기준이다.
+function buildFormView(t: TopicSnapshot, sp: Span) {
+  const N = t.days.length;
+  const win = <T,>(xs: T[]): T[] => cut(xs, sp.i0, sp.i1);
+  const prevWin = (xs: (number | null)[]): (number | null)[] | null => (sp.prev ? cut(xs, sp.prev.i0, sp.prev.i1) : null);
+  const labels = win(t.days).map(md);
+
+  // 탈리 — 신청·결과
+  const forms = t.forms?.ok ? t.forms : null;
+  const hasResult = !!forms?.result;
+  const buy = forms?.buy.ok ? forms.buy : null;
+  const applyS = forms ? spanSum(forms.apply, sp) : null, peopleS = forms ? spanSum(forms.people, sp) : null;
+  const resultS = forms?.result ? spanSum(forms.result, sp) : null, doneS = forms && hasResult ? spanSum(forms.done, sp) : null;
+  const buyS = buy ? spanSum(buy.people, sp) : null, buyRevS = buy ? spanSum(buy.rev, sp) : null;
+  const people = peopleS?.cur ?? 0;
+  const buyRate = buyS ? ratio(buyS.cur * 100, people) : null, doneRate = doneS ? ratio(doneS.cur * 100, people) : null;
+  const steps: { idx: number; label: string; n: number | null; rate: number | null }[] = forms ? [
+    { idx: 0, label: "신청한 사람", n: people, rate: null },
+    { idx: 1, label: "신청 뒤 구매", n: buyS ? buyS.cur : null, rate: buyRate },
+    { idx: 2, label: "결과 제출", n: doneS ? doneS.cur : null, rate: doneRate },
+  ] : [];
+  const byWeek = sp.n > 14;
+  const cohort: { key: string; from: string; to: string; apply: number; people: number; buy: number; buyRev: number; done: number }[] = [];
+  if (forms) for (let i = sp.i0; i <= sp.i1; i++) {
+    const d = t.days[i], key = byWeek ? mondayOf(d) : d;
+    let row = cohort[cohort.length - 1];
+    if (!row || row.key !== key) { row = { key, from: d, to: d, apply: 0, people: 0, buy: 0, buyRev: 0, done: 0 }; cohort.push(row); }
+    row.to = d;
+    row.apply += forms.apply[i] || 0; row.people += forms.people[i] || 0; row.done += forms.done[i] || 0;
+    row.buy += buy?.people[i] || 0; row.buyRev += buy?.rev[i] || 0;
+  }
+
+  // 페이지 — 방문·스크롤은 GA4 세션, 신청은 탈리 제출 건수
+  const ga = t.ga?.ok ? t.ga : null;
+  const visitS = ga ? spanSum(ga.visits, sp) : null;
+  const convRate = visitS && applyS ? { cur: ratio(applyS.cur * 100, visitS.cur), prev: ratio(applyS.prev == null ? null : applyS.prev * 100, visitS.prev) } : null;
+  const funnel: { idx: number; label: string; n: number; from: string; rate: number | null; ofVisit: number | null }[] = [];
+  if (ga && visitS) {
+    const v = visitS.cur;
+    let prevLabel = "방문", prevN = v;
+    funnel.push({ idx: 0, label: "방문", n: v, from: "", rate: null, ofVisit: null });
+    for (const x of ga.scroll) { const n = sumOf(win(x.sessions)); funnel.push({ idx: funnel.length, label: x.label, n, from: prevLabel, rate: ratio(n * 100, prevN), ofVisit: ratio(n * 100, v) }); prevLabel = x.label; prevN = n; }
+    if (applyS) funnel.push({ idx: funnel.length, label: "신청", n: applyS.cur, from: "방문", rate: ratio(applyS.cur * 100, v), ofVisit: ratio(applyS.cur * 100, v) });
+  }
+  const sesTotal = ga ? sumOf(ga.sources.flatMap((x) => win(x.sessions))) : 0;
+  const sourceRows = (ga ? ga.sources : []).map((x) => { const r = spanSum(x.sessions, sp); return { name: x.name, sessions: r.cur, prevSessions: r.prev }; }).filter((r) => r.sessions > 0).sort((a, b) => b.sessions - a.sessions);
+
+  // 메타 광고 — 신청 1건당 광고비는 탈리 신청 건수로 나눈다
+  const meta = t.meta?.ok ? t.meta : null;
+  const pick = (k: "spend" | "clicks" | "impressions") => addSeries(meta ? meta.ads.map((a) => a[k]) : [], N);
+  const spend = pick("spend");
+  const spendS = meta ? spanSum(spend, sp) : null, clickS = meta ? spanSum(pick("clicks"), sp) : null, impS = meta ? spanSum(pick("impressions"), sp) : null;
+  const cpa = spendS && applyS ? { cur: ratio(spendS.cur, applyS.cur), prev: ratio(spendS.prev, applyS.prev) } : null;
+  const adRows = (meta ? meta.ads : []).map((a) => {
+    const sp1 = sumOf(win(a.spend)), imp = sumOf(win(a.impressions)), clk = sumOf(win(a.clicks));
+    return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: imp, clicks: clk, ctr: ratio(clk * 100, imp), cpc: ratio(sp1, clk) };
+  }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
+
+  return { win, prevWin, hasPrev: !!sp.prev, labels, forms, hasResult, buy, applyS, peopleS, resultS, doneS, buyS, buyRevS, people, buyRate, doneRate, steps, byWeek, cohort,
+    ga, visitS, convRate, funnel, sesTotal, sourceRows, meta, spend, spendS, clickS, impS, cpa, adRows };
+}
+type FormView = ReturnType<typeof buildFormView>;
+
+function FormTopicPage({ fv, t, def }: { fv: FormView; t: TopicSnapshot; def: TopicDef }) {
+  const whyX = (x: { ok: boolean } | null) => (x == null ? "연결 안 됨" : x.ok ? undefined : "조회 실패");
+  const ctr = fv.clickS && fv.impS ? ratio(fv.clickS.cur * 100, fv.impS.cur) : null;
+  const pctOf = (v: number | null) => (v == null ? "-" : `${v.toFixed(1)}%`);
+  const noResult = "결과 폼이 정해지지 않았습니다.";
+  type PRow = FormView["steps"][number];
+  const pCols: Col<PRow>[] = [
+    { key: "idx", label: "단계", sort: (r) => -r.idx, cell: (r) => r.label },
+    { key: "n", label: "사람", num: true, bar: true, sort: (r) => r.n ?? 0, cell: (r) => (r.n == null ? "-" : `${r.n.toLocaleString()}명`) },
+    { key: "rate", label: "신청한 사람 대비", num: true, sort: (r) => r.rate ?? 101, cell: (r) => (r.idx === 0 ? "-" : pctOf(r.rate)) },
+  ];
+  type FRow = FormView["funnel"][number];
+  const fCols: Col<FRow>[] = [
+    { key: "idx", label: "단계", sort: (r) => -r.idx, cell: (r) => r.label },
+    { key: "n", label: "수", num: true, bar: true, sort: (r) => r.n, cell: (r) => r.n.toLocaleString() },
+    { key: "ofVisit", label: "방문 대비", num: true, sort: (r) => r.ofVisit ?? 101, cell: (r) => (r.idx === 0 ? "-" : pctOf(r.ofVisit)) },
+    { key: "rate", label: "앞 단계 대비", num: true, w: 30, sort: (r) => r.rate ?? 101, cell: (r) => (r.from ? `${r.from}의 ${pctOf(r.rate)}` : "-") },
+  ];
+  type SRow = FormView["sourceRows"][number];
+  const sCols: Col<SRow>[] = [
+    { key: "name", label: "소스/매체", w: 45, sort: (r) => r.name, cell: (r) => r.name },
+    { key: "sessions", label: "방문", num: true, bar: true, sort: (r) => r.sessions, cell: (r) => r.sessions.toLocaleString() },
+    { key: "share", label: "비중", num: true, sort: (r) => r.sessions, cell: (r) => (fv.sesTotal > 0 ? `${(Math.round((r.sessions / fv.sesTotal) * 1000) / 10).toFixed(1)}%` : "-") },
+    { key: "delta", label: "직전 대비", num: true, sort: (r) => pctChange(r.sessions, r.prevSessions) ?? -Infinity, cell: (r) => <DeltaText d={pctDelta(r.sessions, r.prevSessions, "up")} /> },
+  ];
+  type ARow = FormView["adRows"][number];
+  const aCols: Col<ARow>[] = [
+    { key: "name", label: "광고", w: 30, sort: (r) => r.name, cell: (r) => <span title={r.path || undefined}>{r.name}</span> },
+    { key: "spend", label: "광고비(원)", num: true, bar: true, sort: (r) => r.spend, cell: (r) => won(r.spend) },
+    { key: "imp", label: "노출", num: true, sort: (r) => r.impressions, cell: (r) => r.impressions.toLocaleString() },
+    { key: "clicks", label: "클릭", num: true, sort: (r) => r.clicks, cell: (r) => r.clicks.toLocaleString() },
+    { key: "ctr", label: "CTR", num: true, sort: (r) => r.ctr ?? 0, cell: (r) => pct2(r.ctr) ?? "-" },
+    { key: "cpc", label: "클릭당 광고비(원)", num: true, sort: (r) => r.cpc ?? 0, cell: (r) => (r.cpc == null ? "-" : won(Math.round(r.cpc))) },
+  ];
+  type CRow = FormView["cohort"][number];
+  const cCols: Col<CRow>[] = [
+    { key: "key", label: fv.byWeek ? "신청한 주" : "신청한 날", sort: (r) => r.key, cell: (r) => (fv.byWeek ? `${md(r.from)}~${md(r.to)}` : `${md(r.from)} (${weekday(r.from)})`) },
+    { key: "people", label: "신청한 사람", num: true, bar: true, sort: (r) => r.people, cell: (r) => r.people.toLocaleString() },
+    { key: "buy", label: "신청 뒤 구매", num: true, sort: (r) => r.buy, cell: (r) => (fv.buy ? r.buy.toLocaleString() : "-") },
+    { key: "buyRate", label: "구매율", num: true, sort: (r) => ratio(r.buy, r.people) ?? -1, cell: (r) => (fv.buy ? pct1(ratio(r.buy * 100, r.people)) ?? "-" : "-") },
+    { key: "buyRev", label: "구매 매출(원)", num: true, sort: (r) => r.buyRev, cell: (r) => (fv.buy ? won(r.buyRev) : "-") },
+    { key: "done", label: "결과 제출", num: true, sort: (r) => r.done, cell: (r) => (fv.hasResult ? r.done.toLocaleString() : "-") },
+    { key: "doneRate", label: "완료율", num: true, sort: (r) => ratio(r.done, r.people) ?? -1, cell: (r) => (fv.hasResult ? pct1(ratio(r.done * 100, r.people)) ?? "-" : "-") },
+  ];
+  const noForm = t.forms && !t.forms.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 신청이 없습니다.";
+  const noGa = whyX(t.ga) === "연결 안 됨" ? "GA4가 연결되지 않았습니다." : "페이지 숫자가 없습니다.", noAds = whyX(t.meta) === "연결 안 됨" ? "메타 광고가 연결되지 않았습니다." : "이 기간에 광고 숫자가 없습니다.";
+  const cohortRows = fv.cohort.filter((r) => r.people > 0);
+  const loose = fv.forms ? [fv.forms.noPhone > 0 ? `전화번호 없는 신청 ${fv.forms.noPhone.toLocaleString()}건` : "", fv.forms.resultUnmatched > 0 ? `신청과 잇지 못한 결과 ${fv.forms.resultUnmatched.toLocaleString()}건` : ""].filter(Boolean).join(" · ") : "";
+  return (
+    <>
+      <Errors list={[failOf("탈리", t.forms), fv.forms ? failOf("신청 뒤 구매", fv.forms.buy) : "", failOf("GA4", t.ga), failOf("메타 광고", t.meta),
+        fv.forms?.truncated ? "탈리: 제출이 많아 일부만 받았습니다." : "",
+        t.ga?.ok && t.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다." : "",
+        t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 단위로 보여 줍니다." : ""].filter(Boolean)} />
+      <Scores>
+        <Score label="신청 건수" value={cnt(fv.applyS?.cur, "건")} delta={pctDelta(fv.applyS?.cur ?? null, fv.applyS?.prev ?? null, "up")} note={fv.forms ? `신청한 사람 ${fv.people.toLocaleString()}명` : "조회 실패"} spark={fv.forms ? fv.win(fv.forms.apply) : undefined} />
+        <Score label="페이지 전환율" value={pct2(fv.convRate?.cur)} delta={ppDelta(fv.convRate?.cur ?? null, fv.convRate?.prev ?? null, "up")} note={fv.ga ? `방문 ${(fv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={fv.ga ? fv.win(fv.ga.visits) : undefined} />
+        <Score label="신청 뒤 구매" value={cnt(fv.buyS?.cur, "명")} note={fv.buy ? `신청한 사람의 ${pctOf(fv.buyRate)} · 매출 ${moneyCompact(fv.buyRevS?.cur ?? 0)}원` : fv.forms ? "조회 실패" : undefined} spark={fv.buy ? fv.win(fv.buy.people) : undefined} />
+        <Score label="결과 제출" value={cnt(fv.doneS?.cur, "명")} note={!fv.forms ? undefined : fv.hasResult ? `완료율 ${pctOf(fv.doneRate)} · 제출 ${(fv.resultS?.cur ?? 0).toLocaleString()}건` : "결과 폼 미정"} spark={fv.forms?.result ? fv.win(fv.forms.result) : undefined} />
+        <Score label="메타 광고비" value={wonS(fv.spendS?.cur)} delta={pctDelta(fv.spendS?.cur ?? null, fv.spendS?.prev ?? null, "none")} note={fv.meta ? `클릭 ${(fv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={fv.meta ? fv.win(fv.spend) : undefined} />
+        <Score label="신청 1건당 광고비" value={wonS(fv.cpa?.cur == null ? null : Math.round(fv.cpa.cur))} delta={pctDelta(fv.cpa?.cur ?? null, fv.cpa?.prev ?? null, "down")} note={fv.meta ? `노출 ${(fv.impS?.cur ?? 0).toLocaleString()}회` : whyX(t.meta)} />
+      </Scores>
+      <Card w={8} title="신청 추이" right={fv.forms ? <CompareLegend v={fv} /> : undefined}>
+        {fv.forms ? <CompareLine v={fv} values={fv.forms.apply} unit="건" /> : <div className="b2b-empty">{noForm}</div>}
+      </Card>
+      <Card w={4} title="신청한 사람의 진행" right={loose ? <span className="bd-card-note">{loose}</span> : undefined}>
+        <DataTable rows={fv.people > 0 ? fv.steps : []} cols={pCols} rowKey={(r) => r.label} sortKey="idx" empty={noForm} />
+      </Card>
+      <Card w={6} title={`${def.landing?.label ?? "페이지"} 단계별 전환`}><DataTable rows={fv.funnel} cols={fCols} rowKey={(r) => r.label} sortKey="idx" empty={noGa} /></Card>
+      <Card w={6} title="유입 경로별 방문"><DataTable rows={fv.sourceRows} cols={sCols} rowKey={(r) => r.name} sortKey="sessions" empty={noGa} /></Card>
+      <Card w={6} title="메타 광고비 추이" right={fv.meta ? <CompareLegend v={fv} /> : undefined}>
+        {fv.meta ? <CompareLine v={fv} values={fv.spend} fmtAxis={moneyCompact} fmtTip={won} unit="원" /> : <div className="b2b-empty">{noAds}</div>}
+      </Card>
+      <Card w={6} title="광고별"><DataTable rows={fv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
+      <Card w={12} title={fv.byWeek ? "신청한 주별 구매·결과" : "신청한 날별 구매·결과"}>
+        <DataTable rows={cohortRows} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty={noForm}
+          foot={["합계", fv.people.toLocaleString(), fv.buy ? (fv.buyS?.cur ?? 0).toLocaleString() : "-", fv.buy ? pctOf(fv.buyRate) : "-", fv.buy ? won(fv.buyRevS?.cur ?? 0) : "-", fv.hasResult ? (fv.doneS?.cur ?? 0).toLocaleString() : "-", fv.hasResult ? pctOf(fv.doneRate) : "-"]} />
+      </Card>
+      <Card w={6} title="페이지 방문 추이" right={fv.ga ? <CompareLegend v={fv} /> : undefined}>
+        {fv.ga ? <CompareLine v={fv} values={fv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
+      </Card>
+      <Card w={6} title="결과 제출 추이" right={fv.forms?.result ? <CompareLegend v={fv} /> : undefined}>
+        {fv.forms?.result ? <CompareLine v={fv} values={fv.forms.result} unit="건" /> : <div className="b2b-empty">{fv.forms ? noResult : noForm}</div>}
       </Card>
     </>
   );
@@ -829,7 +982,9 @@ export default function BoardPage() {
   const tData = topicId && topicState.key === topicKey ? topicState.data : null;
   const tError = topicId && topicState.key === topicKey ? topicState.error : "";
   const tSpan = tData && range ? spanOf(tData.days, range.from, range.to) : null;
-  const tView = tData && tSpan ? buildTopicView(tData, tSpan, filters.salesCh) : null;
+  const isFormTopic = !!curTopic?.forms;   // 폼 신청형 주제 — 판매 채널 필터가 없다
+  const tView = tData && tSpan && !isFormTopic ? buildTopicView(tData, tSpan, filters.salesCh) : null;
+  const fView = tData && tSpan && isFormTopic ? buildFormView(tData, tSpan) : null;
   return (
     <div className="bd-root">
       <header className="bd-top">
@@ -843,6 +998,7 @@ export default function BoardPage() {
             <p className="bd-basis">
               {isSubx ? `카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""} · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준`
                 : !snap ? "\u00a0"
+                : isFormTopic ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}신청·결과는 탈리 제출 시각 · 사람은 전화번호로 세고 처음 신청한 날 기준 · 방문·스크롤은 GA4 세션 · 구매는 신청한 날부터의 주문</>
                 : topicId ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}고객은 처음 산 날 기준 · 방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장</>
                 : <>기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</>}
             </p>
@@ -873,7 +1029,7 @@ export default function BoardPage() {
           ) : snap && range ? (
             <div className="bd-controls">
               <DateControl range={range} base={snap.base} min={snap.days[0]} onChange={setRange} />
-              <FilterControl label="판매 채널" options={salesOptions} value={filters.salesCh} onChange={(x) => setFilters((f) => ({ ...f, salesCh: x }))} />
+              {!isFormTopic && <FilterControl label="판매 채널" options={salesOptions} value={filters.salesCh} onChange={(x) => setFilters((f) => ({ ...f, salesCh: x }))} />}
               {!topicId && <FilterControl label="광고 매체" options={mediaOptions} value={filters.media} onChange={(x) => setFilters((f) => ({ ...f, media: x }))} />}
               {!topicId && <FilterControl label="유입 채널" options={gaOptions} value={filters.gaCh} onChange={(x) => setFilters((f) => ({ ...f, gaCh: x }))} />}
             </div>
@@ -889,6 +1045,7 @@ export default function BoardPage() {
             !curTopic ? <div className="b2b-empty bd-c12">없는 주제입니다.</div>
               : tError ? <div className="b2b-error bd-c12">{tError}</div>
               : !tData ? <div className="b2b-loading bd-c12">주제 숫자를 계산하는 중...</div>
+              : isFormTopic ? (fView ? <FormTopicPage fv={fView} t={tData} def={curTopic} /> : <div className="b2b-empty bd-c12">고른 기간에 숫자가 없습니다.</div>)
               : !tView ? <div className="b2b-empty bd-c12">고른 기간에 숫자가 없습니다.</div>
               : <TopicPage tv={tView} t={tData} def={curTopic} />
           )
