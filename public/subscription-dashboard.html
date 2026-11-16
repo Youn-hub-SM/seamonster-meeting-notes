@@ -327,7 +327,15 @@
      · 높이는 부모 창이 맞춘다(안쪽 스크롤 없음). */
   .sec-title { display: none; }
   html.board, html.board body { background: transparent; }
-  html.board .main { max-width: none; padding: 0; display: flex; flex-direction: column; }
+  /* 주요 지표의 다른 탭과 같은 12칸 격자(간격 12) — 카드 크기만 조절하고 계산은 그대로(2026-11-16 대표: "다른 대시보드와 비슷하게 표 레이아웃, 다시 계산은 하지 말고 크기만").
+     넓은 화면에서 짝이 되는 카드는 반씩: 재구매 랭킹 | 일시정지 워치리스트, 분석 히스토리 | 상태 변화 이력. 나머지는 한 줄 전체. */
+  html.board .main { max-width: none; padding: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  html.board .main > * { grid-column: span 12; min-width: 0; }
+  html.board #dashboard:not([style*="none"]) { display: grid !important; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  html.board #dashboard > * { grid-column: span 12; min-width: 0; }
+  @media (min-width: 1100px) {
+    html.board #repeatSection, html.board #pauseSection, html.board #historySection, html.board #transitionSection { grid-column: span 6; }
+  }
   html.board .page-head, html.board #emptyState, html.board .priv-note, html.board #snapshotSection, html.board .history-del,
   html.board .filter-group:has(#saveExcludeBtn) { display: none !important; }
   html.board #dashboard { order: 1; }
@@ -335,15 +343,14 @@
   html.board #historySection { order: 3; }
   html.board #transitionSection { order: 4; }
   html.board #boardWait { order: 0; }
-  html.board .sec-title { display: block; font-size: 13px; font-weight: 600; color: var(--text-sub); margin: 32px 0 12px; scroll-margin-top: 12px; }
+  html.board .sec-title { display: block; font-size: 13px; font-weight: 600; color: var(--text-sub); scroll-margin-top: 12px; }
   html.board #dashboard > .sec-title:first-of-type { margin-top: 0; }
   html.board .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 0; }
   html.board #secMixGrid { grid-template-columns: repeat(3, 1fr); }
   @media (max-width: 1100px) { html.board #secMixGrid { grid-template-columns: 1fr; } }
-  html.board .filter-card { margin-top: 32px; margin-bottom: 0; }
   /* 한 단계씩 작게(2026-11-16 대표: "전체적으로 조금씩 작게") — 글자는 눈금 한 칸 아래(24→17, 15→13, 13→12, 12 는 그대로), 여백·그래프 높이는 주요 지표의 다른 탭과 같은 밀도 */
   html.board body { font-size: 12px; }
-  html.board .card { padding: 16px; margin-bottom: 12px; }
+  html.board .card { padding: 16px; margin-bottom: 0; }
   html.board .card-head { margin-bottom: 10px; gap: 8px; }
   html.board .card-title { font-size: 13px; }
   html.board .card-sub { margin-top: 2px; }
@@ -362,13 +369,15 @@
   html.board .trans-stat { padding: 8px 12px; min-width: 96px; }
   html.board .trans-stat .n { font-size: 17px; }
   html.board .trans-summary { gap: 8px; }
-  html.board .sec-title { margin: 24px 0 8px; }
-  html.board .filter-card { margin-top: 24px; }
+  html.board .sec-title { margin: 12px 0 0; }
+  html.board .filter-card { margin: 0; }
+  html.board .kpi-grid, html.board .grid-2, html.board .grid-3 { margin-bottom: 0; }
   html.board .ship-summary { padding: 10px 12px; margin-bottom: 12px; }
   /* 데이터 목록은 접어 둔 채로 시작(2026-11-16 대표) — 카드 머리의 [목록 펼치기]로 연다. 요약·그래프는 접지 않는다 */
   .fold-btn { display: none; }
   html.board .fold-btn { display: inline-flex; }
   html.board .fold-part.is-folded { display: none !important; }
+  html.board .card.is-folded-all .card-head { margin-bottom: 0; }   /* 통째로 접힌 카드는 머리 줄만 남는다 */
   #boardWait { display: none; }
   html.board #boardWait { display: block; padding: 48px 0; text-align: center; color: var(--text-sub); font-size: 13px; }
 </style>
@@ -767,25 +776,28 @@ function boardNotify() {
 // 데이터 목록 접기 — 카드마다 접을 부분(표·검색칸)을 정해 두고 카드 머리에 [목록 펼치기] 버튼을 단다. 요약·그래프는 그대로 보인다.
 //  그리기 함수가 표의 display 를 직접 바꾸므로 접힘은 클래스(.is-folded, !important)로 덮는다.
 const BOARD_FOLDS = [
-  ["repeatSection", [".scroll-y"]],                         // 재구매 회원 랭킹
-  ["pauseSection", [".scroll-y"]],                          // 일시정지 워치리스트
-  ["ordersSection", [".filters-inline", ".scroll-y"]],      // 전체 신청(검색)
-  ["shippingSection", [".ship-search", "#shipList"]],       // 발송 일정 — 상품별 합계는 두고 날짜별 목록만
-  ["historySection", ["#historyTableWrap"]],                // 분석 히스토리 — 그래프는 두고 표만
-  ["transitionSection", ["#transTypes", "#transTableWrap"]],// 상태 변화 이력 — 요약·그래프는 두고 표만
+  // [카드 id, 접을 부분, 통째로 접는가]
+  ["repeatSection", [".scroll-y"], true],                              // 재구매 회원 랭킹
+  ["pauseSection", [".scroll-y"], true],                               // 일시정지 워치리스트
+  ["ordersSection", [".filters-inline", ".scroll-y"], true],           // 전체 신청(검색)
+  ["shippingSection", [".ship-search", "#shipSummary", "#shipList"], true], // 발송 일정 — 합계까지 통째로(2026-11-16 대표: "발송 일정도 접어줘")
+  ["historySection", ["#historyTableWrap"], false],                    // 분석 히스토리 — 그래프는 두고 표만
+  ["transitionSection", ["#transTypes", "#transTableWrap"], false],    // 상태 변화 이력 — 요약·그래프는 두고 표만
 ];
 function boardFolds() {
-  for (const [id, sels] of BOARD_FOLDS) {
+  for (const [id, sels, whole] of BOARD_FOLDS) {
     const sec = document.getElementById(id);
     const head = sec && sec.querySelector(".card-head");
     const parts = sec ? sels.flatMap((q) => [...sec.querySelectorAll(q)]) : [];
     if (!head || !parts.length) continue;
     parts.forEach((el) => el.classList.add("fold-part", "is-folded"));
+    if (whole) sec.classList.add("is-folded-all");
     const btn = document.createElement("button");
     btn.type = "button"; btn.className = "btn btn-sm fold-btn"; btn.textContent = "목록 펼치기"; btn.setAttribute("aria-expanded", "false");
     btn.onclick = () => {
       const open = btn.getAttribute("aria-expanded") !== "true";
       parts.forEach((el) => el.classList.toggle("is-folded", !open));
+      if (whole) sec.classList.toggle("is-folded-all", !open);
       btn.setAttribute("aria-expanded", String(open));
       btn.textContent = open ? "목록 접기" : "목록 펼치기";
     };
