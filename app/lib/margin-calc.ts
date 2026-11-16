@@ -77,17 +77,20 @@ export function computeSpecItem(spec: MarginSpec, ref: MarginRefData): MarginRes
 
   const taxable = product.tax === "taxable";
   const supplyValue = taxable ? Math.round(revenue / 1.1) : revenue;
+  // 과세 상품은 매출에서 부가세를 뺀다 — 수수료·택배비·아이스박스·보냉비도 부가세가 든 금액이라 같은 기준으로 뺀다(2026-11-03 대표 피드백).
+  //  매출만 ÷1.1 하고 비용은 그대로 두면 이익이 실제보다 작게 나온다. 면세 상품은 양쪽 모두 그대로.
+  const exVat = (n: number) => (taxable ? Math.round(n / 1.1) : n);
 
   const cost = Math.round(product.cost * qty);
   const ch = ref.channels.find((c) => c.channel === spec.channel);
   const feePct = ch ? ch.feeRatePct : Number(spec.feeRatePct) || 0;
-  const fee = Math.round(revenue * feePct / 100);
+  const fee = exVat(Math.round(revenue * feePct / 100));
 
   const volPerBox = ((product.volumeKg ?? 2.0) * qty) / boxes; // 부피 미입력 시 2kg 가정
   const cool = coolFee(ref.month);
-  const parcel = parcelFee(volPerBox) * boxes;
-  const icebox = iceboxFee(volPerBox) * boxes;
-  const cooling = cool.fee * boxes;
+  const parcel = exVat(parcelFee(volPerBox) * boxes);
+  const icebox = exVat(iceboxFee(volPerBox) * boxes);
+  const cooling = exVat(cool.fee * boxes);
 
   const extras = (spec.extraCosts || []).map((e) => ({ label: e.label, amount: Math.round(Number(e.amount) || 0) })).filter((e) => e.amount !== 0);
   const extraSum = extras.reduce((s, e) => s + e.amount, 0);
@@ -97,11 +100,11 @@ export function computeSpecItem(spec: MarginSpec, ref: MarginRefData): MarginRes
   return {
     label: `${spec.channel} · ${product.name} · ${priceLabel}`,
     revenue, supplyValue,
-    taxNote: taxable ? "과세 상품 — 공급가액 = 매출 ÷ 1.1 (부가세 1/11 차감)" : "면세 상품 — 부가세 없음(공급가액=매출)",
+    taxNote: taxable ? "과세 상품 — 공급가액 = 매출 ÷ 1.1 (부가세 1/11 차감). 수수료·택배비·아이스박스·보냉비도 부가세를 뺀 금액(÷ 1.1)" : "면세 상품 — 부가세 없음(공급가액=매출, 비용도 그대로)",
     expenses: [
       { label: "상품원가", amount: cost, note: `단가 ${Math.round(product.cost).toLocaleString()} × ${qty}` },
-      { label: `채널 수수료 ${feePct}%`, amount: fee, note: ch ? "채널표 기준" : "가정 수수료율" },
-      { label: "택배비", amount: parcel, note: `부피 ${volPerBox.toFixed(1)}kg × ${boxes}박스` },
+      { label: `채널 수수료 ${feePct}%`, amount: fee, note: `${ch ? "채널표 기준" : "가정 수수료율"}${taxable ? " · 부가세 제외" : ""}` },
+      { label: "택배비", amount: parcel, note: `부피 ${volPerBox.toFixed(1)}kg × ${boxes}박스${taxable ? " · 부가세 제외" : ""}` },
       { label: "아이스박스·운반", amount: icebox },
       { label: `보냉비(${cool.season})`, amount: cooling },
       ...extras,
