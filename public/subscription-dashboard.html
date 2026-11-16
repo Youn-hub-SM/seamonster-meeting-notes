@@ -330,9 +330,9 @@
   html.board { overflow-y: hidden; }   /* 높이는 부모 창이 맞춘다 — 맞추는 사이 잠깐 생기는 스크롤 막대가 폭을 흔들지 않게 */
   /* 주요 지표의 다른 탭과 같은 12칸 격자(간격 12) — 카드 크기만 조절하고 계산은 그대로(2026-11-16 대표: "다른 대시보드와 비슷하게 표 레이아웃, 다시 계산은 하지 말고 크기만").
      넓은 화면에서 짝이 되는 카드는 반씩: 재구매 랭킹 | 일시정지 워치리스트, 분석 히스토리 | 상태 변화 이력. 나머지는 한 줄 전체. */
-  html.board .main { max-width: none; padding: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  html.board .main { max-width: none; padding: 0 0 8px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: start; }
   html.board .main > * { grid-column: span 12; min-width: 0; }
-  html.board #dashboard:not([style*="none"]) { display: grid !important; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  html.board #dashboard:not([style*="none"]) { display: grid !important; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: start; }
   html.board #dashboard > * { grid-column: span 12; min-width: 0; }
   @media (min-width: 1100px) {
     html.board #repeatSection, html.board #pauseSection, html.board #historySection, html.board #transitionSection { grid-column: span 6; }
@@ -357,14 +357,16 @@
   @media (max-width: 1100px) { html.board #secMixGrid { grid-template-columns: minmax(0, 1fr); } }
   /* 한 단계씩 작게(2026-11-16 대표: "전체적으로 조금씩 작게") — 글자는 눈금 한 칸 아래(24→17, 15→13, 13→12, 12 는 그대로), 여백·그래프 높이는 주요 지표의 다른 탭과 같은 밀도 */
   html.board body { font-size: 12px; }
-  html.board .card { padding: 16px; margin-bottom: 0; }
-  html.board .card-head { margin-bottom: 10px; gap: 8px; }
-  html.board .card-title { font-size: 13px; }
+  /* 주요 지표의 카드와 같은 면(2026-11-16 대표가 고른 분위기) — 모서리 16·옅은 선·옅은 그림자·안 여백 20. 이 보기에서만 쓴다 */
+  html.board .card, html.board .filter-card { padding: 20px; margin-bottom: 0; border: 1px solid var(--border-light); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+  html.board .filter-card { padding: 0; }
+  html.board .card-head { margin-bottom: 16px; gap: 8px; }
+  html.board .card-title { font-size: 15px; }
   html.board .card-sub { margin-top: 2px; }
-  html.board .grid-2, html.board .grid-3 { gap: 12px; }
+  html.board .grid-2, html.board .grid-3 { gap: 16px; }
   /* 오늘 상태 — 대표가 고른 모양(2026-11-16): 흰 판 하나 위에 테두리 없는 타일, 큰 숫자 + 작은 단위, '전주 대비' 증감, 아래에 작은 추세선.
      증감과 추세선은 날마다 저장된 히스토리 스냅샷에서 온다(새 계산 없음). 원래 값 칸(.kpi-value)은 그대로 두고 숨기기만 한다 — 다른 계산이 그 글자를 읽는다. */
-  html.board .kpi-grid { gap: 16px 20px; padding: 16px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); }
+  html.board .kpi-grid { gap: 16px 24px; padding: 20px; background: #fff; border: 1px solid var(--border-light); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
   html.board .kpi, html.board .kpi.accent { padding: 0; border: 0; background: transparent; box-shadow: none; display: flex; flex-direction: column; min-width: 0; }
   html.board .kpi-label { margin-bottom: 2px; }
   html.board .kpi-value { display: none; }
@@ -372,8 +374,10 @@
   html.board .kpi-unit { font-size: 13px; font-weight: 500; margin-left: 2px; }
   html.board .kpi-delta { font-size: 12px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; }
   html.board .kpi-delta b { font-weight: 600; font-variant-numeric: tabular-nums; }
-  html.board .kpi-delta b.is-good { color: var(--success); }
-  html.board .kpi-delta b.is-bad { color: var(--danger); }
+  /* 증감 배지 — 주요 지표의 다른 탭(.bd-delta)과 같은 모양 */
+  html.board .kpi-delta b { display: inline-block; padding: 1px 6px; border-radius: 6px; background: var(--bg-subtle); color: var(--text-sub); }
+  html.board .kpi-delta b.is-good { color: var(--success); background: var(--success-bg); }
+  html.board .kpi-delta b.is-bad { color: var(--danger); background: var(--danger-bg); }
   html.board .kpi-sub { margin-top: 2px; color: var(--text-light); }
   html.board .kpi-spark { position: relative; height: 44px; margin-top: auto; padding-top: 8px; box-sizing: content-box; }   /* 설명 줄 수가 달라도 추세선은 타일 바닥에 맞춘다 */
   html.board .chart-wrap { height: 220px; }
@@ -381,11 +385,14 @@
   html.board .history-chart-wrap { height: 220px !important; margin-bottom: 12px; }
   html.board .table, html.board .ship-summary-table { font-size: 12px; }
   html.board .table th, html.board .table td { padding: 8px 10px; }
+  /* 표 머리는 바탕 없이 옅은 글자, 줄 선은 옅게 — 주요 지표의 다른 탭과 같은 표 */
+  html.board .table th, html.board .history-table th { background: #fff; color: var(--text-light); font-weight: 500; }
+  html.board .table th, html.board .table td, html.board .history-table th, html.board .history-table td { border-bottom-color: var(--border-light); }
   html.board .history-table th, html.board .history-table td { padding-top: 8px; padding-bottom: 8px; font-size: 12px; }
-  html.board .trans-stat { padding: 8px 12px; min-width: 96px; }
+  html.board .trans-stat { padding: 8px 12px; min-width: 96px; border-color: var(--border-light); }
   html.board .trans-stat .n { font-size: 17px; }
   html.board .trans-summary { gap: 8px; }
-  html.board .sec-title { margin: 12px 0 0; }
+  html.board .sec-title { margin: 8px 0 -4px; }
   html.board .filter-card { margin: 0; }
   html.board .kpi-grid, html.board .grid-2, html.board .grid-3 { margin-bottom: 0; }
   html.board .ship-summary { padding: 10px 12px; margin-bottom: 12px; }
@@ -856,7 +863,7 @@ function renderKpiTrends() {
     if (kpiSparks[id]) { kpiSparks[id].destroy(); delete kpiSparks[id]; }
     spark.style.visibility = pts.length >= 2 ? "" : "hidden";
     if (pts.length < 2 || !window.Chart) continue;
-    const color = tone === "good" ? T.success() : tone === "bad" ? T.danger() : T.info();
+    const color = T.orange();   // 추세선은 다른 탭의 숫자 줄과 같은 씨몬스터 주황 — 좋고 나쁨은 증감 배지가 말한다
     kpiSparks[id] = new Chart(spark.querySelector("canvas"), {
       type: "line",
       data: { labels: pts.map((x) => x.d.slice(5)), datasets: [{ data: pts.map((x) => x.v), borderColor: color, backgroundColor: alpha(color, 0.1), fill: true, tension: 0.35, pointRadius: 0, pointHoverRadius: 3, borderWidth: 1.5 }] },

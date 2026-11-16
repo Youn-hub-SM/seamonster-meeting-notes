@@ -15,7 +15,8 @@ const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 const weekday = (ymd: string) => WD[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
 const POLL_MS = 40_000, POLL_MAX = 4, HOURLY_MS = 60 * 60_000;
-const C_CUR = PIE_COLORS[1], C_PREV = "var(--sm-text-light)", C_META = PIE_COLORS[1], C_NAVER = PIE_COLORS[2];
+// 이번 기간·숫자 줄의 추세선 = 씨몬스터 주황, 직전 기간 = 회색. 메타·네이버는 매체 고유색(파랑·초록)
+const C_CUR = PIE_COLORS[0], C_PREV = "var(--sm-text-light)", C_META = PIE_COLORS[1], C_NAVER = PIE_COLORS[2];
 
 // ── 기간 ──
 type Preset = { key: string; label: string; range: (base: string) => [string, string] };
@@ -31,7 +32,8 @@ const PRESETS: Preset[] = [
 ];
 type Range = { preset: string; from: string; to: string };
 type Filters = { salesCh: string[] | null; media: string[] | null; gaCh: string[] | null }; // null = 전체
-const PAGES = [["summary", "요약"], ["sales", "매출"], ["ads", "광고·유입"], ["sub", "정기배송·고객"], ["subx", "정기배송 분석"]] as const;
+// '정기배송·고객' 쪽은 2026-11-16 삭제(대표: "크게 역할을 하지 못한다") — 정기배송은 '정기배송 분석' 탭이 맡는다
+const PAGES = [["summary", "요약"], ["sales", "매출"], ["ads", "광고·유입"], ["subx", "정기배송 분석"]] as const;
 type PageKey = (typeof PAGES)[number][0];
 
 // ── 증감 ── good = 어느 쪽이 좋은가(none = 판정하지 않는 숫자: 광고비 등)
@@ -73,13 +75,19 @@ function Card({ w, title, right, children }: { w: 4 | 6 | 8 | 12; title: string;
     </section>
   );
 }
+// 숫자 줄 — 흰 판 하나(Scores) 위에 테두리 없는 타일(Score): 이름 · 큰 숫자와 작은 단위 · 증감 배지와 직전 값 · 작은 추세선
+function Scores({ children }: { children: React.ReactNode }) {
+  return <section className="bd-card bd-strip bd-c12">{children}</section>;
+}
+const UNIT_RE = /^(.*?)(원|건|명|회|%)$/;
 function Score({ label, value, delta, note, spark }: { label: string; value: string | null; delta?: Delta; note?: string; spark?: (number | null)[] }) {
+  const m = value ? UNIT_RE.exec(value) : null;
   return (
-    <div className="bd-card bd-score bd-c2">
+    <div className="bd-score">
       <div className="bd-score-label">{label}</div>
-      <div className={`bd-score-value${value == null ? " is-light" : ""}`}>{value ?? "-"}</div>
+      <div className={`bd-score-value${value == null ? " is-light" : ""}`}>{m ? <>{m[1]}<span className="bd-score-unit">{m[2]}</span></> : (value ?? "-")}</div>
       <div className="bd-score-sub">{delta && <DeltaText d={delta} />}{note && <span>{note}</span>}</div>
-      {spark && <div className="bd-score-spark"><Sparkline values={spark} color={C_CUR} /></div>}
+      {spark && <div className="bd-score-spark"><Sparkline values={spark} color={C_CUR} height={40} fill /></div>}
     </div>
   );
 }
@@ -238,19 +246,18 @@ function buildView(s: BoardSnapshot, sp: Span, f: Filters) {
   const gaRows = gaSel.map((c) => { const x = spanSum(c.sessions, sp), p = spanSum(c.purchases, sp); return { name: c.name, sessions: x.cur, prevSessions: x.prev, purchases: p.cur, conv: ratio(p.cur * 100, x.cur) }; })
     .filter((r) => r.sessions > 0).sort((a, b) => b.sessions - a.sessions);
 
-  // 정기배송·VOC
-  const sub = s.sub.ok ? s.sub : null, voc = s.voc.ok ? s.voc : null;
+  // 정기배송(요약의 이용중 회원·매출의 정기배송 매출)
+  const sub = s.sub.ok ? s.sub : null;
   const active = sub ? { cur: lastKnown(sub.active, sp.i1), prev: sp.prev ? lastKnown(sub.active, sp.prev.i1) : null } : null;
   const pause = sub ? lastKnown(sub.pause, sp.i1) : null;
-  const newS = sub ? spanSum(sub.newCnt, sp) : null, cancelS = sub ? spanSum(sub.cancelCnt, sp) : null, subRevS = sub ? spanSum(sub.subRev, sp) : null;
+  const subRevS = sub ? spanSum(sub.subRev, sp) : null;
   const allRev = sales ? spanSum(addSeries(sales.channels.map((c) => c.rev), N), sp) : null; // 정기배송 매출 비중의 분모는 전체 채널
-  const vocS = voc ? spanSum(voc.counts, sp) : null;
 
   return {
     win, prevWin, hasPrev: !!sp.prev, days, labels, sales, rev, orders, revS, ordS, aov, aovSeries, chRows,
     meta, naver, naverEx, spend, hasAds, spendS, mRoas, nRoas, naverPending, mediaRows,
     ga, sessions, gaPurchases, sesS, purS, conv, gaRows,
-    sub, voc, active, pause, newS, cancelS, subRevS, allRev, vocS,
+    sub, active, pause, subRevS, allRev,
   };
 }
 type View = ReturnType<typeof buildView>;
@@ -324,7 +331,7 @@ function SummaryPage({ v, s }: { v: View; s: BoardSnapshot }) {
   return (
     <>
       <Errors list={[failOf("매출", s.sales), failOf("메타 광고", s.meta), failOf("네이버 광고", s.naver), failOf("GA4", s.ga), failOf("정기배송", s.sub)].filter(Boolean)} />
-      <ScoreRev v={v} /><ScoreOrders v={v} /><ScoreAov v={v} /><ScoreSpend v={v} s={s} /><ScoreSessions v={v} s={s} /><ScoreActive v={v} />
+      <Scores><ScoreRev v={v} /><ScoreOrders v={v} /><ScoreAov v={v} /><ScoreSpend v={v} s={s} /><ScoreSessions v={v} s={s} /><ScoreActive v={v} /></Scores>
       <Card w={8} title="매출 추이" right={<CompareLegend v={v} />}><CompareLine v={v} values={v.rev} fmtAxis={moneyCompact} fmtTip={won} unit="원" /></Card>
       <Card w={4} title="채널별 매출 비중"><ChannelDonut v={v} /></Card>
       <Card w={6} title="광고비 추이" right={<ChartLegend items={mediaLegend(v)} />}><SpendLine v={v} /></Card>
@@ -364,9 +371,11 @@ function SalesPage({ v, s, detail }: { v: View; s: BoardSnapshot; detail: Detail
   return (
     <>
       <Errors list={[failOf("매출", s.sales), failOf("정기배송", s.sub), detail.error ? `상품·고객: ${detail.error}` : ""].filter(Boolean)} />
+      <Scores>
       <ScoreRev v={v} /><ScoreOrders v={v} /><ScoreAov v={v} /><ScoreSubRev v={v} />
       <Score label="신규 고객" value={cnt(cust?.cur.newCust, "명")} delta={cust ? pctDelta(cust.cur.newCust, cust.prev.newCust, "up") : null} note={cust ? prevNote(cnt(cust.prev.newCust, "명")) : waiting} />
       <Score label="재구매 고객 비율" value={pct1(rep?.cur)} delta={rep ? ppDelta(rep.cur, rep.prev, "up") : null} note={cust ? `재구매 ${cust.cur.repeatCust.toLocaleString()}명` : waiting} />
+      </Scores>
       <Card w={8} title="일별 매출" right={<ChartLegend items={series.map((x, i) => [x.key, PIE_COLORS[i % PIE_COLORS.length]])} />}>
         <StackedBar periods={v.labels} series={series} fmtAxis={moneyCompact} unit="원" />
       </Card>
@@ -410,6 +419,7 @@ function AdsPage({ v, s }: { v: View; s: BoardSnapshot }) {
   return (
     <>
       <Errors list={[failOf("메타 광고", s.meta), failOf("네이버 광고", s.naver), failOf("GA4", s.ga), s.ga?.ok && s.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다." : ""].filter(Boolean)} />
+      <Scores>
       <ScoreSpend v={v} s={s} />
       <Score label="메타 ROAS" value={fix2(v.mRoas?.cur)} delta={pctDelta(v.mRoas?.cur ?? null, v.mRoas?.prev ?? null, "up")} note={v.meta ? prevNote(fix2(v.mRoas?.prev)) : why(s.meta)} />
       <Score label="네이버 ROAS" value={v.naver && !v.naver.purchaseOk ? null : fix2(v.nRoas?.cur)} delta={v.naver?.purchaseOk ? pctDelta(v.nRoas?.cur ?? null, v.nRoas?.prev ?? null, "up") : null}
@@ -417,6 +427,7 @@ function AdsPage({ v, s }: { v: View; s: BoardSnapshot }) {
       <ScoreSessions v={v} s={s} />
       <Score label="구매(GA4)" value={cnt(v.purS?.cur, "건")} delta={pctDelta(v.purS?.cur ?? null, v.purS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.purS?.prev, "건")) : why(s.ga)} spark={v.ga ? v.win(v.gaPurchases) : undefined} />
       <Score label="구매 전환율" value={pct2(v.conv?.cur)} delta={ppDelta(v.conv?.cur ?? null, v.conv?.prev ?? null, "up")} note={v.ga ? prevNote(pct2(v.conv?.prev)) : why(s.ga)} />
+      </Scores>
       <Card w={6} title="광고비 추이" right={<ChartLegend items={mediaLegend(v)} />}><SpendLine v={v} /></Card>
       <Card w={6} title="방문 추이" right={v.ga ? <CompareLegend v={v} /> : undefined}>
         {v.ga ? <CompareLine v={v} values={v.sessions} unit="회" /> : <div className="b2b-empty">방문 숫자가 없습니다.</div>}
@@ -425,38 +436,6 @@ function AdsPage({ v, s }: { v: View; s: BoardSnapshot }) {
       <Card w={12} title="유입 채널별">
         <DataTable rows={v.gaRows} cols={gCols} rowKey={(r) => r.name} sortKey="sessions" empty="방문 숫자가 없습니다."
           foot={["합계", sesTotal.toLocaleString(), sesTotal > 0 ? "100.0%" : "-", (v.purS?.cur ?? 0).toLocaleString(), pct2(v.conv?.cur) ?? "-", <DeltaText key="d" d={pctDelta(v.sesS?.cur ?? null, v.sesS?.prev ?? null, "up")} />]} />
-      </Card>
-    </>
-  );
-}
-
-function SubPage({ v, s, detail }: { v: View; s: BoardSnapshot; detail: DetailState }) {
-  const cust = detail.data?.cust ?? null;
-  const rep = cust ? { cur: ratio(cust.cur.repeatCust * 100, cust.cur.total), prev: ratio(cust.prev.repeatCust * 100, cust.prev.total) } : null;
-  return (
-    <>
-      <Errors list={[failOf("정기배송", s.sub), failOf("VOC", s.voc), detail.error ? `고객: ${detail.error}` : ""].filter(Boolean)} />
-      <ScoreActive v={v} />
-      <Score label="신규 신청" value={cnt(v.newS?.cur, "건")} delta={pctDelta(v.newS?.cur ?? null, v.newS?.prev ?? null, "up")} note={prevNote(cnt(v.newS?.prev, "건"))} spark={v.sub ? v.win(v.sub.newCnt) : undefined} />
-      <Score label="해지" value={cnt(v.cancelS?.cur, "건")} delta={pctDelta(v.cancelS?.cur ?? null, v.cancelS?.prev ?? null, "down")} note={prevNote(cnt(v.cancelS?.prev, "건"))} spark={v.sub ? v.win(v.sub.cancelCnt) : undefined} />
-      <ScoreSubRev v={v} />
-      <Score label="재구매 고객 비율" value={pct1(rep?.cur)} delta={rep ? ppDelta(rep.cur, rep.prev, "up") : null}
-        note={cust ? `신규 ${cust.cur.newCust.toLocaleString()}명 · 재구매 ${cust.cur.repeatCust.toLocaleString()}명` : detail.loading ? "불러오는 중..." : undefined} />
-      <Score label="VOC 접수" value={cnt(v.vocS?.cur, "건")} delta={pctDelta(v.vocS?.cur ?? null, v.vocS?.prev ?? null, "down")} note={prevNote(cnt(v.vocS?.prev, "건"))} spark={v.voc ? v.win(v.voc.counts) : undefined} />
-      <Card w={6} title="정기배송 회원" right={<ChartLegend items={[["이용중", C_CUR], ["일시정지", C_PREV]]} />}>
-        {v.sub ? <LineChart periods={v.labels} unit="명" series={[{ key: "이용중", values: v.win(v.sub.active), color: C_CUR }, { key: "일시정지", values: v.win(v.sub.pause), color: C_PREV, dashed: true }]} />
-          : <div className="b2b-empty">정기배송 숫자가 없습니다.</div>}
-      </Card>
-      <Card w={6} title="신규 신청과 해지" right={<ChartLegend items={[["신규 신청", "var(--sm-success)"], ["해지", "var(--sm-danger)"]]} />}>
-        {v.sub ? <StackedBar periods={v.labels} series={[{ key: "신규 신청", values: v.win(v.sub.newCnt) }, { key: "해지", values: v.win(v.sub.cancelCnt) }]} colors={["var(--sm-success)", "var(--sm-danger)"]} />
-          : <div className="b2b-empty">정기배송 숫자가 없습니다.</div>}
-      </Card>
-      <Card w={8} title="VOC 접수 추이" right={v.voc ? <CompareLegend v={v} /> : undefined}>
-        {v.voc ? <CompareLine v={v} values={v.voc.counts} unit="건" /> : <div className="b2b-empty">VOC 숫자가 없습니다.</div>}
-      </Card>
-      <Card w={4} title="신규·재구매 고객">
-        {!cust ? <div className={detail.loading ? "b2b-loading" : "b2b-empty"}>{detail.loading ? "불러오는 중..." : "고객 숫자가 없습니다."}</div>
-          : <DonutCard data={[["신규", cust.cur.newCust], ["재구매", cust.cur.repeatCust]]} colors={[C_CUR, C_NAVER]} center={cust.cur.total.toLocaleString()} centerSub="명" fmt={(n) => `${n.toLocaleString()}명`} />}
       </Card>
     </>
   );
@@ -590,12 +569,14 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
       <Errors list={[failOf("매출", t.sales), failOf("고객", t.cust), failOf("GA4", t.ga), failOf("메타 광고", t.meta),
         t.ga?.ok && t.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다." : "",
         t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 단위로 보여 줍니다." : ""].filter(Boolean)} />
+      <Scores>
       <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `매출 ${moneyCompact(tv.revS?.cur ?? 0)}원` : "조회 실패"} spark={tv.sales ? tv.win(tv.orders) : undefined} />
       <Score label="처음 산 고객" value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />
       <Score label="페이지 전환율" value={pct2(tv.convRate?.cur)} delta={ppDelta(tv.convRate?.cur ?? null, tv.convRate?.prev ?? null, "up")} note={tv.ga ? `방문 ${(tv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={tv.ga ? tv.win(tv.ga.visits) : undefined} />
       <Score label="메타 광고비" value={wonS(tv.spendS?.cur)} delta={pctDelta(tv.spendS?.cur ?? null, tv.spendS?.prev ?? null, "none")} note={tv.meta ? `클릭 ${(tv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={tv.meta ? tv.win(tv.spend) : undefined} />
       <Score label="주문 1건당 광고비" value={wonS(tv.cpa?.cur == null ? null : Math.round(tv.cpa.cur))} delta={pctDelta(tv.cpa?.cur ?? null, tv.cpa?.prev ?? null, "down")} note={tv.meta ? `메타 집계 구매 ${(tv.purS?.cur ?? 0).toLocaleString()}건 · ROAS ${fix2(roas) ?? "-"}` : whyX(t.meta)} />
       <Score label={`${TOPIC_REPEAT_DAYS}일 안 재구매율`} value={pct1(tv.rate30)} note={tv.cust ? (tv.matureFirst > 0 ? `${TOPIC_REPEAT_DAYS}일 지난 ${tv.matureFirst.toLocaleString()}명 중 ${tv.matureConv30.toLocaleString()}명` : `${TOPIC_REPEAT_DAYS}일 지난 고객 없음`) : "조회 실패"} />
+      </Scores>
       <Card w={8} title="주문 추이" right={tv.sales ? <CompareLegend v={tv} /> : undefined}>
         {tv.sales ? <CompareLine v={tv} values={tv.orders} unit="건" /> : <div className="b2b-empty">{noSales}</div>}
       </Card>
@@ -738,7 +719,7 @@ export default function BoardPage() {
   const view = useMemo(() => (snap && span ? buildView(snap, span, filters) : null), [snap, span, filters]);
 
   // 기간 상세(상품별 표·신규/재구매) — 그 숫자가 있는 쪽을 볼 때만, 기간·판매 채널이 바뀌면 다시 받는다
-  const needDetail = page === "sales" || page === "sub";
+  const needDetail = page === "sales";
   const detailKey = range ? `${range.from}|${range.to}|${(filters.salesCh ?? ["*"]).join(",")}` : "";
   const haveKey = detail.key;
   useEffect(() => {
@@ -799,42 +780,48 @@ export default function BoardPage() {
   const tView = tData && tSpan ? buildTopicView(tData, tSpan, filters.salesCh) : null;
   return (
     <div className="bd-root">
-      <header className="bd-bar">
+      <header className="bd-top">
         <div className="bd-bar-row">
           <Link href="/" className="bd-logo" aria-label="업무도우미 홈">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="씨몬스터" />
           </Link>
-          <h1 className="bd-title">주요 지표</h1>
+          <div className="bd-heading">
+            <h1 className="bd-title">주요 지표</h1>
+            <p className="bd-basis">
+              {isSubx ? "카페24 정기배송 신청 전체 · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준"
+                : !snap ? "\u00a0"
+                : topicId ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}고객은 처음 산 날 기준 · 방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장</>
+                : <>기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</>}
+            </p>
+          </div>
+          <div className="bd-bar-right">
+            {!isSubx && snap && <span className={`bd-state${refreshing ? " is-busy" : ""}`}><i aria-hidden="true" />{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
+            {!isSubx && <button type="button" className="b2b-btn-primary" onClick={rebuild} disabled={busy || loading}>{busy ? "계산 중..." : "다시 계산"}</button>}
+          </div>
+        </div>
+      </header>
+      {/* 스크롤해도 붙어 있는 줄 — 쪽 탭과 기간·필터(정기배송 분석 탭에서는 구역 이동) */}
+      <nav className="bd-bar" aria-label="쪽과 기간">
+        <div className="bd-bar-row bd-bar-nav">
           <div className="sm-tabs bd-pages">
             {PAGES.map(([k, label]) => <button key={k} type="button" className={`sm-tab ${page === k ? "is-active" : ""}`} onClick={() => setPage(k)}>{label}</button>)}
             {TOPICS.map((t) => <button key={t.id} type="button" className={`sm-tab ${page === `t:${t.id}` ? "is-active" : ""}`} onClick={() => setPage(`t:${t.id}`)}>{t.name}</button>)}
           </div>
-          <div className="bd-bar-right">
-            {!isSubx && snap && <span className="bd-state">{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
-            {!isSubx && <button type="button" className="b2b-btn-secondary" onClick={rebuild} disabled={busy || loading}>{busy ? "계산 중..." : "다시 계산"}</button>}
-          </div>
-        </div>
-        {isSubx && (
-          <div className="bd-controls">
+          {isSubx ? (
             <div className="sm-tabs bd-secnav" role="group" aria-label="구역으로 이동">
-              {sub.nav.map((s) => <button key={s.id} type="button" className="sm-tab" onClick={() => sub.go(s.top)}>{s.label}</button>)}
+              {sub.nav.map((x) => <button key={x.id} type="button" className="sm-tab" onClick={() => sub.go(x.top)}>{x.label}</button>)}
             </div>
-            <span className="bd-basis">카페24 정기배송 신청 전체 · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준</span>
-          </div>
-        )}
-        {!isSubx && snap && range && (
-          <div className="bd-controls">
-            <DateControl range={range} base={snap.base} min={snap.days[0]} onChange={setRange} />
-            <FilterControl label="판매 채널" options={salesOptions} value={filters.salesCh} onChange={(x) => setFilters((f) => ({ ...f, salesCh: x }))} />
-            {!topicId && <FilterControl label="광고 매체" options={mediaOptions} value={filters.media} onChange={(x) => setFilters((f) => ({ ...f, media: x }))} />}
-            {!topicId && <FilterControl label="유입 채널" options={gaOptions} value={filters.gaCh} onChange={(x) => setFilters((f) => ({ ...f, gaCh: x }))} />}
-            {topicId
-              ? <span className="bd-basis">기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}고객은 처음 산 날 기준 · 방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장</span>
-              : <span className="bd-basis">기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</span>}
-          </div>
-        )}
-      </header>
+          ) : snap && range ? (
+            <div className="bd-controls">
+              <DateControl range={range} base={snap.base} min={snap.days[0]} onChange={setRange} />
+              <FilterControl label="판매 채널" options={salesOptions} value={filters.salesCh} onChange={(x) => setFilters((f) => ({ ...f, salesCh: x }))} />
+              {!topicId && <FilterControl label="광고 매체" options={mediaOptions} value={filters.media} onChange={(x) => setFilters((f) => ({ ...f, media: x }))} />}
+              {!topicId && <FilterControl label="유입 채널" options={gaOptions} value={filters.gaCh} onChange={(x) => setFilters((f) => ({ ...f, gaCh: x }))} />}
+            </div>
+          ) : null}
+        </div>
+      </nav>
       <main className="bd-canvas">
         {!isSubx && error && <div className="b2b-error bd-c12">{error}</div>}
         {isSubx ? <iframe ref={sub.frame} src={SUB_SRC} title="정기배송 분석" className="bd-embed bd-c12" style={sub.height ? { height: sub.height } : undefined} />
@@ -850,8 +837,7 @@ export default function BoardPage() {
           : !view ? <div className="b2b-empty bd-c12">고른 기간에 숫자가 없습니다.</div>
           : page === "summary" ? <SummaryPage v={view} s={snap} />
           : page === "sales" ? <SalesPage v={view} s={snap} detail={shownDetail} />
-          : page === "ads" ? <AdsPage v={view} s={snap} />
-          : <SubPage v={view} s={snap} detail={shownDetail} />}
+          : <AdsPage v={view} s={snap} />}
       </main>
     </div>
   );

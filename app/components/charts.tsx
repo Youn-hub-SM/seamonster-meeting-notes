@@ -312,7 +312,8 @@ export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height 
 }
 
 // 작은 추세선(스코어카드 안) — 축·격자·글자 없음. 값이 2개 미만이면 그리지 않는다.
-export function Sparkline({ values, color = "var(--sm-text-mid)", height = 32 }: { values: (number | null)[]; color?: string; height?: number }) {
+// fill = 선 아래를 같은 색으로 옅게 채운다(주요 지표 숫자 줄)
+export function Sparkline({ values, color = "var(--sm-text-mid)", height = 32, fill = false }: { values: (number | null)[]; color?: string; height?: number; fill?: boolean }) {
   const pts = values.map((v, i) => [i, v] as const).filter((p): p is readonly [number, number] => p[1] != null);
   if (pts.length < 2) return null;
   const W = 120, H = 32, pad = 2;
@@ -322,6 +323,7 @@ export function Sparkline({ values, color = "var(--sm-text-mid)", height = 32 }:
   const y = (v: number) => pad + (H - pad * 2) * (1 - (v - min) / span);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={height} preserveAspectRatio="none" style={{ display: "block" }} aria-hidden="true">
+      {fill && <polygon points={`${x(pts[0][0])},${H} ${pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" ")} ${x(pts[pts.length - 1][0])},${H}`} fill={color} opacity="0.1" />}
       <polyline points={pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
