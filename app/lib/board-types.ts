@@ -110,11 +110,11 @@ export const TOPICS: TopicDef[] = [
   },
   {
     // 다이어트 챌린지(2026-11-16 대표) = seamonster.kr/diet 에서 탈리 폼으로 신청 → 미션을 마치면 탈리 폼으로 결과 제출. 주로 메타 '다이어트 챌린지' 캠페인으로 들어온다.
-    //  신청 폼 ArKkkW 는 /diet 페이지에 박혀 있는 폼이다. 결과 폼은 대표가 주소를 주면 result 에 적는다(그때까지 결과·완료율은 비어 있다).
+    //  신청 폼 ArKkkW 는 /diet 페이지에 박혀 있는 폼이다. 결과 폼 q4r7Dd 는 미션을 마친 사람이 내는 '챌린지 인증' 폼이다(후기 링크 2개·연락처).
     //  상품이 정해져 있지 않다(선정된 뒤 원하는 제품을 산다) — 구매는 '신청한 사람이 신청한 날부터 산 주문'으로 본다(전화번호 → 고객 키).
     id: "diet", name: "다이어트 챌린지",
-    basis: "페이지 /diet · 탈리 신청 폼 · 메타 '다이어트 챌린지' 캠페인",
-    forms: { apply: { id: "ArKkkW", label: "챌린지 신청" }, result: null },
+    basis: "페이지 /diet · 탈리 신청 폼·인증 폼 · 메타 '다이어트 챌린지' 캠페인",
+    forms: { apply: { id: "ArKkkW", label: "챌린지 신청" }, result: { id: "q4r7Dd", label: "챌린지 인증" } },   // 인증 폼은 한 사람이 한 번 제출, 연락처 칸으로 신청과 잇는다(2026-11-16 대표)
     productLike: [],
     landing: { label: "/diet", paths: ["/diet", "/diet/", "/diet/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
     gaItemNames: [],
