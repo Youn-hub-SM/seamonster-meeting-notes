@@ -341,6 +341,34 @@
   html.board #secMixGrid { grid-template-columns: repeat(3, 1fr); }
   @media (max-width: 1100px) { html.board #secMixGrid { grid-template-columns: 1fr; } }
   html.board .filter-card { margin-top: 32px; margin-bottom: 0; }
+  /* 한 단계씩 작게(2026-11-16 대표: "전체적으로 조금씩 작게") — 글자는 눈금 한 칸 아래(24→17, 15→13, 13→12, 12 는 그대로), 여백·그래프 높이는 주요 지표의 다른 탭과 같은 밀도 */
+  html.board body { font-size: 12px; }
+  html.board .card { padding: 16px; margin-bottom: 12px; }
+  html.board .card-head { margin-bottom: 10px; gap: 8px; }
+  html.board .card-title { font-size: 13px; }
+  html.board .card-sub { margin-top: 2px; }
+  html.board .grid-2, html.board .grid-3 { gap: 12px; }
+  html.board .kpi-grid { gap: 12px; }
+  html.board .kpi { padding: 12px 14px; }
+  html.board .kpi-label { margin-bottom: 4px; }
+  html.board .kpi-value { font-size: 17px; }
+  html.board .kpi-sub { margin-top: 4px; }
+  html.board .chart-wrap { height: 220px; }
+  html.board .chart-wrap.tall { height: 240px; }
+  html.board .history-chart-wrap { height: 220px !important; margin-bottom: 12px; }
+  html.board .table, html.board .ship-summary-table { font-size: 12px; }
+  html.board .table th, html.board .table td { padding: 8px 10px; }
+  html.board .history-table th, html.board .history-table td { padding-top: 8px; padding-bottom: 8px; font-size: 12px; }
+  html.board .trans-stat { padding: 8px 12px; min-width: 96px; }
+  html.board .trans-stat .n { font-size: 17px; }
+  html.board .trans-summary { gap: 8px; }
+  html.board .sec-title { margin: 24px 0 8px; }
+  html.board .filter-card { margin-top: 24px; }
+  html.board .ship-summary { padding: 10px 12px; margin-bottom: 12px; }
+  /* 데이터 목록은 접어 둔 채로 시작(2026-11-16 대표) — 카드 머리의 [목록 펼치기]로 연다. 요약·그래프는 접지 않는다 */
+  .fold-btn { display: none; }
+  html.board .fold-btn { display: inline-flex; }
+  html.board .fold-part.is-folded { display: none !important; }
   #boardWait { display: none; }
   html.board #boardWait { display: block; padding: 48px 0; text-align: center; color: var(--text-sub); font-size: 13px; }
 </style>
@@ -618,7 +646,7 @@
 
     <!-- 테이블 -->
     <h2 class="sec-title" id="secMembers" data-nav="회원·신청">회원·신청</h2>
-    <section class="card">
+    <section class="card" id="repeatSection">
       <div class="card-head">
         <div><div class="card-title">재구매 회원 랭킹</div><div class="card-sub">2건 이상 신청한 회원</div></div>
       </div>
@@ -632,7 +660,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="pauseSection">
       <div class="card-head">
         <div><div class="card-title">일시정지 워치리스트</div><div class="card-sub">재개 유도 CS 대상</div></div>
       </div>
@@ -646,7 +674,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="ordersSection">
       <div class="card-head">
         <div><div class="card-title">전체 신청 (검색)</div><div class="card-sub" id="totalCount">-</div></div>
       </div>
@@ -732,12 +760,43 @@ function boardNotify() {
   const sections = [...document.querySelectorAll(".sec-title")].filter((el) => el.offsetParent !== null)
     .map((el) => ({ id: el.id, label: el.dataset.nav || el.textContent, top: Math.round(el.getBoundingClientRect().top + window.scrollY) }))
     .sort((a, b) => a.top - b.top);
-  window.parent.postMessage({ type: "sm-sub-board", height: Math.ceil(document.documentElement.scrollHeight), sections }, location.origin);
+  // 높이는 내용(.main)의 높이로 — 문서 높이(scrollHeight)는 창 높이보다 작아지지 않아, 한 번 늘린 뒤에는 목록을 접어도 줄지 않는다
+  const height = Math.ceil(document.querySelector(".main").getBoundingClientRect().height);
+  window.parent.postMessage({ type: "sm-sub-board", height, sections }, location.origin);
+}
+// 데이터 목록 접기 — 카드마다 접을 부분(표·검색칸)을 정해 두고 카드 머리에 [목록 펼치기] 버튼을 단다. 요약·그래프는 그대로 보인다.
+//  그리기 함수가 표의 display 를 직접 바꾸므로 접힘은 클래스(.is-folded, !important)로 덮는다.
+const BOARD_FOLDS = [
+  ["repeatSection", [".scroll-y"]],                         // 재구매 회원 랭킹
+  ["pauseSection", [".scroll-y"]],                          // 일시정지 워치리스트
+  ["ordersSection", [".filters-inline", ".scroll-y"]],      // 전체 신청(검색)
+  ["shippingSection", [".ship-search", "#shipList"]],       // 발송 일정 — 상품별 합계는 두고 날짜별 목록만
+  ["historySection", ["#historyTableWrap"]],                // 분석 히스토리 — 그래프는 두고 표만
+  ["transitionSection", ["#transTypes", "#transTableWrap"]],// 상태 변화 이력 — 요약·그래프는 두고 표만
+];
+function boardFolds() {
+  for (const [id, sels] of BOARD_FOLDS) {
+    const sec = document.getElementById(id);
+    const head = sec && sec.querySelector(".card-head");
+    const parts = sec ? sels.flatMap((q) => [...sec.querySelectorAll(q)]) : [];
+    if (!head || !parts.length) continue;
+    parts.forEach((el) => el.classList.add("fold-part", "is-folded"));
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "btn btn-sm fold-btn"; btn.textContent = "목록 펼치기"; btn.setAttribute("aria-expanded", "false");
+    btn.onclick = () => {
+      const open = btn.getAttribute("aria-expanded") !== "true";
+      parts.forEach((el) => el.classList.toggle("is-folded", !open));
+      btn.setAttribute("aria-expanded", String(open));
+      btn.textContent = open ? "목록 접기" : "목록 펼치기";
+    };
+    (head.children.length > 1 ? head.lastElementChild : head).appendChild(btn);
+  }
 }
 if (BOARD) {
   window.addEventListener("load", () => {
     document.getElementById("filterBody").classList.remove("open");   // 필터는 접어 둔다(펼치면 그대로 쓸 수 있다)
     document.getElementById("filterHead").classList.remove("open");
+    boardFolds();
     new ResizeObserver(boardNotify).observe(document.body);
     boardNotify();
   });
