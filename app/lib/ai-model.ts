@@ -47,10 +47,9 @@ export async function getCurrentModel(): Promise<string> {
 }
 
 // ── 기능별 모델 ──
-export type AiFeature = "meeting" | "cs" | "voc" | "report" | "daily_analyst" | "notice" | "agent"; // briefing(옛 06:30 브리핑)은 2026-10-20, production(재고 AI 조언·주간 초안)은 2026-11-08 삭제
+export type AiFeature = "cs" | "voc" | "report" | "daily_analyst" | "notice" | "agent"; // briefing(옛 06:30 브리핑)은 2026-10-20, production(재고 AI 조언·주간 초안)은 2026-11-08, meeting(회의 정리)은 2026-11-16 삭제
 // inheritDefault: 기능 설정이 'inherit' 일 때 공통 기본 대신 쓰는 모델(정확도가 중요한 기능). 없으면 공통 기본을 따른다.
 const AI_FEATURES_ALL: { key: AiFeature; label: string; desc: string; inheritDefault?: ModelKey }[] = [
-  { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
   { key: "cs", label: "CS 코치", desc: "CS 응대 코칭·답변 초안" },
   { key: "voc", label: "VOC 인사이트", desc: "VOC 인사이트·설문 분석·제조사 리포트 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
   { key: "report", label: "AI 비서", desc: "질문 → 조사(SQL·글 검색) → 근거 있는 답 (기본 fable — 2026-10-19). 보조 작업은 Opus 낮음 고정", inheritDefault: "fable" },
@@ -61,7 +60,6 @@ const AI_FEATURES_ALL: { key: AiFeature; label: string; desc: string; inheritDef
 // 운영에서 보류 중인 AI 에이전트(hold.ts)는 설정 화면의 기능 목록에서 뺀다(모델 조회 getFeatureModel 은 아래에서 전체 목록을 본다).
 export const AI_FEATURES = AI_FEATURES_ALL.filter((f) => !(HOLD_AGENTS && f.key === "agent"));
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
-  meeting: "ai_model_meeting",
   cs: "ai_model_cs", // 기존 CS 전용 키와 동일(하위호환)
   voc: "ai_model_voc",
   report: "ai_model_report",

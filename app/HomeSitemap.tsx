@@ -34,7 +34,7 @@ export default function HomeSitemap() {
       <div className="home-map">
         {cats.map((cat) => (
           <div key={cat.label || "공통"} className="home-map-cat">
-            {/* 라벨 없는 최상단 그룹(가이드·업데이트 노트·회의 정리)은 '공통'으로 */}
+            {/* 라벨 없는 최상단 그룹(가이드·업데이트 노트·AI 비서)은 '공통'으로 */}
             <h3 className="home-map-cat-title">{cat.label || "공통"}</h3>
             <div className="home-map-tools">
               {cat.tools.map((tool) => {

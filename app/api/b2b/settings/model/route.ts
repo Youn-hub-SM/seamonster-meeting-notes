@@ -30,7 +30,7 @@ export async function GET() {
 
 // PUT /api/b2b/settings/model — { scope, key }
 //  - scope "global": key 는 모델 키
-//  - scope 가 기능 키(meeting/cs/voc/production 등): key 는 모델 키 또는 "inherit"(공통 따름)
+//  - scope 가 기능 키(cs/voc/report 등): key 는 모델 키 또는 "inherit"(공통 따름)
 export async function PUT(req: NextRequest) {
   const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
