@@ -256,20 +256,21 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
 // 선 그래프(시계열) — 여러 선, 값 없는 구간(null)은 끊는다. dashed = 비교 기간처럼 '참고' 선.
 //  막대 3종과 같은 좌표계(GEOM)·격자·X축 솎음. 마우스오버 시 그 시점의 모든 선 값을 보여 준다.
 //  tipLabels = 툴팁 제목(기간 이름과 다르게 쓰고 싶을 때 — 예: 비교 선의 날짜를 함께 적기).
-export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height }: {
+export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height, yMax }: {
   periods: string[];
   series: { key: string; values: (number | null)[]; color: string; dashed?: boolean }[];
   fmtAxis?: (n: number) => string;
   fmtTip?: (n: number) => string;
   unit?: string;
   height?: number;                 // viewBox 높이(기본 GEOM.H) — 낮은 카드에 넣을 때만
+  yMax?: number;                   // 세로축 최댓값 고정(만점이 정해진 점수 등) — 없으면 값에 맞춰 올림
 }) {
   const [hi, setHi] = useState<number | null>(null);
   if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const tip = fmtTip || ((n: number) => n.toLocaleString());
   const { W, padL, padT, padB } = GEOM, H = height || GEOM.H, padR = 14;
-  const top = niceCeil(Math.max(...series.flatMap((s) => s.values.map((v) => v ?? 0)), 1));
+  const top = yMax && yMax > 0 ? yMax : niceCeil(Math.max(...series.flatMap((s) => s.values.map((v) => v ?? 0)), 1));
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = periods.length;
   const cx = (i: number) => (n === 1 ? padL + plotW / 2 : padL + (plotW * i) / (n - 1));

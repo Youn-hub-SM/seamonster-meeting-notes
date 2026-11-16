@@ -87,12 +87,14 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
 //  주제는 두 가지다(2026-11-16): 상품 주문이 전환인 주제(productLike)와, 탈리 폼 신청이 전환인 주제(forms — 상품 주문·고객 집계를 하지 않는다).
-export const TOPIC_VERSION = 5;
+export const TOPIC_VERSION = 6;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
   forms?: { apply: { id: string; label: string }; result: { id: string; label: string } | null };   // 탈리 폼 ID(신청·결과). result null = 결과 폼이 아직 정해지지 않음
-  submit?: { id: string; label: string };   // 상품 주문형 주제의 결과 제출 탈리 폼(산 뒤 미션을 마치고 내는 폼) — 산 고객과 전화번호로 잇는다
+  // 상품 주문형 주제의 결과 제출 탈리 폼(산 뒤 미션을 마치고 내는 폼) — 산 고객과 전화번호로 잇는다.
+  //  scaleMax = 폼 안 설문 척도 문항의 만점(있으면 문항별 평균 점수를 보여 준다), scaleNames = [문항 제목에 든 구절, 화면에 쓸 짧은 이름]
+  submit?: { id: string; label: string; scaleMax?: number; scaleNames?: [match: string, name: string][] };
   productLike: string[];              // 주문 상품명에 든 구절(그중 하나라도) — 그 상품만 잡히게 충분히 길게. 폼 신청형은 빈 배열
   landing: { label: string; paths: string[]; scroll: [label: string, event: string][] } | null;   // 랜딩 페이지 주소(정확히)와 스크롤 깊이 이벤트
   gaItemNames: string[];              // GA4 상품명(정확히) — 주문서 진입 수
@@ -103,9 +105,11 @@ export const TOPICS: TopicDef[] = [
     // 이유식 체험단 = 공식몰 상품번호 172(이유식 생선 체험단). 페이지 seamonster.kr/baby, 메타 '이유식 체험단' 캠페인. 네이버 광고 없음.
     //  2026-11-16 이름을 '체험단' → '이유식 체험단'으로(대표 — 다이어트 챌린지와 나란히 놓이므로).
     //  결과 제출 폼 J9Lpyz(form.seamonster.kr/baby-submit, 2026-11-16 대표) = 이유식 기록 2건을 남긴 참여자가 내는 폼(휴대폰 번호·기록 링크 2개·선택 설문).
+    //  선택 설문 = 1~8점 척도 8문항('설문 참여하고 소중한 의견 남기기'를 고른 사람만 답한다). 2026-11-17 대표: "설문 평균 점수 추이도 넣어줘".
     id: "trial", name: "이유식 체험단",
     basis: "공식몰 상품번호 172 주문 · 페이지 /baby · 탈리 제출 폼 · 메타 '이유식 체험단' 캠페인",
-    submit: { id: "J9Lpyz", label: "체험단 제출" },
+    submit: { id: "J9Lpyz", label: "체험단 제출", scaleMax: 8,
+      scaleNames: [["배송 상태", "배송 상태"], ["지퍼백 포장", "지퍼백 포장"], ["조리 과정", "조리 과정"], ["조리 후 식감", "조리 후 식감"], ["조리 후 향", "조리 후 향"], ["가격 대비", "가격 대비 만족도"], ["아이의 반응", "아이의 반응"], ["다시 활용", "다시 쓸 의향"]] },
     productLike: ["이유식 생선 체험단 패키지", "첫 생선일기 전용 패키지"],   // 172 의 지금 이름과 예전 이름
     landing: { label: "/baby", paths: ["/baby", "/baby/", "/baby/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
     gaItemNames: ["씨몬스터 이유식 생선 체험단 패키지", "우리 아이 첫 생선일기 전용 패키지"],
@@ -175,6 +179,8 @@ export type TopicSubmit = {
   done: number[];       // 처음 산 날 기준 — 그날 처음 산 고객 중 지금까지 결과를 낸 사람
   unmatched: number;    // 전화번호가 없거나 그 상품을 산 기록을 찾지 못한 제출 건수
   truncated: boolean;   // 제출이 많아 일부만 받음
+  survey: { label: string; sum: number[]; n: number[] }[];   // 설문 척도 문항(폼의 순서대로) — 그날 제출의 점수 합과 응답 수. 평균은 화면이 기간 합계끼리 나눈다
+  surveyAnswered: number[];   // 그날 설문 척도 문항에 하나라도 답한 제출 건수
 };
 export type TopicSnapshot = {
   v: typeof TOPIC_VERSION;

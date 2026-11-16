@@ -516,6 +516,19 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
   const submit = t.submit?.ok ? t.submit : null;
   const subCntS = submit ? spanSum(submit.count, sp) : null, subDoneS = submit ? spanSum(submit.done, sp) : null;
   const subRate = subDoneS && firstS ? ratio(subDoneS.cur * 100, firstS.cur) : null;
+  // 설문(제출 폼의 척도 문항) — 평균은 기간 합계끼리 나눈다. 추이는 14일 넘는 기간이면 주 단위(응답이 없는 칸은 비운다)
+  const survey = submit?.survey ?? [];
+  const surveyRows = survey.map((q) => { const a = spanSum(q.sum, sp), c = spanSum(q.n, sp); return { name: q.label, n: c.cur, avg: ratio(a.cur, c.cur), prevAvg: ratio(a.prev, c.prev) }; }).filter((r) => r.n > 0);
+  const svSum = addSeries(survey.map((q) => q.sum), N), svN = addSeries(survey.map((q) => q.n), N);
+  const surveyAvg = { cur: ratio(sumOf(win(svSum)), sumOf(win(svN))), prev: sp.prev ? ratio(sumOf(cut(svSum, sp.prev.i0, sp.prev.i1)), sumOf(cut(svN, sp.prev.i0, sp.prev.i1))) : null };
+  const surveyAnswered = submit ? sumOf(win(submit.surveyAnswered ?? [])) : 0;
+  const surveyTrend: { key: string; label: string; sum: number; n: number }[] = [];
+  if (survey.length) for (let i = sp.i0; i <= sp.i1; i++) {
+    const d = t.days[i], key = sp.n > 14 ? mondayOf(d) : d;
+    let b = surveyTrend[surveyTrend.length - 1];
+    if (!b || b.key !== key) { b = { key, label: md(d), sum: 0, n: 0 }; surveyTrend.push(b); }
+    b.sum += svSum[i] || 0; b.n += svN[i] || 0;
+  }
   const cohort: { key: string; from: string; to: string; mature: boolean; first: number; conv30: number; conv: number; convRev: number; done: number }[] = [];
   if (cust) for (let i = sp.i0; i <= sp.i1; i++) {
     const d = t.days[i], key = byWeek ? mondayOf(d) : d;
@@ -555,7 +568,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
     return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: imp, clicks: clk, ctr: ratio(clk * 100, imp), purchases: sumOf(win(a.purchases)), value: val, roas: ratio(val, sp1) };
   }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
 
-  return { win, prevWin, hasPrev: !!sp.prev, labels, sales, rev, orders, revS, ordS, qtyS, itemRows, cust, firstS, freshS, matureFirst, matureConv30, rate30, byWeek, cohort, afterRows, submit, subCntS, subDoneS, subRate,
+  return { win, prevWin, hasPrev: !!sp.prev, labels, sales, rev, orders, revS, ordS, qtyS, itemRows, cust, firstS, freshS, matureFirst, matureConv30, rate30, byWeek, cohort, afterRows, submit, subCntS, subDoneS, subRate, surveyRows, surveyAvg, surveyAnswered, surveyTrend,
     ga, visitS, checkoutS, convRate, funnel, sesTotal, sourceRows, meta, spend, value, spendS, valueS, purS, clickS, impS, cpa, adRows };
 }
 type TopicView = ReturnType<typeof buildTopicView>;
@@ -592,6 +605,20 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   ];
   type CRow = TopicView["cohort"][number];
   const hasSubmit = !!def.submit;   // 결과 제출 폼이 있는 주제 — 표에 결과 제출 열, 아래에 제출 추이
+  const scaleMax = def.submit?.scaleMax ?? 0;   // 설문 척도 만점 — 있으면 문항별 평균 점수와 추이
+  const score1 = (v: number | null) => (v == null ? "-" : v.toFixed(1));
+  const scoreDelta = (cur: number | null, prev: number | null): Delta => {   // 점수끼리의 차(소수 한 자리)
+    if (cur == null || prev == null) return null;
+    const r = Math.round((cur - prev) * 10) / 10;
+    return { text: `${arrow(r)} ${Math.abs(r).toFixed(1)}`.trim(), tone: toneOf(r, r === 0, "up") };
+  };
+  type VRow = TopicView["surveyRows"][number];
+  const vCols: Col<VRow>[] = [
+    { key: "name", label: "문항", w: 45, sort: (r) => r.name, cell: (r) => r.name },
+    { key: "avg", label: `평균(${scaleMax}점 만점)`, num: true, bar: true, sort: (r) => r.avg ?? 0, cell: (r) => score1(r.avg) },
+    { key: "delta", label: "직전 대비", num: true, sort: (r) => (r.avg != null && r.prevAvg != null ? r.avg - r.prevAvg : -Infinity), cell: (r) => <DeltaText d={scoreDelta(r.avg, r.prevAvg)} /> },
+    { key: "n", label: "응답", num: true, sort: (r) => r.n, cell: (r) => r.n.toLocaleString() },
+  ];
   const subCell = (v: string) => (tv.submit ? v : "-");
   const cCols: Col<CRow>[] = [
     { key: "key", label: tv.byWeek ? "처음 산 주" : "처음 산 날", sort: (r) => r.key, cell: (r) => (tv.byWeek ? `${md(r.from)}~${md(r.to)}` : `${md(r.from)} (${weekday(r.from)})`) },
@@ -623,6 +650,8 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   const subDone = tv.subDoneS?.cur ?? 0;
   const subNote = tv.submit ? [`결과 제출 ${(tv.subCntS?.cur ?? 0).toLocaleString()}건`, tv.submit.unmatched > 0 ? `구매와 잇지 못한 제출 ${tv.submit.unmatched.toLocaleString()}건` : ""].filter(Boolean).join(" · ") : "";
   const noSubmit = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 결과 제출이 없습니다.";
+  const noSurvey = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 설문 응답이 없습니다.";
+  const surveyNote = tv.surveyRows.length ? `설문 응답 ${tv.surveyAnswered.toLocaleString()}건 · 전체 평균 ${score1(tv.surveyAvg.cur)}점` : "";
   return (
     <>
       <Errors list={[failOf("매출", t.sales), failOf("고객", t.cust), failOf("GA4", t.ga), failOf("메타 광고", t.meta), failOf("결과 제출", t.submit ?? null),
@@ -661,6 +690,18 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
         <Card w={6} title="결과 제출 추이" right={tv.submit ? <CompareLegend v={tv} /> : undefined}>
           {tv.submit ? <CompareLine v={tv} values={tv.submit.count} unit="건" /> : <div className="b2b-empty">{noSubmit}</div>}
         </Card>
+      )}
+      {hasSubmit && scaleMax > 0 && (
+        <>
+          <Card w={6} title="설문 평균 점수" right={surveyNote ? <span className="bd-card-note">{surveyNote}</span> : undefined}>
+            <DataTable rows={tv.surveyRows} cols={vCols} rowKey={(r) => r.name} sortKey="avg" empty={noSurvey} />
+          </Card>
+          <Card w={6} title={`설문 평균 점수 추이(${tv.byWeek ? "주별" : "날짜별"})`}>
+            {tv.surveyRows.length
+              ? <LineChart periods={tv.surveyTrend.map((b) => b.label)} yMax={scaleMax} fmtTip={(v) => v.toFixed(1)} unit="점" series={[{ key: "전체 평균", values: tv.surveyTrend.map((b) => (b.n > 0 ? b.sum / b.n : null)), color: C_CUR }]} />
+              : <div className="b2b-empty">{noSurvey}</div>}
+          </Card>
+        </>
       )}
       <Card w={6} title="페이지 방문 추이" right={tv.ga ? <CompareLegend v={tv} /> : undefined}>
         {tv.ga ? <CompareLine v={tv} values={tv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}

@@ -178,9 +178,9 @@ async function metaSection(def: TopicDef, days: string[]): Promise<TopicMeta> {
 
 // ── 탈리 폼(신청·결과) ── 180일 안의 제출을 받아 날짜별 건수로. 신청한 사람(전화번호)에 결과 제출과 주문을 잇는다.
 //  사람의 날짜 = 처음 신청한 날(한 사람은 하루에만 들어가 기간으로 더해도 겹치지 않는다). 구매 = 그날부터 기준일까지의 주문(모든 채널).
-type FormSub = { day: string; phone: string | null };
+type FormSub = { day: string; phone: string | null; scales: [qid: string, score: number][] };   // scales = 척도 문항의 점수(설문 평균용)
 const kstDay = (iso: string | undefined) => { const t = Date.parse(String(iso || "")); return Number.isFinite(t) ? new Date(t + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
-async function tallySubs(formId: string, startIso: string, apiKey: string): Promise<{ subs: FormSub[]; truncated: boolean }> {
+async function tallySubs(formId: string, startIso: string, apiKey: string): Promise<{ subs: FormSub[]; truncated: boolean; questions: TallyQ[] }> {
   const qmap = new Map<string, TallyQ>();
   const subs: FormSub[] = [];
   const seen = new Set<string>();
@@ -192,11 +192,18 @@ async function tallySubs(formId: string, startIso: string, apiKey: string): Prom
       if (!s?.id || seen.has(s.id)) continue;
       seen.add(s.id);
       const day = kstDay(s.submittedAt);
-      if (day) subs.push({ day, phone: findPhone(mapTallySubmission(s, qmap, formId).answers) });
+      if (!day) continue;
+      const scales: [string, number][] = [];
+      for (const r of s.responses || []) {
+        if (!/SCALE|RATING/i.test(qmap.get(r.questionId)?.type || "")) continue;
+        const v = Number(r.answer);
+        if (Number.isFinite(v) && v > 0) scales.push([r.questionId, v]);
+      }
+      subs.push({ day, phone: findPhone(mapTallySubmission(s, qmap, formId).answers), scales });
     }
-    if (!json.hasMore || list.length === 0) return { subs, truncated: false };
+    if (!json.hasMore || list.length === 0) return { subs, truncated: false, questions: [...qmap.values()] };
   }
-  return { subs, truncated: true };
+  return { subs, truncated: true, questions: [...qmap.values()] };
 }
 async function formsSection(sb: SupabaseClient, def: TopicDef, days: string[], base: string): Promise<TopicForms> {
   const f = def.forms!;
@@ -258,11 +265,22 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   if (!apiKey) throw new Error("탈리 API 키가 없습니다. VOC › 설정에서 탈리 API 키를 넣으세요.");
   const rs = await timeout(tallySubs(def.submit!.id, new Date(`${days[0]}T00:00:00+09:00`).toISOString(), apiKey), 60_000, "탈리");
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
-  const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), unmatched: 0, truncated: rs.truncated };
+  const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), unmatched: 0, truncated: rs.truncated, survey: [], surveyAnswered: zeros(n) };
+  // 설문 척도 문항 — 폼의 순서대로. 이름은 정의에 적어 둔 짧은 이름(없으면 문항 제목 그대로)
+  const names = def.submit!.scaleNames || [];
+  const scaleQ = new Map<string, TopicSubmit["survey"][number]>();
+  if (def.submit!.scaleMax) for (const q of rs.questions) {
+    if (!/SCALE|RATING/i.test(q.type || "")) continue;
+    const title = (q.title || "").replace(/\s+/g, " ").trim();
+    scaleQ.set(q.id, { label: names.find(([m]) => title.includes(m))?.[1] || title || "(제목 없음)", sum: zeros(n), n: zeros(n) });
+  }
   const byKey = new Map<string, number>();   // 고객 키 → 제출 건수
   for (const s of rs.subs) {
     const i = idx.get(s.day); if (i == null) continue;   // 기준일 뒤(오늘) 제출은 다음 계산에
     out.count[i]++;
+    let answered = false;
+    for (const [qid, v] of s.scales) { const q = scaleQ.get(qid); if (q) { q.sum[i] += v; q.n[i]++; answered = true; } }
+    if (answered) out.surveyAnswered[i]++;
     const k = s.phone ? customerKey(s.phone) : "";
     if (!k) { out.unmatched++; continue; }
     byKey.set(k, (byKey.get(k) || 0) + 1);
@@ -279,6 +297,7 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
     if (!d) { out.unmatched += cnt; continue; }
     const i = idx.get(d); if (i != null) out.done[i]++;   // 180일보다 먼저 산 고객은 이은 것으로 보되 날짜 칸에는 넣지 않는다
   }
+  out.survey = [...scaleQ.values()].filter((q) => sum(q.n) > 0);
   return out;
 }
 
