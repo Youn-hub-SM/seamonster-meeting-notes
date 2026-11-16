@@ -522,6 +522,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
   const svSum = addSeries(survey.map((q) => q.sum), N), svN = addSeries(survey.map((q) => q.n), N);
   const surveyAvg = { cur: ratio(sumOf(win(svSum)), sumOf(win(svN))), prev: sp.prev ? ratio(sumOf(cut(svSum, sp.prev.i0, sp.prev.i1)), sumOf(cut(svN, sp.prev.i0, sp.prev.i1))) : null };
   const surveyAnswered = submit ? sumOf(win(submit.surveyAnswered ?? [])) : 0;
+  const opinionRows = (submit?.opinions ?? []).filter((o) => o.day >= t.days[sp.i0] && o.day <= t.days[sp.i1]);   // 고른 기간에 낸 의견(최근 것부터)
   const surveyTrend: { key: string; label: string; sum: number; n: number }[] = [];
   if (survey.length) for (let i = sp.i0; i <= sp.i1; i++) {
     const d = t.days[i], key = sp.n > 14 ? mondayOf(d) : d;
@@ -568,7 +569,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
     return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: imp, clicks: clk, ctr: ratio(clk * 100, imp), purchases: sumOf(win(a.purchases)), value: val, roas: ratio(val, sp1) };
   }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
 
-  return { win, prevWin, hasPrev: !!sp.prev, labels, sales, rev, orders, revS, ordS, qtyS, itemRows, cust, firstS, freshS, matureFirst, matureConv30, rate30, byWeek, cohort, afterRows, submit, subCntS, subDoneS, subRate, surveyRows, surveyAvg, surveyAnswered, surveyTrend,
+  return { win, prevWin, hasPrev: !!sp.prev, labels, sales, rev, orders, revS, ordS, qtyS, itemRows, cust, firstS, freshS, matureFirst, matureConv30, rate30, byWeek, cohort, afterRows, submit, subCntS, subDoneS, subRate, surveyRows, surveyAvg, surveyAnswered, surveyTrend, opinionRows,
     ga, visitS, checkoutS, convRate, funnel, sesTotal, sourceRows, meta, spend, value, spendS, valueS, purS, clickS, impS, cpa, adRows };
 }
 type TopicView = ReturnType<typeof buildTopicView>;
@@ -606,6 +607,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   type CRow = TopicView["cohort"][number];
   const hasSubmit = !!def.submit;   // 결과 제출 폼이 있는 주제 — 표에 결과 제출 열, 아래에 제출 추이
   const scaleMax = def.submit?.scaleMax ?? 0;   // 설문 척도 만점 — 있으면 문항별 평균 점수와 추이
+  const hasOpinion = !!def.submit?.textNames?.length;   // 주관식 의견 문항이 있는 주제 — 설문 평균 점수 오른쪽에 의견 목록
   const score1 = (v: number | null) => (v == null ? "-" : v.toFixed(1));
   const scoreDelta = (cur: number | null, prev: number | null): Delta => {   // 점수끼리의 차(소수 한 자리)
     if (cur == null || prev == null) return null;
@@ -651,6 +653,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   const subNote = tv.submit ? [`결과 제출 ${(tv.subCntS?.cur ?? 0).toLocaleString()}건`, tv.submit.unmatched > 0 ? `구매와 잇지 못한 제출 ${tv.submit.unmatched.toLocaleString()}건` : ""].filter(Boolean).join(" · ") : "";
   const noSubmit = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 결과 제출이 없습니다.";
   const noSurvey = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 설문 응답이 없습니다.";
+  const noOpinion = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 남긴 의견이 없습니다.";
   const surveyNote = tv.surveyRows.length ? `설문 응답 ${tv.surveyAnswered.toLocaleString()}건 · 전체 평균 ${score1(tv.surveyAvg.cur)}점` : "";
   return (
     <>
@@ -696,6 +699,20 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
           <Card w={6} title="설문 평균 점수" right={surveyNote ? <span className="bd-card-note">{surveyNote}</span> : undefined}>
             <DataTable rows={tv.surveyRows} cols={vCols} rowKey={(r) => r.name} sortKey="avg" empty={noSurvey} />
           </Card>
+          {hasOpinion && (
+            <Card w={6} title="추가 의견" right={tv.opinionRows.length ? <span className="bd-card-note">{tv.opinionRows.length.toLocaleString()}건</span> : undefined}>
+              {tv.opinionRows.length ? (
+                <div className="bd-feed" tabIndex={0}>
+                  {tv.opinionRows.map((o, i) => (
+                    <div className="bd-feed-item" key={`${o.day}-${i}`}>
+                      <div className="bd-feed-meta">{md(o.day)} ({weekday(o.day)}){o.score != null ? ` · 평균 ${o.score.toFixed(1)}점` : ""}</div>
+                      {o.parts.map(([name, text], k) => <p className="bd-feed-text" key={k}><span className="bd-feed-tag">{name}</span>{text}</p>)}
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="b2b-empty">{noOpinion}</div>}
+            </Card>
+          )}
           <Card w={6} title={`설문 평균 점수 추이(${tv.byWeek ? "주별" : "날짜별"})`}>
             {tv.surveyRows.length
               ? <LineChart periods={tv.surveyTrend.map((b) => b.label)} yMax={scaleMax} fmtTip={(v) => v.toFixed(1)} unit="점" series={[{ key: "전체 평균", values: tv.surveyTrend.map((b) => (b.n > 0 ? b.sum / b.n : null)), color: C_CUR }]} />
@@ -706,7 +723,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
       <Card w={6} title="페이지 방문 추이" right={tv.ga ? <CompareLegend v={tv} /> : undefined}>
         {tv.ga ? <CompareLine v={tv} values={tv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
       </Card>
-      <Card w={6} title="상품·옵션별 주문">
+      <Card w={hasSubmit && scaleMax > 0 && hasOpinion ? 12 : 6} title="상품·옵션별 주문">
         <DataTable rows={tv.itemRows} cols={iCols} rowKey={(r) => r.key} sortKey="rev" empty={noSales}
           foot={["합계", "", won(tv.revS?.cur ?? 0), (tv.ordS?.cur ?? 0).toLocaleString()]} />
       </Card>

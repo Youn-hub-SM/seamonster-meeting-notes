@@ -125,5 +125,14 @@
 .bd-table-wrap th.bd-w45 { width: 45%; }
 .bd-path { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 의견 목록 — 댓글처럼 한 줄에 하나씩, 카드 안에서 세로로 스크롤한다(옆의 설문 표와 높이를 맞춘다) */
+.bd-feed { max-height: 329px; overflow-y: auto; padding-right: var(--sm-space-2); }
+.bd-feed-item { padding: var(--sm-space-3) 0; border-bottom: 1px solid var(--sm-border-light); }
+.bd-feed-item:first-child { padding-top: 0; }
+.bd-feed-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.bd-feed-meta { font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-light); font-variant-numeric: tabular-nums; }
+.bd-feed-text { margin: var(--sm-space-1) 0 0; font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-black); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bd-feed-tag { display: block; font-size: var(--sm-fs-xs); font-weight: 500; line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+
 /* 정기배송 분석 탭 — 정기배송 분석 화면을 그대로 넣은 틀. 높이는 그 화면이 알려 온 값으로 맞춘다(알려 오기 전에는 화면 높이만큼). */
 .bd-embed { width: 100%; border: 0; display: block; min-height: 70vh; background: transparent; }

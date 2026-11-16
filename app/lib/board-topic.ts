@@ -14,7 +14,7 @@ import { readKvSoft, mutateKv } from "./production-kv";
 import { isMetaAdConfigured, getDailyByName } from "./meta-ad";
 import { isGaConfigured, runGaReport, type GaFilter } from "./ga";
 import { readBoard, salesFingerprint } from "./board";
-import { BOARD_DAYS, TOPIC_VERSION, TOPICS, TOPIC_REPEAT_DAYS, shiftDay as shift, type TopicDef, type TopicSnapshot, type TopicSales, type TopicCust, type TopicGa, type TopicMeta, type TopicForms, type TopicSubmit, type Fail } from "./board-types";
+import { BOARD_DAYS, TOPIC_VERSION, TOPICS, TOPIC_REPEAT_DAYS, TOPIC_OPINION_MAX, shiftDay as shift, type TopicDef, type TopicSnapshot, type TopicSales, type TopicCust, type TopicGa, type TopicMeta, type TopicForms, type TopicSubmit, type Fail } from "./board-types";
 import { getTallyApiKey, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "./voc-tally";
 import { findPhone } from "./form-sms";
 import { customerKey } from "./sales-normalize";
@@ -178,7 +178,9 @@ async function metaSection(def: TopicDef, days: string[]): Promise<TopicMeta> {
 
 // ── 탈리 폼(신청·결과) ── 180일 안의 제출을 받아 날짜별 건수로. 신청한 사람(전화번호)에 결과 제출과 주문을 잇는다.
 //  사람의 날짜 = 처음 신청한 날(한 사람은 하루에만 들어가 기간으로 더해도 겹치지 않는다). 구매 = 그날부터 기준일까지의 주문(모든 채널).
-type FormSub = { day: string; phone: string | null; scales: [qid: string, score: number][] };   // scales = 척도 문항의 점수(설문 평균용)
+type FormSub = { day: string; phone: string | null; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
+const OPINION_CHARS = 600;   // 의견 한 편의 최대 길이
+const EMPTY_OPINION = /^(딱히\s*)?(없음|없습니다|없어요|없네요|없다|없어용)?[\s.!~\-xX]*$/;   // '없음' 같은 빈 답은 의견으로 치지 않는다
 const kstDay = (iso: string | undefined) => { const t = Date.parse(String(iso || "")); return Number.isFinite(t) ? new Date(t + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
 async function tallySubs(formId: string, startIso: string, apiKey: string): Promise<{ subs: FormSub[]; truncated: boolean; questions: TallyQ[] }> {
   const qmap = new Map<string, TallyQ>();
@@ -193,13 +195,17 @@ async function tallySubs(formId: string, startIso: string, apiKey: string): Prom
       seen.add(s.id);
       const day = kstDay(s.submittedAt);
       if (!day) continue;
-      const scales: [string, number][] = [];
+      const scales: [string, number][] = [], texts: [string, string][] = [];
       for (const r of s.responses || []) {
-        if (!/SCALE|RATING/i.test(qmap.get(r.questionId)?.type || "")) continue;
-        const v = Number(r.answer);
-        if (Number.isFinite(v) && v > 0) scales.push([r.questionId, v]);
+        if (/SCALE|RATING/i.test(qmap.get(r.questionId)?.type || "")) {   // 척도 문항 — 점수가 글자로 와도 숫자로 읽는다
+          const v = Number(r.answer);
+          if (Number.isFinite(v) && v > 0) scales.push([r.questionId, v]);
+        } else if (typeof r.answer === "string") {
+          const tx = r.answer.trim();
+          if (tx && !EMPTY_OPINION.test(tx)) texts.push([r.questionId, tx.slice(0, OPINION_CHARS)]);
+        }
       }
-      subs.push({ day, phone: findPhone(mapTallySubmission(s, qmap, formId).answers), scales });
+      subs.push({ day, phone: findPhone(mapTallySubmission(s, qmap, formId).answers), scales, texts });
     }
     if (!json.hasMore || list.length === 0) return { subs, truncated: false, questions: [...qmap.values()] };
   }
@@ -265,7 +271,7 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   if (!apiKey) throw new Error("탈리 API 키가 없습니다. VOC › 설정에서 탈리 API 키를 넣으세요.");
   const rs = await timeout(tallySubs(def.submit!.id, new Date(`${days[0]}T00:00:00+09:00`).toISOString(), apiKey), 60_000, "탈리");
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
-  const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), unmatched: 0, truncated: rs.truncated, survey: [], surveyAnswered: zeros(n) };
+  const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), unmatched: 0, truncated: rs.truncated, survey: [], surveyAnswered: zeros(n), opinions: [] };
   // 설문 척도 문항 — 폼의 순서대로. 이름은 정의에 적어 둔 짧은 이름(없으면 문항 제목 그대로)
   const names = def.submit!.scaleNames || [];
   const scaleQ = new Map<string, TopicSubmit["survey"][number]>();
@@ -274,13 +280,22 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
     const title = (q.title || "").replace(/\s+/g, " ").trim();
     scaleQ.set(q.id, { label: names.find(([m]) => title.includes(m))?.[1] || title || "(제목 없음)", sum: zeros(n), n: zeros(n) });
   }
+  // 주관식 의견 — 정의에 적은 문항만(이름·연락처 같은 다른 글 답은 담지 않는다)
+  const textQ = new Map<string, string>();   // 문항 id → 화면에 쓸 이름
+  for (const q of rs.questions) {
+    const title = (q.title || "").replace(/\s+/g, " ").trim();
+    const hit = (def.submit!.textNames || []).find(([m]) => title.includes(m));
+    if (hit) textQ.set(q.id, hit[1]);
+  }
   const byKey = new Map<string, number>();   // 고객 키 → 제출 건수
   for (const s of rs.subs) {
     const i = idx.get(s.day); if (i == null) continue;   // 기준일 뒤(오늘) 제출은 다음 계산에
     out.count[i]++;
-    let answered = false;
-    for (const [qid, v] of s.scales) { const q = scaleQ.get(qid); if (q) { q.sum[i] += v; q.n[i]++; answered = true; } }
-    if (answered) out.surveyAnswered[i]++;
+    let scoreSum = 0, scoreN = 0;
+    for (const [qid, v] of s.scales) { const q = scaleQ.get(qid); if (q) { q.sum[i] += v; q.n[i]++; scoreSum += v; scoreN++; } }
+    if (scoreN > 0) out.surveyAnswered[i]++;
+    const parts = s.texts.flatMap(([qid, tx]): [string, string][] => { const name = textQ.get(qid); return name ? [[name, tx]] : []; });
+    if (parts.length) out.opinions.push({ day: s.day, score: scoreN > 0 ? Math.round((scoreSum / scoreN) * 10) / 10 : null, parts });
     const k = s.phone ? customerKey(s.phone) : "";
     if (!k) { out.unmatched++; continue; }
     byKey.set(k, (byKey.get(k) || 0) + 1);
@@ -298,6 +313,7 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
     const i = idx.get(d); if (i != null) out.done[i]++;   // 180일보다 먼저 산 고객은 이은 것으로 보되 날짜 칸에는 넣지 않는다
   }
   out.survey = [...scaleQ.values()].filter((q) => sum(q.n) > 0);
+  out.opinions = out.opinions.map((o, k) => ({ o, k })).sort((a, b) => (a.o.day < b.o.day ? 1 : a.o.day > b.o.day ? -1 : a.k - b.k)).slice(0, TOPIC_OPINION_MAX).map((x) => x.o);   // 최근 것부터
   return out;
 }
 
