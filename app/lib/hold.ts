@@ -5,6 +5,7 @@
 //  보류를 풀 때는 next.config.ts 의 HOLD_AGENTS 만 false 로 바꾼다.
 //
 //  2026-11-13 대표: "ai 에이전트만 보류하고 모두 배포해줘" — AI 에이전트(/agents: 도매 생산 요청서·광고 카피).
+//  2026-11-16 대표: "에이전트 배포" — 보류 해제(next.config.ts HOLD_AGENTS = false). 지금 보류 중인 화면은 없다.
 export const HOLD_AGENTS = process.env.NEXT_PUBLIC_HOLD_AGENTS === "1";
 
 const HELD_PREFIXES = ["/agents"];

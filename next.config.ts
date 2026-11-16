@@ -9,7 +9,8 @@ const factoryHostRe = factoryHosts.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "
 //   · 주소: /agents 와 /api/agents/* 를 없는 주소로 보내 404 (화면·API·예약 신호 모두)
 //   · 화면: NEXT_PUBLIC_HOLD_AGENTS 로 메뉴·가이드·업데이트 내역·AI 설정 항목을 뺀다(app/lib/hold.ts)
 //  보류를 풀 때: 아래 HOLD_AGENTS 를 false 로 바꾸고 배포하면 끝(다른 곳은 이 값만 본다).
-const HOLD_AGENTS = process.env.VERCEL_ENV === "production";
+//  2026-11-16 대표: "에이전트 배포" — 보류 해제. 다시 가리려면 아래를 `process.env.VERCEL_ENV === "production"` 으로 되돌린다.
+const HOLD_AGENTS = false;
 const HELD = "/__held-in-production"; // 없는 주소 — 404
 
 const nextConfig: NextConfig = {
