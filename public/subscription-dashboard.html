@@ -327,6 +327,7 @@
      · 높이는 부모 창이 맞춘다(안쪽 스크롤 없음). */
   .sec-title { display: none; }
   html.board, html.board body { background: transparent; }
+  html.board { overflow-y: hidden; }   /* 높이는 부모 창이 맞춘다 — 맞추는 사이 잠깐 생기는 스크롤 막대가 폭을 흔들지 않게 */
   /* 주요 지표의 다른 탭과 같은 12칸 격자(간격 12) — 카드 크기만 조절하고 계산은 그대로(2026-11-16 대표: "다른 대시보드와 비슷하게 표 레이아웃, 다시 계산은 하지 말고 크기만").
      넓은 화면에서 짝이 되는 카드는 반씩: 재구매 랭킹 | 일시정지 워치리스트, 분석 히스토리 | 상태 변화 이력. 나머지는 한 줄 전체. */
   html.board .main { max-width: none; padding: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: start; }
@@ -345,9 +346,15 @@
   html.board #boardWait { order: 0; }
   html.board .sec-title { display: block; font-size: 13px; font-weight: 600; color: var(--text-sub); scroll-margin-top: 12px; }
   html.board #dashboard > .sec-title:first-of-type { margin-top: 0; }
-  html.board .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 0; }
-  html.board #secMixGrid { grid-template-columns: repeat(3, 1fr); }
-  @media (max-width: 1100px) { html.board #secMixGrid { grid-template-columns: 1fr; } }
+  html.board .kpi-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); margin-bottom: 0; }   /* 타일 일곱 개를 한 줄에 — 좁아지면 4칸, 2칸 */
+  @media (max-width: 1180px) { html.board .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { html.board .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  html.board #secMixGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* 그래프가 든 칸은 내용 폭보다 좁아질 수 있어야 한다(1fr 의 최소 폭은 내용이라, 창을 줄여도 그래프가 안 줄고 옆으로 넘친다) */
+  @media (min-width: 901px) { html.board .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  html.board .grid-2 > *, html.board .grid-3 > * { min-width: 0; }
+  html.board .chart-wrap, html.board .history-chart-wrap, html.board .kpi-spark { overflow: hidden; }
+  @media (max-width: 1100px) { html.board #secMixGrid { grid-template-columns: minmax(0, 1fr); } }
   /* 한 단계씩 작게(2026-11-16 대표: "전체적으로 조금씩 작게") — 글자는 눈금 한 칸 아래(24→17, 15→13, 13→12, 12 는 그대로), 여백·그래프 높이는 주요 지표의 다른 탭과 같은 밀도 */
   html.board body { font-size: 12px; }
   html.board .card { padding: 16px; margin-bottom: 0; }
@@ -355,11 +362,20 @@
   html.board .card-title { font-size: 13px; }
   html.board .card-sub { margin-top: 2px; }
   html.board .grid-2, html.board .grid-3 { gap: 12px; }
-  html.board .kpi-grid { gap: 12px; }
-  html.board .kpi { padding: 12px 14px; }
-  html.board .kpi-label { margin-bottom: 4px; }
-  html.board .kpi-value { font-size: 17px; }
-  html.board .kpi-sub { margin-top: 4px; }
+  /* 오늘 상태 — 대표가 고른 모양(2026-11-16): 흰 판 하나 위에 테두리 없는 타일, 큰 숫자 + 작은 단위, '전주 대비' 증감, 아래에 작은 추세선.
+     증감과 추세선은 날마다 저장된 히스토리 스냅샷에서 온다(새 계산 없음). 원래 값 칸(.kpi-value)은 그대로 두고 숨기기만 한다 — 다른 계산이 그 글자를 읽는다. */
+  html.board .kpi-grid { gap: 16px 20px; padding: 16px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); }
+  html.board .kpi, html.board .kpi.accent { padding: 0; border: 0; background: transparent; box-shadow: none; display: flex; flex-direction: column; min-width: 0; }
+  html.board .kpi-label { margin-bottom: 2px; }
+  html.board .kpi-value { display: none; }
+  html.board .kpi-show { font-size: 24px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  html.board .kpi-unit { font-size: 13px; font-weight: 500; margin-left: 2px; }
+  html.board .kpi-delta { font-size: 12px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; }
+  html.board .kpi-delta b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  html.board .kpi-delta b.is-good { color: var(--success); }
+  html.board .kpi-delta b.is-bad { color: var(--danger); }
+  html.board .kpi-sub { margin-top: 2px; color: var(--text-light); }
+  html.board .kpi-spark { position: relative; height: 44px; margin-top: auto; padding-top: 8px; box-sizing: content-box; }   /* 설명 줄 수가 달라도 추세선은 타일 바닥에 맞춘다 */
   html.board .chart-wrap { height: 220px; }
   html.board .chart-wrap.tall { height: 240px; }
   html.board .history-chart-wrap { height: 220px !important; margin-bottom: 12px; }
@@ -374,7 +390,8 @@
   html.board .kpi-grid, html.board .grid-2, html.board .grid-3 { margin-bottom: 0; }
   html.board .ship-summary { padding: 10px 12px; margin-bottom: 12px; }
   /* 데이터 목록은 접어 둔 채로 시작(2026-11-16 대표) — 카드 머리의 [목록 펼치기]로 연다. 요약·그래프는 접지 않는다 */
-  .fold-btn { display: none; }
+  .fold-btn, .kpi-show, .kpi-delta, .kpi-spark { display: none; }
+  html.board .kpi-show, html.board .kpi-delta, html.board .kpi-spark { display: block; }
   html.board .fold-btn { display: inline-flex; }
   html.board .fold-part.is-folded { display: none !important; }
   html.board .card.is-folded-all .card-head { margin-bottom: 0; }   /* 통째로 접힌 카드는 머리 줄만 남는다 */
@@ -771,8 +788,89 @@ function boardNotify() {
     .sort((a, b) => a.top - b.top);
   // 높이는 내용(.main)의 높이로 — 문서 높이(scrollHeight)는 창 높이보다 작아지지 않아, 한 번 늘린 뒤에는 목록을 접어도 줄지 않는다
   const height = Math.ceil(document.querySelector(".main").getBoundingClientRect().height);
+  const sig = height + "|" + sections.map((x) => x.id + ":" + x.top).join(",");
+  if (sig === boardNotify.last) return;   // 달라졌을 때만 알린다
+  boardNotify.last = sig;
   window.parent.postMessage({ type: "sm-sub-board", height, sections }, location.origin);
 }
+// 오늘 상태 타일의 증감·추세선 — 날마다 저장된 히스토리 스냅샷(/api/subscription/snapshots, 분석 히스토리 그래프와 같은 자료)에서 만든다.
+//  [값 칸 id, 스냅샷 칸, 단위, 증감 표기(pct = %, pp = %p, both = 신청·해지 건수), 좋은 방향, 이 날짜부터만(기준이 바뀐 지표)]
+const KPI_TREND = [
+  ["kpiActiveMembers", "activeMembers", "명", "pct", "up", ""],
+  ["kpiPauseMembers", "pauseMembers", "명", "pct", "down", "2026-11-13"],   // 2026-11-13 에 사람 기준으로 바뀌어 그 전 값과 잇지 않는다
+  ["kpiFirstPay", "firstPayRate", "%", "pp", "up", ""],
+  ["kpi3rd", "reach3Rate", "%", "pp", "up", ""],
+  ["kpi4th", "reach4Rate", "%", "pp", "up", ""],
+  ["kpiAOV", "avgWeightKg", "kg", "pct", "up", ""],
+  ["kpiTotals", "totalOrders", "", "both", "none", ""],   // 단위는 이름에 있다(건)
+];
+const kpiSparks = {};
+function renderKpiTrends() {
+  if (!BOARD) return;
+  // 날짜별 마지막 스냅샷(자동 저장이 있으면 자동 저장만 — 손으로 저장한 것은 필터가 다를 수 있다)
+  const autoOnly = historyRows.some((r) => r.snapshot && r.snapshot.auto);
+  const byDay = new Map();
+  for (const r of historyRows) {
+    const d = historyDayOf(r);
+    if (!d || !r.snapshot || (autoOnly && !r.snapshot.auto)) continue;
+    const cur = byDay.get(d);
+    if (!cur || String(r.created_at || "") >= String(cur.created_at || "")) byDay.set(d, r);
+  }
+  const days = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([d, r]) => ({ d, s: r.snapshot }));
+  const num = (v) => { const n = parseFloat(String(v)); return Number.isFinite(n) ? n : null; };
+  for (const [id, key, unit, mode, good, since] of KPI_TREND) {
+    const valEl = document.getElementById(id);
+    const tile = valEl && valEl.closest(".kpi");
+    if (!tile) continue;
+    let show = tile.querySelector(".kpi-show"), delta = tile.querySelector(".kpi-delta"), spark = tile.querySelector(".kpi-spark");
+    if (!show) { show = document.createElement("div"); show.className = "kpi-show"; valEl.after(show); }
+    if (!delta) { delta = document.createElement("div"); delta.className = "kpi-delta"; show.after(delta); }
+    if (!spark) { spark = document.createElement("div"); spark.className = "kpi-spark"; spark.innerHTML = "<canvas></canvas>"; tile.appendChild(spark); }
+    // 큰 숫자 + 작은 단위 — 원래 글자("92.9%", "1.2 kg", "40 / 6")에서 단위만 떼어 작게 붙인다
+    const raw = valEl.textContent.trim();
+    const m = /^(.*?)\s*(%|kg)$/.exec(raw);
+    const numText = ((m ? m[1] : raw) || "-").trim() || "-";
+    show.innerHTML = `${escapeHtml(numText)}${numText === "-" ? "" : `<span class="kpi-unit">${escapeHtml(m ? m[2] : unit)}</span>`}`;
+
+    const pts = days.filter((x) => !since || x.d >= since).map((x) => ({ d: x.d, v: num(x.s[key]), c: num(x.s.totalCancels) })).filter((x) => x.v != null).slice(-30);
+    const last = pts[pts.length - 1];
+    // 전주 대비 — 마지막 날의 7일 전(없으면 그 앞 사흘 안의 가장 가까운 날)
+    const target = last ? addDaysISO(last.d, -7) : "";
+    const base = last ? [...pts].reverse().find((x) => x.d <= target && x.d >= addDaysISO(target, -3)) : null;
+    let tone = "flat", text = "-";
+    if (last && base) {
+      if (mode === "both") {
+        const dc = last.c != null && base.c != null ? last.c - base.c : null;
+        text = `신청 ${signed(Math.round(last.v - base.v))}${dc == null ? "" : ` · 해지 ${signed(Math.round(dc))}`}`;
+      } else {
+        const r = mode === "pp" ? last.v - base.v : base.v ? ((last.v - base.v) / base.v) * 100 : null;
+        if (r != null) {
+          const a = Math.round(Math.abs(r) * 10) / 10;
+          text = `${a === 0 ? "" : r > 0 ? "▲ " : "▼ "}${a}${mode === "pp" ? "%p" : "%"}`;
+          tone = a === 0 || good === "none" ? "flat" : (r > 0) === (good === "up") ? "good" : "bad";
+        }
+      }
+    }
+    delta.innerHTML = `전주 대비 <b class="is-${tone}">${escapeHtml(text)}</b>`;
+
+    if (kpiSparks[id]) { kpiSparks[id].destroy(); delete kpiSparks[id]; }
+    spark.style.visibility = pts.length >= 2 ? "" : "hidden";
+    if (pts.length < 2 || !window.Chart) continue;
+    const color = tone === "good" ? T.success() : tone === "bad" ? T.danger() : T.info();
+    kpiSparks[id] = new Chart(spark.querySelector("canvas"), {
+      type: "line",
+      data: { labels: pts.map((x) => x.d.slice(5)), datasets: [{ data: pts.map((x) => x.v), borderColor: color, backgroundColor: alpha(color, 0.1), fill: true, tension: 0.35, pointRadius: 0, pointHoverRadius: 3, borderWidth: 1.5 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false }, tooltip: { displayColors: false, callbacks: { label: (c) => `${c.formattedValue}${unit}` } } },
+        scales: { x: { display: false }, y: { display: false } },
+        interaction: { mode: "index", intersect: false },
+        layout: { padding: { top: 2, bottom: 0 } },
+      },
+    });
+  }
+}
+
 // 데이터 목록 접기 — 카드마다 접을 부분(표·검색칸)을 정해 두고 카드 머리에 [목록 펼치기] 버튼을 단다. 요약·그래프는 그대로 보인다.
 //  그리기 함수가 표의 display 를 직접 바꾸므로 접힘은 클래스(.is-folded, !important)로 덮는다.
 const BOARD_FOLDS = [
@@ -2536,14 +2634,17 @@ document.getElementById("saveExcludeBtn").onclick = async () => {
 
 // 분석 갱신 시 미리보기도 갱신 (render() 끝부분에서 호출)
 const _origRender = render;
-render = function() { _origRender(); renderSnapshotPreview(); boardNotify(); };
+render = function() { _origRender(); renderSnapshotPreview(); renderKpiTrends(); boardNotify(); };
 // 주요 지표용 보기 — 그릴 때마다 높이를 다시 알린다(크기 감시는 화면이 가려져 있으면 돌지 않는다). 펼치기·접기·칩 누름 뒤에도 한 번.
 if (BOARD) {
   for (const name of ["renderHistory", "renderTransitions", "renderShippingSchedule", "renderOrdersTable"]) {
     const orig = window[name];
-    if (typeof orig === "function") window[name] = function () { const r = orig.apply(this, arguments); boardNotify(); return r; };
+    if (typeof orig === "function") window[name] = function () { const r = orig.apply(this, arguments); if (name === "renderHistory") renderKpiTrends(); boardNotify(); return r; };
   }
   document.addEventListener("click", () => setTimeout(boardNotify, 80));
+  window.addEventListener("resize", () => setTimeout(boardNotify, 120));
+  // 안전망 — 크기 감시·창 크기 신호는 화면을 그릴 때만 온다. 놓친 높이 변화가 잘린 채 남지 않게 1.5초마다 높이만 다시 잰다(서버 호출 없음, 같으면 아무 일도 안 한다).
+  setInterval(boardNotify, 1500);
 }
 </script>
 </body>
