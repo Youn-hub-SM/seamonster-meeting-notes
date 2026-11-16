@@ -56,7 +56,7 @@ const AI_FEATURES_ALL: { key: AiFeature; label: string; desc: string; inheritDef
   { key: "report", label: "AI 비서", desc: "질문 → 조사(SQL·글 검색) → 근거 있는 답 (기본 fable — 2026-10-19). 보조 작업은 Opus 낮음 고정", inheritDefault: "fable" },
   { key: "daily_analyst", label: "종합 리포트(일일·주간·월간)", desc: "매출·광고 분석 에이전트 — 일일·주간·월간 공통 (기본 fable — 2026-10-19 대표 선택, 이전 opus)", inheritDefault: "fable" },
   { key: "notice", label: "공지 작성기", desc: "상황 항목 → 씨몬스터 톤 공지문 (기본 sonnet)", inheritDefault: "sonnet" },
-  { key: "agent", label: "AI 에이전트", desc: "맡은 일을 조사해 보고서로 내는 에이전트 — 도매 생산 요청서 (기본 fable — 2026-11-11)", inheritDefault: "fable" },
+  { key: "agent", label: "AI 에이전트", desc: "맡은 일을 조사해 보고서로 내는 에이전트 — 도매·소매 생산 요청서, 광고 카피 (기본 fable — 2026-11-11)", inheritDefault: "fable" },
 ];
 // 운영에서 보류 중인 AI 에이전트(hold.ts)는 설정 화면의 기능 목록에서 뺀다(모델 조회 getFeatureModel 은 아래에서 전체 목록을 본다).
 export const AI_FEATURES = AI_FEATURES_ALL.filter((f) => !(HOLD_AGENTS && f.key === "agent"));

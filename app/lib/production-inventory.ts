@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { getLedgerVelocity } from "./production-velocity";
+import { getLedgerVelocity, type VelocitySnapshot } from "./production-velocity";
 import { readAll, readStockMap } from "./inventory-template";
 import { RESERVED_CHANNELS } from "./inventory";
 import { getPromotionsWithOk, promoForwardFrom, promoSoldFrom } from "./production-promotions";
@@ -68,6 +68,7 @@ export interface InventoryResult {
   settingsOk: boolean;       // 행사 일정·안전재고 보정 조회 성공 여부(소매·전체만 의미) — false 면 행사 스파이크·보정이 빠진 값(S4)
   velocitySpanDays: number;  // 출고 평균이 커버한 일수
   velocityCapped: boolean;   // 표본 상한에 걸려 일부만 집계했는지
+  velocityWindows?: VelocitySnapshot["windowTotals"]; // 채널을 지정했을 때 — SKU별 최근 7일·30일(도매는 90일도) 출고 합계(행사 제거 전 원 숫자)
 }
 
 // channel 미지정 = 전체 재고·레거시 속도(기존 소비처 호환). "소매"/"도매" = 그 채널의 재고·소진 속도만.
@@ -295,5 +296,6 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     settingsOk,
     velocitySpanDays: velocity.spanDays,
     velocityCapped: velocity.capped,
+    velocityWindows: velocity.windowTotals,
   };
 }

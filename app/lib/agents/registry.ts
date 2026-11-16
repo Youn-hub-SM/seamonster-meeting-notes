@@ -7,6 +7,7 @@ export type AgentMeta = {
   name: string;        // 화면 이름
   output: string;      // 보고서로 만들 수 있는 것(버튼·문구용 명사)
   kind?: "ideas";      // 보고서 모양. 없으면 요청서 초안(품목·수량 → 결재). "ideas" = 소재 목록(결재 없음, 피드백으로 다시 쓰기)
+  table?: { stock: string; due: string; next: string }; // 요청서 초안 표의 말 — 재고 열 이름, 이번 요청분이 들어오는 날·다음 요청분이 들어오는 날의 이름
   stages?: string[];   // 단계로 나눠 실행하는 에이전트의 단계 이름(순서대로) — 단계마다 함수 호출이 따로라 한 단계가 270초 안에만 끝나면 된다
   schedule?: AgentSchedule; // 예약 기본값(없으면 DEFAULT_SCHEDULE)
 };
@@ -16,6 +17,14 @@ export const AGENTS: AgentMeta[] = [
     id: "wholesale-request",
     name: "도매 생산 요청서",
     output: "도매 생산 요청서",
+    table: { stock: "도매 재고", due: "입고 예정", next: "다음 요청분 입고" },
+  },
+  {
+    id: "retail-request",
+    name: "소매 생산 요청서",
+    output: "소매 생산 요청서",
+    table: { stock: "소매 재고", due: "생산 종료", next: "다음 요청분 판매 가능일" },
+    schedule: { on: false, weekday: 3, hour: 10 }, // 제조사 요청은 매주 수요일(production-schedule DRAFT_WEEKDAY)
   },
   {
     id: "ad-copy",
@@ -41,14 +50,14 @@ export type DraftItem = {
   qty: number;                 // 제안 수량
   reason: string;
   urgent: boolean;
-  wholesale_stock: number | null; // 도매 가용 재고(발송일이 잡힌 선점까지 뺀 값). null = 도매 원장 없음
-  daily_out: number;           // 도매 하루 평균 출고
+  wholesale_stock: number | null; // 그 에이전트가 보는 칸의 가용 재고(도매 요청서 = 도매 칸, 소매 요청서 = 소매 칸). null = 그 칸 원장 없음 — 칸 이름은 옛 보고서와 맞추려고 그대로 둔다
+  daily_out: number;           // 하루 평균 출고
   days_left: number | null;    // 지금 재고로 버티는 일수(출고 0 이면 null)
   formula: number;             // 수식 권장(이미 낸 요청을 뺀 값)
-  open_req: number;            // 이미 낸 도매 요청 잔여
+  open_req: number;            // 이미 요청한 양(열린 요청서의 잔여 — 소매는 확정된 입고 예정 + 확정 전 잔여)
   retail_spare?: number | null; // 2026-11-11 이전 정의로 쓴 옛 보고서에만 있다(소매 여유) — 지금은 소매를 보지 않아 적지 않는다
-  out7?: number;               // 최근 7일 순수 도매 출고(옛 보고서에는 없다)
-  out30?: number;              // 최근 30일 순수 도매 출고
+  out7?: number;               // 최근 7일 출고(옛 보고서에는 없다)
+  out30?: number;              // 최근 30일 출고
   need?: number;               // 다음 요청분이 입고될 때까지 필요한 양 = 하루 출고 × 버틸 일수
 };
 export type AppliedItem = { sku: string; product_id: string; qty: number; draft_qty: number | null };

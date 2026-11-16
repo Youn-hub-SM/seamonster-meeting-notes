@@ -46,7 +46,7 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
   const items = r.draft.filter((d) => d.product_id && d.qty > 0);
   const firstBySku = useMemo(() => new Map((r.facts?.first_draft || []).map((d) => [d.sku, d.qty])), [r.facts?.first_draft]);
   const revised = !!r.facts?.first_draft && !revising;           // 피드백을 반영한 수정본을 보고 있다
-  const hasTrend = r.draft.some((d) => d.out7 !== undefined);    // 순수 도매 출고 추이(옛 보고서에는 없다)
+  const hasTrend = r.draft.some((d) => d.out7 !== undefined);    // 최근 7일·30일 출고(옛 보고서에는 없다)
   const hasRetail = r.draft.some((d) => d.retail_spare != null); // 2026-11-11 이전 정의로 쓴 옛 보고서에만 있는 소매 여유
 
   const approve = async () => {
@@ -119,14 +119,14 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
             <section>
               <div className="ag-sec-title">{revised ? "수정본" : "초안"}</div>
               {r.facts?.next_arrival && r.facts.due_date && (
-                <div className="ag-note" style={{ marginBottom: "var(--sm-space-2)" }}>입고 예정 {dateShort(r.facts.due_date)} · 다음 요청분 입고 {dateShort(r.facts.next_arrival)}까지 {qty(r.facts.horizon_days ?? 0)}일분 기준</div>
+                <div className="ag-note" style={{ marginBottom: "var(--sm-space-2)" }}>{agent.table?.due ?? "입고 예정"} {dateShort(r.facts.due_date)} · {agent.table?.next ?? "다음 요청분 입고"} {dateShort(r.facts.next_arrival)}까지 {qty(r.facts.horizon_days ?? 0)}일분 기준</div>
               )}
               {r.draft.length === 0 ? <div className="b2b-empty">요청할 품목이 없습니다.</div> : (
                 <div className="b2b-table-wrap">
                   <table className="b2b-table ag-table">
                     <thead>
                       <tr>
-                        <th>품목</th><th className="num">도매 재고</th><th className="num">하루 출고</th><th className="num">버티는 날</th>
+                        <th>품목</th><th className="num">{agent.table?.stock ?? "재고"}</th><th className="num">하루 출고</th><th className="num">버티는 날</th>
                         {hasTrend && <><th className="num">최근 7일</th><th className="num">최근 30일</th></>}
                         <th className="num">이미 요청</th>{hasRetail && <th className="num">소매 여유</th>}<th className="num">수식 권장</th><th className="num">요청 수량</th>
                       </tr>

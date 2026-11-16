@@ -4,6 +4,7 @@ import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getReport } from "@/app/lib/agents/store";
 import { agentOf } from "@/app/lib/agents/registry";
 import { startRevision, AgentStartError } from "@/app/lib/agents/run";
+import { isRequestAgent } from "@/app/lib/agents/request-apply";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 800; // 단계형 에이전트의 한 단계 740초(staged.ts STAGE_MS) + 저장·넘기기. 요청서 에이전트는 그 안에서 270초 기한을 따로 지킨다(Pro + Fluid 한도 800)
@@ -11,7 +12,7 @@ export const maxDuration = 800; // 단계형 에이전트의 한 단계 740초(s
 type Ctx = { params: Promise<{ id: string }> };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// POST { feedback } — 피드백 보내기. 에이전트가 피드백대로 초안을 고치고, 그 수정본이 실제 도매 생산 요청서로 작성된다.
+// POST { feedback } — 피드백 보내기. 에이전트가 피드백대로 초안을 고치고, 그 수정본이 실제 생산 요청서로 작성된다.
 //  보고서를 바로 '피드백 반영 중'으로 돌려 응답하고, 반영·작성은 after() 로 끝까지 돈다(창을 닫아도 계속).
 //  반영에 실패하면 초안은 그대로 남고 결재 대기로 돌아온다.
 export async function POST(req: NextRequest, { params }: Ctx) {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const report = await getReport(sb, id);
     if (!report) return NextResponse.json({ ok: false, error: "없는 보고서입니다." }, { status: 404 });
     const ideas = agentOf(report.agent)?.kind === "ideas"; // 소재 목록 — 요청서가 없어 닫히지 않는다. 피드백마다 목록을 다시 쓴다
-    if (report.agent !== "wholesale-request" && !ideas) return NextResponse.json({ ok: false, error: "피드백을 받을 수 없는 보고서입니다." }, { status: 400 });
+    if (!isRequestAgent(report.agent) && !ideas) return NextResponse.json({ ok: false, error: "피드백을 받을 수 없는 보고서입니다." }, { status: 400 });
     if (report.status !== "done") return NextResponse.json({ ok: false, error: "작성이 끝난 보고서에만 피드백을 보낼 수 있습니다." }, { status: 409 });
     if (report.applied) return NextResponse.json({ ok: false, error: "이미 요청서로 작성한 보고서입니다. 요청서는 생산 요청 화면에서 고치세요." }, { status: 409 });
 

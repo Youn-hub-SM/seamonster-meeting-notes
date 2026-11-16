@@ -6,8 +6,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { agentOf, type AgentReport } from "./registry";
 import { startReport, finishReport, failReport, priorCases, runningReportId, beginRevision, finishRevision, failRevision, getReport } from "./store";
-import { runWholesaleRequest, AgentRunError, type AgentRunResult, type RunInput } from "./wholesale-request";
-import { applyWholesaleDraft } from "./wholesale-apply";
+import { AgentRunError, type AgentRunResult, type RunInput } from "./request-agent";
+import { runWholesaleRequest } from "./wholesale-request";
+import { runRetailRequest } from "./retail-request";
+import { applyRequestDraft } from "./request-apply";
 import { getAssistantSettings, getAssistantMonthUsage, addAssistantUsage } from "../assistant";
 import { logAgentDraftReady } from "../b2b-activity";
 import { getAppBaseUrl } from "../b2b-settings";
@@ -20,6 +22,7 @@ type Runner = (sb: SupabaseClient, p: RunInput) => Promise<AgentRunResult>;
 // 한 번에 도는 에이전트. 보고서가 언제 쓰였든 피드백 반영도 지금 실행기가 한다.
 const RUNNERS: Record<string, Runner> = {
   "wholesale-request": runWholesaleRequest,
+  "retail-request": runRetailRequest,
 };
 
 // 단계로 나눠 도는 에이전트(staged.ts) — 단계마다 함수 호출이 따로라 전체 길이에 제한이 없다
@@ -114,7 +117,7 @@ export async function startRevision(sb: SupabaseClient, report: AgentReport, fee
     // 수정본 → 요청서. 여기서 실패하면 수정본은 남아 있다(결재 대기) — 담당자가 [결재]로 다시 작성한다.
     try {
       const fresh = await getReport(sb, report.id);
-      if (fresh) await applyWholesaleDraft(sb, fresh, who, "피드백 반영");
+      if (fresh) await applyRequestDraft(sb, fresh, who, "피드백 반영");
     } catch (e) {
       console.error("[agents/revise apply]", report.id, e);
       const fresh = await getReport(sb, report.id).catch(() => null);

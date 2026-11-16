@@ -14,7 +14,8 @@ export interface VelocitySnapshot {
   txCount: number;        // 집계에 쓴 출고 라인 수
   capped: boolean;        // 원장 전수 집계라 항상 false(이전 인터페이스 호환 유지)
   perSku: Record<string, number>; // SKU(대문자) → 일평균 출고량
-  // 도매 채널로 불렀을 때만 — perSku 를 만든 같은 행(칸 이동·대량 발송·제조사 반품 제외)의 창별 출고 합계. AI 에이전트가 추이를 본다.
+  // 채널(소매·도매)을 지정해 불렀을 때만 — perSku 를 만든 같은 행(칸 이동·대량 발송·제조사 반품 제외)의 창별 출고 합계. AI 에이전트가 추이를 본다.
+  //  도매: d7 = 최근 7일, short = 30일, long = 90일. 소매: d7 = 최근 7일, short = long = 집계 창(30일) — 소매는 90일을 읽지 않는다(행 수가 많다).
   windowTotals?: { d7: Record<string, number>; short: Record<string, number>; long: Record<string, number>; shortDays: number; longDays: number };
 }
 
@@ -124,7 +125,7 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
 
   const totals = new Map<string, number>();       // 소매·레거시: 단일 창 / 도매: 장기(90일) 창
   const totalsShort = new Map<string, number>();  // 도매 전용: 단기(windowDays) 창
-  const totals7 = new Map<string, number>();      // 도매 전용: 최근 7일(추이 표시용 — 속도 계산에는 쓰지 않는다)
+  const totals7 = new Map<string, number>();      // 채널 지정 시: 최근 7일(추이 표시용 — 속도 계산에는 쓰지 않는다)
   const weekFrom = dateAt(today, -7);
   const shortFrom = dateAt(today, -windowDays);
   let oldest = today;
@@ -148,7 +149,7 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
     if (!q) continue;
     totals.set(sku, (totals.get(sku) || 0) + q);
     if (isWholesale && r.txn_date && r.txn_date >= shortFrom) totalsShort.set(sku, (totalsShort.get(sku) || 0) + q);
-    if (isWholesale && r.txn_date && r.txn_date >= weekFrom) totals7.set(sku, (totals7.get(sku) || 0) + q);
+    if (channel && r.txn_date && r.txn_date >= weekFrom) totals7.set(sku, (totals7.get(sku) || 0) + q);
     if (r.txn_date && r.txn_date < oldest) oldest = r.txn_date;
     txCount++;
   }
@@ -177,6 +178,7 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
   } else {
     spanDays = Math.min(windowDays, Math.max(1, daysBetween(oldest, today) || 1));
     for (const [sku, total] of totals) perSku[sku] = total / spanDays;
+    if (channel) { const all = Object.fromEntries(totals); windowTotals = { d7: Object.fromEntries(totals7), short: all, long: all, shortDays: spanDays, longDays: spanDays }; }
   }
 
   return { computedAt: new Date().toISOString(), spanDays, txCount, capped: false, perSku, ...(windowTotals ? { windowTotals } : {}) };
