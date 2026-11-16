@@ -47,6 +47,7 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
   const firstBySku = useMemo(() => new Map((r.facts?.first_draft || []).map((d) => [d.sku, d.qty])), [r.facts?.first_draft]);
   const revised = !!r.facts?.first_draft && !revising;           // 피드백을 반영한 수정본을 보고 있다
   const hasTrend = r.draft.some((d) => d.out7 !== undefined);    // 최근 7일·30일 출고(옛 보고서에는 없다)
+  const hasWholesaleReq = r.draft.some((d) => d.wholesale_req !== undefined); // 소매 요청서 — 수식 권장에 더한 도매 요청 잔여
   const hasRetail = r.draft.some((d) => d.retail_spare != null); // 2026-11-11 이전 정의로 쓴 옛 보고서에만 있는 소매 여유
 
   const approve = async () => {
@@ -128,7 +129,7 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
                       <tr>
                         <th>품목</th><th className="num">{agent.table?.stock ?? "재고"}</th><th className="num">하루 출고</th><th className="num">버티는 날</th>
                         {hasTrend && <><th className="num">최근 7일</th><th className="num">최근 30일</th></>}
-                        <th className="num">이미 요청</th>{hasRetail && <th className="num">소매 여유</th>}<th className="num">수식 권장</th><th className="num">요청 수량</th>
+                        {hasWholesaleReq && <th className="num">도매 요청</th>}<th className="num">이미 요청</th>{hasRetail && <th className="num">소매 여유</th>}<th className="num">수식 권장</th><th className="num">요청 수량</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -145,6 +146,7 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
                               <td className="num">{num(d.daily_out)}</td>
                               <td className="num">{d.days_left == null ? "-" : `${qty(d.days_left)}일`}</td>
                               {hasTrend && <><td className="num">{num(d.out7)}</td><td className="num">{num(d.out30)}</td></>}
+                              {hasWholesaleReq && <td className="num">{num(d.wholesale_req)}</td>}
                               <td className="num">{num(d.open_req)}</td>
                               {hasRetail && <td className="num">{num(d.retail_spare)}</td>}
                               <td className="num">{num(d.formula)}</td>
@@ -153,7 +155,7 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
                                 {revised && before !== d.qty && <span className="ag-changed">{before == null ? "추가" : `초안 ${num(before)}`}</span>}
                               </td>
                             </tr>
-                            <tr className="ag-reason-row"><td colSpan={7 + (hasTrend ? 2 : 0) + (hasRetail ? 1 : 0)}>{d.reason}</td></tr>
+                            <tr className="ag-reason-row"><td colSpan={7 + (hasTrend ? 2 : 0) + (hasRetail ? 1 : 0) + (hasWholesaleReq ? 1 : 0)}>{d.reason}</td></tr>
                           </Fragment>
                         );
                       })}

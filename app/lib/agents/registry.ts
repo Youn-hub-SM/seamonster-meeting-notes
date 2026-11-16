@@ -59,6 +59,7 @@ export type DraftItem = {
   out7?: number;               // 최근 7일 출고(옛 보고서에는 없다)
   out30?: number;              // 최근 30일 출고
   need?: number;               // 다음 요청분이 입고될 때까지 필요한 양 = 하루 출고 × 버틸 일수
+  wholesale_req?: number;      // (소매 요청서만) 열린 도매 생산 요청서의 잔여 — 수식 권장에 더해진 도매 몫
 };
 export type AppliedItem = { sku: string; product_id: string; qty: number; draft_qty: number | null };
 // 광고 소재 한 건(ad-copy 의 draft 원소) — 소재 기획 규칙: 후킹+스토리+제안 3요소(meta-creatives.ts 와 같은 틀)

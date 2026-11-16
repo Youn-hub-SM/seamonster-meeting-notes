@@ -35,7 +35,7 @@ const FINAL_RESERVE_MS = 70_000; // 이만큼 남으면 조사를 끝내고 제�
 // ── 사실(코드가 모은 것) ──
 export type ProductRow = { id: string; sku: string | null; name: string; spec: string | null; unit: string | null; active: boolean | null };
 // 품목별 근거 숫자(보고서 표에 그대로 싣는다) — 수량·이유는 에이전트가, 이 숫자는 코드가 채운다
-export type Basis = { stock: number | null; dailyOut: number; daysLeft: number | null; formula: number; openReq: number; out7: number; out30: number; need: number };
+export type Basis = { stock: number | null; dailyOut: number; daysLeft: number | null; formula: number; openReq: number; out7: number; out30: number; need: number; wholesaleReq?: number };
 export type Collected = {
   today: string;
   dueDate: string;          // 이번 요청분이 들어오는 날(요청서의 마감)
@@ -227,6 +227,7 @@ export async function runRequestAgent(sb: SupabaseClient, def: RequestAgentDef, 
       wholesale_stock: f?.stock ?? null, daily_out: r2(f?.dailyOut ?? 0), days_left: f?.daysLeft ?? null,
       formula: f?.formula ?? 0, open_req: f?.openReq ?? 0,
       ...(f ? { out7: f.out7, out30: f.out30, need: f.need } : {}),
+      ...(f?.wholesaleReq !== undefined ? { wholesale_req: f.wholesaleReq } : {}),
     });
   }
   const summary = s.summary.trim().slice(0, 300);
