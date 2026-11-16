@@ -1,8 +1,8 @@
 // AI 에이전트 등록부 — 화면(/agents)과 서버가 같이 읽는다(클라이언트 안전: DB·SDK import 없음).
-//  에이전트 = 정해진 일을 맡은 AI. 같은 에이전트도 지침·도구·모델을 바꾼 여러 버전이 나온다.
-//  새 버전 = 여기 versions 맨 앞에 한 줄 + 서버 실행기(app/lib/agents/run.ts RUNNERS)에 같은 id 로 등록.
-//  옛 버전은 지우지 않는다 — 그 버전이 쓴 보고서가 남아 있고, 버전끼리 비교가 이 화면의 목적이다.
-//  더는 실행하지 않을 버전은 retired: true (보고서·기록은 보이고 [업무 요청] 선택지에서만 빠진다).
+//  에이전트 = 정해진 일을 맡은 AI.
+//  버전을 나눠 쓰는 에이전트(versions 가 있는 것)만 버전 고르기·버전 기록이 화면에 나온다.
+//   새 버전 = versions 맨 앞에 한 줄 + 서버 실행기(app/lib/agents/run.ts STAGED)에 같은 id 로 등록. 더는 실행하지 않을 버전은 retired: true.
+//  versions 가 없는 에이전트(도매 생산 요청서 — 2026-11-16 대표: "항상 최신 버전만 사용")는 버전이 없다. 지침을 고치면 그것이 곧 지금 에이전트다.
 
 export type AgentVersionMeta = {
   id: string;          // v1, v2 … (agent_reports.version)
@@ -17,7 +17,7 @@ export type AgentMeta = {
   kind?: "ideas";      // 보고서 모양. 없으면 요청서 초안(품목·수량 → 결재). "ideas" = 소재 목록(결재 없음, 피드백으로 다시 쓰기)
   stages?: string[];   // 단계로 나눠 실행하는 에이전트의 단계 이름(순서대로) — 단계마다 함수 호출이 따로라 한 단계가 270초 안에만 끝나면 된다
   schedule?: AgentSchedule; // 예약 기본값(없으면 DEFAULT_SCHEDULE)
-  versions: AgentVersionMeta[]; // 최신이 맨 앞
+  versions?: AgentVersionMeta[]; // 버전을 나눠 쓰는 에이전트만. 최신이 맨 앞
 };
 
 export const AGENTS: AgentMeta[] = [
@@ -25,35 +25,6 @@ export const AGENTS: AgentMeta[] = [
     id: "wholesale-request",
     name: "도매 생산 요청서",
     output: "도매 생산 요청서",
-    versions: [
-      {
-        id: "v3", date: "2026-11-11",
-        changes: [
-          "판단 재료를 순수 도매 출고량과 도매 재고 둘로 한정 — 소매 재고·소매 판매는 보지 않음, 도매 대량 제외",
-          "주 1회 요청·리드타임 7~10일 기준: 요청한 주의 다음 주 금요일 입고, 다음 요청분이 입고될 때까지 버틸 양만 요청",
-          "최근 7일·30일·90일 도매 출고를 함께 보고 일회성 발주는 걸러 냄",
-          "아직 확정하지 않은 도매 요청서의 잔여도 이미 요청한 양으로 뺌",
-        ],
-      },
-      {
-        id: "v2", date: "2026-11-11", retired: true,
-        changes: [
-          "도매 수요를 도매 칸의 일반 B2B 발송으로만 한정 — 소매·도매 대량·프로모션으로 옮긴 양과 대량 발주는 수요로 세지 않음",
-          "발송 대기 발주 자료에서 대량 발주를 뺌",
-          "칸 이동으로 재고가 줄어든 품목은 '확인 필요'에 따로 적음",
-        ],
-      },
-      {
-        id: "v1", date: "2026-11-11", retired: true,
-        changes: [
-          "맡은 일은 도매 생산 요청서 초안 작성 하나 — 다른 일은 하지 않음",
-          "도매 재고·출고 속도·이미 낸 요청·소매 여유를 읽고 품목과 수량을 제안",
-          "판단에 더 필요한 것은 원장·발주를 직접 조회",
-          "담당자가 결재하면 초안 그대로, 피드백을 보내면 고친 수정본이 요청서로 작성됨",
-          "지난 초안의 확정 수량과 피드백을 다음 작성에 반영",
-        ],
-      },
-    ],
   },
   {
     id: "ad-copy",
@@ -115,8 +86,11 @@ export const AGENTS: AgentMeta[] = [
 ];
 
 export const agentOf = (id: string): AgentMeta | undefined => AGENTS.find((a) => a.id === id);
-export const latestVersion = (a: AgentMeta): AgentVersionMeta => a.versions.find((v) => !v.retired) ?? a.versions[0];
-export const versionOf = (a: AgentMeta, id: string): AgentVersionMeta | undefined => a.versions.find((v) => v.id === id);
+// 버전 없는 에이전트의 보고서에 적는 값(agent_reports.version 은 빈 값을 못 받는다) — 화면에는 나오지 않는다
+export const NO_VERSION = "latest";
+// 지금 실행할 버전 id — 버전을 나눠 쓰는 에이전트는 종료하지 않은 맨 앞 버전
+export const runVersionId = (a: AgentMeta): string => (a.versions ? (a.versions.find((v) => !v.retired) ?? a.versions[0]).id : NO_VERSION);
+export const versionOf = (a: AgentMeta, id: string): AgentVersionMeta | undefined => a.versions?.find((v) => v.id === id);
 
 // ── 보고서(화면 계약) ──
 export type AgentReportStatus = "running" | "done" | "error";
@@ -135,10 +109,10 @@ export type DraftItem = {
   days_left: number | null;    // 지금 재고로 버티는 일수(출고 0 이면 null)
   formula: number;             // 수식 권장(이미 낸 요청을 뺀 값)
   open_req: number;            // 이미 낸 도매 요청 잔여
-  retail_spare: number | null; // (v1·v2 보고서만) 소매에서 옮겨도 소매가 부족해지지 않는 양. v3 부터는 소매를 보지 않아 늘 null
-  out7?: number;               // (v3~) 최근 7일 순수 도매 출고
-  out30?: number;              // (v3~) 최근 30일 순수 도매 출고
-  need?: number;               // (v3~) 다음 요청분이 입고될 때까지 필요한 양 = 하루 출고 × 버틸 일수
+  retail_spare?: number | null; // 2026-11-11 이전 정의로 쓴 옛 보고서에만 있다(소매 여유) — 지금은 소매를 보지 않아 적지 않는다
+  out7?: number;               // 최근 7일 순수 도매 출고(옛 보고서에는 없다)
+  out30?: number;              // 최근 30일 순수 도매 출고
+  need?: number;               // 다음 요청분이 입고될 때까지 필요한 양 = 하루 출고 × 버틸 일수
 };
 export type AppliedItem = { sku: string; product_id: string; qty: number; draft_qty: number | null };
 // 광고 소재 한 건(ad-copy 의 draft 원소) — 소재 기획 규칙: 후킹+스토리+제안 3요소(meta-creatives.ts 와 같은 틀)
@@ -170,7 +144,7 @@ export type AgentReport = {
   ideas: AdIdea[];       // kind "ideas" 에이전트의 결과(DB 에서는 draft 칸에 들어 있다)
   facts: {
     today?: string; horizon_days?: number; lead_days?: number; due_date?: string | null; rows?: number; warnings?: string[];
-    next_arrival?: string;                                // (v3~) 다음 요청분 입고 예정일 — 이번 요청이 버텨야 하는 날
+    next_arrival?: string;                                // 다음 요청분 입고 예정일 — 이번 요청이 버텨야 하는 날
     scheduled?: boolean;                                  // 예약 시각에 자동으로 작성된 초안
     run_started?: string;                                 // 지금(또는 마지막) 실행이 시작된 시각 — 피드백 반영은 created_at 이 아니라 이 시각으로 멈춤을 가린다
     revising?: boolean;                                   // 피드백을 반영해 다시 쓰는 중

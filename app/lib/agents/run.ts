@@ -1,12 +1,12 @@
-// AI 에이전트 실행 — 서버 전용. 등록부(registry.ts)의 에이전트·버전 id 를 실제 실행기에 잇는다.
+// AI 에이전트 실행 — 서버 전용. 등록부(registry.ts)의 에이전트(버전을 나눠 쓰면 버전 id 까지)를 실제 실행기에 잇는다.
 //  실행 1회 = agent_reports 1행. 먼저 'running' 행을 만들고(화면이 바로 '작성 중'을 본다), 끝나면 done / error 로 닫는다.
 //  시작하는 길은 둘: 화면의 [업무 요청] / 예약 시각의 틱(/api/agents/tick — 끝나면 팀즈로 '결재 필요'를 알린다).
 //  피드백 반영(startRevision)은 같은 행을 다시 쓰고, 끝나면 수정본으로 요청서를 작성한다.
 //  비용은 AI 비서와 같은 월 상한·끄기 스위치를 따른다(getAssistantSettings) — 에이전트 실행도 그 누적에 더한다.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { agentOf, versionOf, type AgentReport } from "./registry";
+import { agentOf, versionOf, runVersionId, NO_VERSION, type AgentReport } from "./registry";
 import { startReport, finishReport, failReport, priorCases, runningReportId, beginRevision, finishRevision, failRevision, getReport } from "./store";
-import { runWholesaleRequest, WHOLESALE_V1, WHOLESALE_V2, WHOLESALE_V3, AgentRunError, type AgentRunResult, type RunInput } from "./wholesale-request";
+import { runWholesaleRequest, AgentRunError, type AgentRunResult, type RunInput } from "./wholesale-request";
 import { applyWholesaleDraft } from "./wholesale-apply";
 import { getAssistantSettings, getAssistantMonthUsage, addAssistantUsage } from "../assistant";
 import { logAgentDraftReady } from "../b2b-activity";
@@ -17,16 +17,12 @@ import { AD_COPY_V2, AD_COPY_V3, AD_COPY_V4, AD_COPY_V5 } from "./ad-copy";
 export const AGENT_DEADLINE_MS = 270_000; // 라우트 maxDuration 300
 
 type Runner = (sb: SupabaseClient, p: RunInput) => Promise<AgentRunResult>;
-// 에이전트 id → 버전 id → 실행기. registry.ts 의 versions 와 짝이 맞아야 한다(없으면 그 버전은 실행 불가).
-const RUNNERS: Record<string, Record<string, Runner>> = {
-  "wholesale-request": {
-    v1: (sb, p) => runWholesaleRequest(sb, WHOLESALE_V1, p),
-    v2: (sb, p) => runWholesaleRequest(sb, WHOLESALE_V2, p),
-    v3: (sb, p) => runWholesaleRequest(sb, WHOLESALE_V3, p),
-  },
+// 한 번에 도는 에이전트 — 버전이 없다. 보고서가 언제 쓰였든 피드백 반영도 지금 실행기가 한다.
+const RUNNERS: Record<string, Runner> = {
+  "wholesale-request": runWholesaleRequest,
 };
 
-// 단계로 나눠 도는 에이전트(staged.ts) — 단계마다 함수 호출이 따로라 전체 길이에 제한이 없다
+// 단계로 나눠 도는 에이전트(staged.ts) — 단계마다 함수 호출이 따로라 전체 길이에 제한이 없다. 에이전트 id → 버전 id → 실행기(registry.ts 의 versions 와 짝)
 const STAGED: Record<string, Record<string, StagedRunner>> = {
   "ad-copy": { v2: AD_COPY_V2, v3: AD_COPY_V3, v4: AD_COPY_V4, v5: AD_COPY_V5 }, // v1 은 첫 실행에서 시간 초과 — 종료(registry retired), 실행기 없음
 };
@@ -45,16 +41,19 @@ async function guard(sb: SupabaseClient, agent: string): Promise<void> {
 // 실행 준비 — 검증·상한 확인·'작성 중' 행 생성까지. 돌려준 run() 을 after() 에 넘겨 끝까지 돌린다.
 //  scheduled = 예약 틱이 시작한 실행(작성자 '예약', 끝나면 팀즈 알림).
 //  origin = 이 요청이 들어온 주소 — 단계형 에이전트가 다음 단계를 같은 배포의 새 함수 호출로 넘길 때 쓴다.
-export async function startAgentRun(sb: SupabaseClient, p: { agent: string; version: string; instruction: string | null; who: string | null; scheduled?: boolean; origin?: string }): Promise<{ id: string; run: () => Promise<void> }> {
+export async function startAgentRun(sb: SupabaseClient, p: { agent: string; version?: string; instruction: string | null; who: string | null; scheduled?: boolean; origin?: string }): Promise<{ id: string; run: () => Promise<void> }> {
   const meta = agentOf(p.agent);
-  const ver = meta && versionOf(meta, p.version);
-  const runner = RUNNERS[p.agent]?.[p.version];
-  const staged = STAGED[p.agent]?.[p.version];
-  if (!meta || !ver || (!runner && !staged)) throw new AgentStartError("없는 에이전트 또는 버전입니다.");
-  if (ver.retired) throw new AgentStartError("더 실행하지 않는 버전입니다. 다른 버전을 고르세요.");
+  if (!meta) throw new AgentStartError("없는 에이전트입니다.");
+  // 버전을 나눠 쓰는 에이전트만 버전을 받는다(안 주면 지금 버전). 나머지는 늘 지금 실행기 하나.
+  const version = meta.versions ? p.version || runVersionId(meta) : NO_VERSION;
+  const ver = meta.versions ? versionOf(meta, version) : null;
+  const runner = RUNNERS[p.agent];
+  const staged = STAGED[p.agent]?.[version];
+  if ((meta.versions && !ver) || (!runner && !staged)) throw new AgentStartError("없는 에이전트 또는 버전입니다.");
+  if (ver?.retired) throw new AgentStartError("더 실행하지 않는 버전입니다. 다른 버전을 고르세요.");
   await guard(sb, p.agent);
 
-  const id = await startReport(sb, { agent: p.agent, version: p.version, instruction: p.instruction, created_by: p.who });
+  const id = await startReport(sb, { agent: p.agent, version, instruction: p.instruction, created_by: p.who });
   if (staged) return { id, run: () => runStages(sb, staged, id, { origin: p.origin, fnDeadlineAt: fnDeadline(), scheduled: p.scheduled }) };
   if (!runner) throw new AgentStartError("없는 에이전트 또는 버전입니다.");
   const deadlineAt = Date.now() + AGENT_DEADLINE_MS;
@@ -70,7 +69,7 @@ export async function startAgentRun(sb: SupabaseClient, p: { agent: string; vers
         await logAgentDraftReady(meta.name, r.summary, [...lines, base ? `${base}/agents` : ""].filter(Boolean).join("\n"));
       }
     } catch (e) {
-      console.error("[agents/run]", p.agent, p.version, e);
+      console.error("[agents/run]", p.agent, version, e);
       const partial = e instanceof AgentRunError ? e.partial : undefined;
       await failReport(sb, id, e instanceof Error ? e.message : "작성 실패", partial);
       if (partial?.est_usd) await addAssistantUsage(partial.est_usd);
@@ -96,8 +95,8 @@ export async function startRevision(sb: SupabaseClient, report: AgentReport, fee
     await beginRevision(sb, { ...report, facts: { ...(report.facts || {}), stage: { done: staged.reviseFrom, total: staged.stages.length } } }, feedback, who);
     return { run: () => runStages(sb, staged, report.id, { origin, fnDeadlineAt: fnDeadline() }) };
   }
-  const runner = RUNNERS[report.agent]?.[report.version];
-  if (!runner) throw new AgentStartError("이 버전은 더 실행할 수 없습니다. [결재]하거나 새로 [업무 요청]하세요.");
+  const runner = RUNNERS[report.agent];
+  if (!runner) throw new AgentStartError("이 버전은 더 실행할 수 없습니다. 새로 [업무 요청]하세요.");
   await guard(sb, report.agent);
   await beginRevision(sb, report, feedback, who);
   const deadlineAt = Date.now() + AGENT_DEADLINE_MS;

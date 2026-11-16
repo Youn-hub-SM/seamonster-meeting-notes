@@ -29,12 +29,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { agent, version, instruction? } — 업무 요청([업무 요청] 버튼) = 보고서 작성 시작. '작성 중' 행의 id 를 바로 돌려주고, 작성은 after() 로 끝까지 돈다(창을 닫아도 계속).
+// POST { agent, version?, instruction? } — 업무 요청(version 은 버전을 나눠 쓰는 에이전트만, 없으면 지금 버전)([업무 요청] 버튼) = 보고서 작성 시작. '작성 중' 행의 id 를 바로 돌려주고, 작성은 after() 로 끝까지 돈다(창을 닫아도 계속).
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as { agent?: string; version?: string; instruction?: string };
     const instruction = String(b.instruction || "").trim().slice(0, 1000) || null;
-    const { id, run } = await startAgentRun(supabaseAdmin(), { agent: String(b.agent || ""), version: String(b.version || ""), instruction, who: await actor(req), origin: req.nextUrl.origin });
+    const { id, run } = await startAgentRun(supabaseAdmin(), { agent: String(b.agent || ""), version: b.version ? String(b.version) : undefined, instruction, who: await actor(req), origin: req.nextUrl.origin });
     after(run);
     return NextResponse.json({ ok: true, id });
   } catch (err) {
