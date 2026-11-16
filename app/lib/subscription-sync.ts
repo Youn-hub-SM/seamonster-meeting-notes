@@ -305,5 +305,46 @@ export async function loadCurrentRoundDist(sb: SupabaseClient): Promise<RoundDis
   return out;
 }
 
+// ── 재활성 — 해지했던 회원이 새로 신청한 것(2026-11-16 대표) ──
+//  카페24 해지는 되돌릴 수 없어(11-15 실측) 같은 신청번호가 해지→이용중이 되는 일이 없다. 다시 시작하는 고객은 새 신청번호를 받아 '신규'로 기록된다.
+//  그래서 신규 기록(직전 상태 없음) 가운데, 그 회원의 앞선 신청이 그때 모두 해지 상태였던 것을 재활성으로 본다(사람 기준 — 2026-11-13 상태 기준과 같다).
+//   · 앞선 신청 = 같은 회원의 신청번호가 더 이른 것(신청번호 S-YYYYMMDD-NNNNNNN 은 글자 순서가 곧 시간 순서).
+//   · 앞선 신청 가운데 이용중·일시정지가 하나라도 있으면 추가 신청이지 재활성이 아니다.
+//   · '그때 해지였다' = 지금 해지이고 해지일이 새 신청을 관측한 날 이전. 해지일 = 품목 해지일(terminated_date)의 최댓값, 없으면 이 이력의 해지 기록일,
+//     그것도 없으면 이력이 생기기 전에 해지된 것으로 본다(새 신청보다 먼저 해지).
+//  읽을 때 계산한다 — 이력 표를 고치지 않으므로 지난 신규 기록에도 소급된다.
+export type RejoinEvent = { subscription_id: string; member_hash: string | null; prev_state: string | null; new_state: string; changed_on: string };
+export type RejoinSub = { subscription_id: string; member_hash: string | null; state: string | null };
+export function rejoinSubscriptionIds(events: RejoinEvent[], subs: RejoinSub[], terminated: Map<string, string>): Set<string> {
+  const byMember = new Map<string, RejoinSub[]>();
+  for (const s of subs) {
+    if (!s.member_hash) continue;
+    const list = byMember.get(s.member_hash); if (list) list.push(s); else byMember.set(s.member_hash, [s]);
+  }
+  // 해지일 — 품목 해지일이 없으면 이력의 해지 기록일(가장 늦은 것)
+  const loggedCancel = new Map<string, string>();
+  for (const e of events) if (e.new_state === "C" && e.changed_on > (loggedCancel.get(e.subscription_id) || "")) loggedCancel.set(e.subscription_id, e.changed_on);
+  const out = new Set<string>();
+  for (const e of events) {
+    if (e.prev_state != null || e.new_state === "C" || !e.member_hash) continue;       // 신규 기록만(처음부터 해지로 관측된 것은 제외)
+    const priors = (byMember.get(e.member_hash) ?? []).filter((s) => s.subscription_id < e.subscription_id);
+    if (!priors.length) continue;                                                        // 첫 신청 — 신규
+    const allCancelled = priors.every((s) => s.state === "C" && (terminated.get(s.subscription_id) || loggedCancel.get(s.subscription_id) || "") <= e.changed_on);
+    if (allCancelled) out.add(e.subscription_id);
+  }
+  return out;
+}
+// 재활성 판정에 쓰는 자료 — 전 신청(회원·상태)과 신청별 해지일(품목 해지일 최댓값)
+export async function loadRejoinBase(sb: SupabaseClient): Promise<{ subs: RejoinSub[]; terminated: Map<string, string> }> {
+  const [subs, items] = await Promise.all([
+    pageAll<RejoinSub>((a, b) => sb.from("cafe24_subscriptions").select("subscription_id, member_hash, state").order("subscription_id").range(a, b)),
+    pageAll<{ subscription_id: string; terminated_date: string | null }>((a, b) => sb.from("cafe24_subscription_items").select("subscription_id, terminated_date")
+      .not("terminated_date", "is", null).order("subscription_item_id").range(a, b)),
+  ]);
+  const terminated = new Map<string, string>();
+  for (const it of items) if (it.terminated_date && it.terminated_date > (terminated.get(it.subscription_id) || "")) terminated.set(it.subscription_id, it.terminated_date);
+  return { subs, terminated };
+}
+
 // 상태 전이의 종류 — 화면·API 공용 라벨(prev→new)
 export type TransitionKind = "new" | "resume" | "reactivate" | "pause" | "cancel" | "other";

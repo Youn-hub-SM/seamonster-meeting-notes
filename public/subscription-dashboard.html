@@ -395,8 +395,8 @@
     </div>
     <div class="chips" id="transTypes" style="display:none; margin:10px 0 0;">
       <span class="chip on" data-kind="">전체</span>
-      <span class="chip" data-kind="resume">재개</span>
-      <span class="chip" data-kind="reactivate">재활성</span>
+      <span class="chip" data-kind="resume" title="일시정지했던 신청이 다시 이용중">재개</span>
+      <span class="chip" data-kind="reactivate" title="해지했던 회원이 새로 신청">재활성</span>
       <span class="chip" data-kind="pause">일시정지</span>
       <span class="chip" data-kind="cancel">해지</span>
       <span class="chip" data-kind="new">신규</span>
@@ -2149,8 +2149,9 @@ const TRANS_KIND = {
   new:        { label: "신규", pill: "pill-blue" },
   other:      { label: "기타", pill: "" },
 };
-function transKindOf(prev, next) {
-  if (!prev) return "new";
+// 재활성 = 해지했던 회원이 새로 신청한 것(서버가 신규 기록에 rejoin 을 붙인다 — 카페24 해지는 되돌릴 수 없어 같은 신청이 해지→이용중이 되지 않는다)
+function transKindOf(prev, next, rejoin) {
+  if (!prev) return rejoin ? "reactivate" : "new";
   if (next === "U") return prev === "C" ? "reactivate" : "resume";
   if (next === "P") return "pause";
   if (next === "C") return "cancel";
@@ -2204,7 +2205,7 @@ function renderTransitions() {
     const cut = new Date(Date.now() - transDays * 86400000).toISOString().slice(0, 10);
     rows = rows.filter(r => (r.changed_on || "") >= cut);
   }
-  rows = rows.map(r => ({ ...r, kind: transKindOf(r.prev_state, r.new_state) }));
+  rows = rows.map(r => ({ ...r, kind: transKindOf(r.prev_state, r.new_state, r.rejoin) }));
 
   // 전체 비어있음(현재 분포도 변화도 없음) — 섹션 최상단 안내만
   if (!hasCurrent && !rows.length) {
@@ -2270,7 +2271,7 @@ function renderTransitions() {
       <td>${escapeHtml(r.changed_on || "")}</td>
       <td>${escapeHtml(r.subscription_id || "")}</td>
       <td style="font-variant-numeric:tabular-nums">${member}</td>
-      <td>${statePill(r.prev_state)}<span class="trans-arrow">→</span>${statePill(r.new_state)}</td>
+      <td>${r.kind === "reactivate" && !r.prev_state ? `<span class="pill pill-cancel" title="이 회원의 앞선 신청이 모두 해지 상태">이전 신청 해지</span>` : statePill(r.prev_state)}<span class="trans-arrow">→</span>${statePill(r.new_state)}</td>
       <td><span class="pill ${k.pill}">${k.label}</span></td>
     </tr>`;
   }).join("") + (shown.length > 500 ? `<tr><td colspan="5" style="color:var(--text-sub)">… 외 ${shown.length - 500}건 (기간을 좁혀 보세요)</td></tr>` : "");
