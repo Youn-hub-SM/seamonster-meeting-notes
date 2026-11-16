@@ -87,11 +87,12 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
 //  주제는 두 가지다(2026-11-16): 상품 주문이 전환인 주제(productLike)와, 탈리 폼 신청이 전환인 주제(forms — 상품 주문·고객 집계를 하지 않는다).
-export const TOPIC_VERSION = 4;
+export const TOPIC_VERSION = 5;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
   forms?: { apply: { id: string; label: string }; result: { id: string; label: string } | null };   // 탈리 폼 ID(신청·결과). result null = 결과 폼이 아직 정해지지 않음
+  submit?: { id: string; label: string };   // 상품 주문형 주제의 결과 제출 탈리 폼(산 뒤 미션을 마치고 내는 폼) — 산 고객과 전화번호로 잇는다
   productLike: string[];              // 주문 상품명에 든 구절(그중 하나라도) — 그 상품만 잡히게 충분히 길게. 폼 신청형은 빈 배열
   landing: { label: string; paths: string[]; scroll: [label: string, event: string][] } | null;   // 랜딩 페이지 주소(정확히)와 스크롤 깊이 이벤트
   gaItemNames: string[];              // GA4 상품명(정확히) — 주문서 진입 수
@@ -101,8 +102,10 @@ export const TOPICS: TopicDef[] = [
   {
     // 이유식 체험단 = 공식몰 상품번호 172(이유식 생선 체험단). 페이지 seamonster.kr/baby, 메타 '이유식 체험단' 캠페인. 네이버 광고 없음.
     //  2026-11-16 이름을 '체험단' → '이유식 체험단'으로(대표 — 다이어트 챌린지와 나란히 놓이므로).
+    //  결과 제출 폼 J9Lpyz(form.seamonster.kr/baby-submit, 2026-11-16 대표) = 이유식 기록 2건을 남긴 참여자가 내는 폼(휴대폰 번호·기록 링크 2개·선택 설문).
     id: "trial", name: "이유식 체험단",
-    basis: "공식몰 상품번호 172 주문 · 페이지 /baby · 메타 '이유식 체험단' 캠페인",
+    basis: "공식몰 상품번호 172 주문 · 페이지 /baby · 탈리 제출 폼 · 메타 '이유식 체험단' 캠페인",
+    submit: { id: "J9Lpyz", label: "체험단 제출" },
     productLike: ["이유식 생선 체험단 패키지", "첫 생선일기 전용 패키지"],   // 172 의 지금 이름과 예전 이름
     landing: { label: "/baby", paths: ["/baby", "/baby/", "/baby/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
     gaItemNames: ["씨몬스터 이유식 생선 체험단 패키지", "우리 아이 첫 생선일기 전용 패키지"],
@@ -165,6 +168,14 @@ export type TopicForms = {
   resultUnmatched: number;      // 결과 제출 중 신청한 사람과 잇지 못한 건수
   truncated: boolean;           // 제출이 많아 일부만 받음
 };
+// 결과 제출 폼(상품 주문형 주제) — 날짜는 제출 시각의 한국 날짜. 낸 사람은 전화번호 → 고객 키로 그 상품을 처음 산 날에 잇는다(묶음에는 건수만).
+export type TopicSubmit = {
+  ok: true;
+  count: number[];      // 그날 결과 제출 건수
+  done: number[];       // 처음 산 날 기준 — 그날 처음 산 고객 중 지금까지 결과를 낸 사람
+  unmatched: number;    // 전화번호가 없거나 그 상품을 산 기록을 찾지 못한 제출 건수
+  truncated: boolean;   // 제출이 많아 일부만 받음
+};
 export type TopicSnapshot = {
   v: typeof TOPIC_VERSION;
   id: string; cond: string;          // cond = 계산에 쓴 정의(달라지면 다시 계산)
@@ -175,4 +186,5 @@ export type TopicSnapshot = {
   ga: TopicGa | Fail | null;         // null = 정의에 없음 또는 연결 안 됨
   meta: TopicMeta | Fail | null;
   forms: TopicForms | Fail | null;   // null = 상품 주문형 주제
+  submit: TopicSubmit | Fail | null; // null = 결과 제출 폼이 없는 주제
 };

@@ -14,7 +14,7 @@ import { readKvSoft, mutateKv } from "./production-kv";
 import { isMetaAdConfigured, getDailyByName } from "./meta-ad";
 import { isGaConfigured, runGaReport, type GaFilter } from "./ga";
 import { readBoard, salesFingerprint } from "./board";
-import { BOARD_DAYS, TOPIC_VERSION, TOPICS, TOPIC_REPEAT_DAYS, shiftDay as shift, type TopicDef, type TopicSnapshot, type TopicSales, type TopicCust, type TopicGa, type TopicMeta, type TopicForms, type Fail } from "./board-types";
+import { BOARD_DAYS, TOPIC_VERSION, TOPICS, TOPIC_REPEAT_DAYS, shiftDay as shift, type TopicDef, type TopicSnapshot, type TopicSales, type TopicCust, type TopicGa, type TopicMeta, type TopicForms, type TopicSubmit, type Fail } from "./board-types";
 import { getTallyApiKey, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "./voc-tally";
 import { findPhone } from "./form-sms";
 import { customerKey } from "./sales-normalize";
@@ -251,17 +251,49 @@ async function formsSection(sb: SupabaseClient, def: TopicDef, days: string[], b
   return out;
 }
 
+// ── 결과 제출 폼(상품 주문형 주제 — 이유식 체험단) ── 날짜별 제출 건수와, 그 상품을 산 고객 가운데 결과를 낸 사람(처음 산 날 자리에).
+//  제출한 사람의 전화번호 → 고객 키로 그 상품의 첫 구매일을 찾는다(custSection 의 '처음 산 날'과 같은 기준이라 처음 산 고객 수로 나눌 수 있다).
+async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], base: string): Promise<TopicSubmit> {
+  const apiKey = await getTallyApiKey();
+  if (!apiKey) throw new Error("탈리 API 키가 없습니다. VOC › 설정에서 탈리 API 키를 넣으세요.");
+  const rs = await timeout(tallySubs(def.submit!.id, new Date(`${days[0]}T00:00:00+09:00`).toISOString(), apiKey), 60_000, "탈리");
+  const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
+  const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), unmatched: 0, truncated: rs.truncated };
+  const byKey = new Map<string, number>();   // 고객 키 → 제출 건수
+  for (const s of rs.subs) {
+    const i = idx.get(s.day); if (i == null) continue;   // 기준일 뒤(오늘) 제출은 다음 계산에
+    out.count[i]++;
+    const k = s.phone ? customerKey(s.phone) : "";
+    if (!k) { out.unmatched++; continue; }
+    byKey.set(k, (byKey.get(k) || 0) + 1);
+  }
+  const keys = [...byKey.keys()], firstBy = new Map<string, string>();   // 고객 키 → 그 상품을 처음 산 날
+  for (let c = 0; c < keys.length; c += KEY_CHUNK) {
+    const rows = await runQ<{ k: string; d: string }>(sb,
+      `select o.customer_key as k, min(o.order_date)::text as d from sales_orders o `
+      + `where o.customer_key in (${keys.slice(c, c + KEY_CHUNK).map(lit).join(", ")}) and o.order_date <= '${base}' and (${prodSql(def)}) group by 1`);
+    for (const r of rows) firstBy.set(String(r.k), String(r.d));
+  }
+  for (const [k, cnt] of byKey) {
+    const d = firstBy.get(k);
+    if (!d) { out.unmatched += cnt; continue; }
+    const i = idx.get(d); if (i != null) out.done[i]++;   // 180일보다 먼저 산 고객은 이은 것으로 보되 날짜 칸에는 넣지 않는다
+  }
+  return out;
+}
+
 export async function buildTopic(sb: SupabaseClient, def: TopicDef, base: string): Promise<TopicSnapshot> {
   const days = Array.from({ length: BOARD_DAYS }, (_, i) => shift(base, i - (BOARD_DAYS - 1)));
   const isForm = !!def.forms;   // 폼 신청형 — 상품 주문·고객 집계를 하지 않는다
-  const [sales, cust, ga, meta, forms] = await Promise.all([
+  const [sales, cust, ga, meta, forms, submit] = await Promise.all([
     isForm ? Promise.resolve(null) : salesSection(sb, def, days, base).catch(fail),
     isForm ? Promise.resolve(null) : custSection(sb, def, days, base).catch(fail),
     def.landing && isGaConfigured() ? gaSection(def, days, base).catch(fail) : Promise.resolve(null),
     def.metaCampaignLike.length && isMetaAdConfigured() ? metaSection(def, days).catch(fail) : Promise.resolve(null),
     isForm ? formsSection(sb, def, days, base).catch(fail) : Promise.resolve(null),
+    !isForm && def.submit ? submitSection(sb, def, days, base).catch(fail) : Promise.resolve(null),
   ]);
-  return { v: TOPIC_VERSION, id: def.id, cond: JSON.stringify(def), base, builtAt: new Date().toISOString(), builtDay: kstToday(), days, sales, cust, ga, meta, forms };
+  return { v: TOPIC_VERSION, id: def.id, cond: JSON.stringify(def), base, builtAt: new Date().toISOString(), builtDay: kstToday(), days, sales, cust, ga, meta, forms, submit };
 }
 
 /** 주제 하나의 묶음 — 저장된 것이 오늘 계산됐고 정의·기준일이 같으면 그대로, 아니면 계산해 저장한다. force = [다시 계산](1분 안 연타 거절). */

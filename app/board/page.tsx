@@ -512,13 +512,17 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
   const matureFirst = cust && mEnd >= sp.i0 ? sumOf(cut(cust.first, sp.i0, mEnd)) : 0, matureConv30 = cust && mEnd >= sp.i0 ? sumOf(cut(cust.conv30, sp.i0, mEnd)) : 0;
   const rate30 = ratio(matureConv30 * 100, matureFirst);
   const byWeek = sp.n > 14;
-  const cohort: { key: string; from: string; to: string; mature: boolean; first: number; conv30: number; conv: number; convRev: number }[] = [];
+  // 결과 제출(탈리) — 제출 건수는 제출한 날, 낸 사람은 처음 산 날 기준(처음 산 고객 수로 나눈다)
+  const submit = t.submit?.ok ? t.submit : null;
+  const subCntS = submit ? spanSum(submit.count, sp) : null, subDoneS = submit ? spanSum(submit.done, sp) : null;
+  const subRate = subDoneS && firstS ? ratio(subDoneS.cur * 100, firstS.cur) : null;
+  const cohort: { key: string; from: string; to: string; mature: boolean; first: number; conv30: number; conv: number; convRev: number; done: number }[] = [];
   if (cust) for (let i = sp.i0; i <= sp.i1; i++) {
     const d = t.days[i], key = byWeek ? mondayOf(d) : d;
     let row = cohort[cohort.length - 1];
-    if (!row || row.key !== key) { row = { key, from: d, to: d, mature: true, first: 0, conv30: 0, conv: 0, convRev: 0 }; cohort.push(row); }
+    if (!row || row.key !== key) { row = { key, from: d, to: d, mature: true, first: 0, conv30: 0, conv: 0, convRev: 0, done: 0 }; cohort.push(row); }
     row.to = d; row.mature = i <= lastMature;   // 그 줄의 마지막 날까지 30일이 지났는가
-    row.first += cust.first[i] || 0; row.conv30 += cust.conv30[i] || 0; row.conv += cust.conv[i] || 0; row.convRev += cust.convRev[i] || 0;
+    row.first += cust.first[i] || 0; row.conv30 += cust.conv30[i] || 0; row.conv += cust.conv[i] || 0; row.convRev += cust.convRev[i] || 0; row.done += submit?.done[i] || 0;
   }
   const afterRows = (cust ? cust.after : []).map((a) => ({ name: a.name, customers: sumOf(win(a.customers)), rev: sumOf(win(a.rev)) })).filter((r) => r.customers > 0).sort((a, b) => b.customers - a.customers || b.rev - a.rev);
 
@@ -551,7 +555,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null) {
     return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: imp, clicks: clk, ctr: ratio(clk * 100, imp), purchases: sumOf(win(a.purchases)), value: val, roas: ratio(val, sp1) };
   }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
 
-  return { win, prevWin, hasPrev: !!sp.prev, labels, sales, rev, orders, revS, ordS, qtyS, itemRows, cust, firstS, freshS, matureFirst, matureConv30, rate30, byWeek, cohort, afterRows,
+  return { win, prevWin, hasPrev: !!sp.prev, labels, sales, rev, orders, revS, ordS, qtyS, itemRows, cust, firstS, freshS, matureFirst, matureConv30, rate30, byWeek, cohort, afterRows, submit, subCntS, subDoneS, subRate,
     ga, visitS, checkoutS, convRate, funnel, sesTotal, sourceRows, meta, spend, value, spendS, valueS, purS, clickS, impS, cpa, adRows };
 }
 type TopicView = ReturnType<typeof buildTopicView>;
@@ -587,9 +591,15 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
     { key: "roas", label: "ROAS", num: true, sort: (r) => r.roas ?? 0, cell: (r) => fix2(r.roas) ?? "-" },
   ];
   type CRow = TopicView["cohort"][number];
+  const hasSubmit = !!def.submit;   // 결과 제출 폼이 있는 주제 — 표에 결과 제출 열, 아래에 제출 추이
+  const subCell = (v: string) => (tv.submit ? v : "-");
   const cCols: Col<CRow>[] = [
     { key: "key", label: tv.byWeek ? "처음 산 주" : "처음 산 날", sort: (r) => r.key, cell: (r) => (tv.byWeek ? `${md(r.from)}~${md(r.to)}` : `${md(r.from)} (${weekday(r.from)})`) },
     { key: "first", label: "처음 산 고객", num: true, bar: true, sort: (r) => r.first, cell: (r) => r.first.toLocaleString() },
+    ...(hasSubmit ? [
+      { key: "done", label: "결과 제출", num: true, sort: (r) => r.done, cell: (r) => subCell(r.done.toLocaleString()) },
+      { key: "doneRate", label: "제출률", num: true, sort: (r) => ratio(r.done, r.first) ?? -1, cell: (r) => subCell(pct1(ratio(r.done * 100, r.first)) ?? "-") },
+    ] as Col<CRow>[] : []),
     { key: "conv30", label: `${TOPIC_REPEAT_DAYS}일 안 재구매`, num: true, sort: (r) => (r.mature ? r.conv30 : -1), cell: (r) => (r.mature ? r.conv30.toLocaleString() : "집계 중") },
     { key: "rate30", label: "재구매율", num: true, sort: (r) => (r.mature ? ratio(r.conv30, r.first) ?? -1 : -1), cell: (r) => (r.mature ? pct1(ratio(r.conv30 * 100, r.first)) ?? "-" : "집계 중") },
     { key: "conv", label: "지금까지 재구매", num: true, sort: (r) => r.conv, cell: (r) => r.conv.toLocaleString() },
@@ -610,14 +620,18 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   ];
   const noSales = "이 기간에 주문이 없습니다.", noGa = whyX(t.ga) === "연결 안 됨" ? "GA4가 연결되지 않았습니다." : "페이지 숫자가 없습니다.", noAds = whyX(t.meta) === "연결 안 됨" ? "메타 광고가 연결되지 않았습니다." : "이 기간에 광고 숫자가 없습니다.";
   const cohortRows = tv.cohort.filter((r) => r.first > 0);
+  const subDone = tv.subDoneS?.cur ?? 0;
+  const subNote = tv.submit ? [`결과 제출 ${(tv.subCntS?.cur ?? 0).toLocaleString()}건`, tv.submit.unmatched > 0 ? `구매와 잇지 못한 제출 ${tv.submit.unmatched.toLocaleString()}건` : ""].filter(Boolean).join(" · ") : "";
+  const noSubmit = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 결과 제출이 없습니다.";
   return (
     <>
-      <Errors list={[failOf("매출", t.sales), failOf("고객", t.cust), failOf("GA4", t.ga), failOf("메타 광고", t.meta),
+      <Errors list={[failOf("매출", t.sales), failOf("고객", t.cust), failOf("GA4", t.ga), failOf("메타 광고", t.meta), failOf("결과 제출", t.submit ?? null),
+        tv.submit?.truncated ? "탈리: 제출이 많아 일부만 받았습니다." : "",
         t.ga?.ok && t.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다." : "",
         t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 단위로 보여 줍니다." : ""].filter(Boolean)} />
       <Scores>
       <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `매출 ${moneyCompact(tv.revS?.cur ?? 0)}원` : "조회 실패"} spark={tv.sales ? tv.win(tv.orders) : undefined} />
-      <Score label="처음 산 고객" value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />
+      <Score label="처음 산 고객" value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명${tv.submit ? ` · 결과 제출 ${subDone.toLocaleString()}명` : ""}` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />
       <Score label="페이지 전환율" value={pct2(tv.convRate?.cur)} delta={ppDelta(tv.convRate?.cur ?? null, tv.convRate?.prev ?? null, "up")} note={tv.ga ? `방문 ${(tv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={tv.ga ? tv.win(tv.ga.visits) : undefined} />
       <Score label="메타 광고비" value={wonS(tv.spendS?.cur)} delta={pctDelta(tv.spendS?.cur ?? null, tv.spendS?.prev ?? null, "none")} note={tv.meta ? `클릭 ${(tv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={tv.meta ? tv.win(tv.spend) : undefined} />
       <Score label="주문 1건당 광고비" value={wonS(tv.cpa?.cur == null ? null : Math.round(tv.cpa.cur))} delta={pctDelta(tv.cpa?.cur ?? null, tv.cpa?.prev ?? null, "down")} note={tv.meta ? `메타 집계 구매 ${(tv.purS?.cur ?? 0).toLocaleString()}건 · ROAS ${fix2(roas) ?? "-"}` : whyX(t.meta)} />
@@ -637,11 +651,17 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
           : <div className="b2b-empty">{noAds}</div>}
       </Card>
       <Card w={6} title="광고별"><DataTable rows={tv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
-      <Card w={6} title={tv.byWeek ? "처음 산 주별 재구매" : "처음 산 날별 재구매"}>
+      <Card w={hasSubmit ? 12 : 6} title={`${tv.byWeek ? "처음 산 주별" : "처음 산 날별"} ${hasSubmit ? "결과 제출·재구매" : "재구매"}`} right={subNote ? <span className="bd-card-note">{subNote}</span> : undefined}>
         <DataTable rows={cohortRows} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty="이 기간에 처음 산 고객이 없습니다."
-          foot={["합계", first.toLocaleString(), tv.matureConv30.toLocaleString(), pct1(tv.rate30) ?? "-", cohortRows.reduce((a, r) => a + r.conv, 0).toLocaleString(), won(cohortRows.reduce((a, r) => a + r.convRev, 0))]} />
+          foot={["합계", first.toLocaleString(), ...(hasSubmit ? [subCell(subDone.toLocaleString()), subCell(pct1(tv.subRate) ?? "-")] : []),
+            tv.matureConv30.toLocaleString(), pct1(tv.rate30) ?? "-", cohortRows.reduce((a, r) => a + r.conv, 0).toLocaleString(), won(cohortRows.reduce((a, r) => a + r.convRev, 0))]} />
       </Card>
       <Card w={6} title="재구매한 상품 상위 15"><DataTable rows={tv.afterRows} cols={nCols} rowKey={(r) => r.name} sortKey="customers" empty="이 기간에 처음 산 고객의 재구매가 없습니다." /></Card>
+      {hasSubmit && (
+        <Card w={6} title="결과 제출 추이" right={tv.submit ? <CompareLegend v={tv} /> : undefined}>
+          {tv.submit ? <CompareLine v={tv} values={tv.submit.count} unit="건" /> : <div className="b2b-empty">{noSubmit}</div>}
+        </Card>
+      )}
       <Card w={6} title="페이지 방문 추이" right={tv.ga ? <CompareLegend v={tv} /> : undefined}>
         {tv.ga ? <CompareLine v={tv} values={tv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
       </Card>
@@ -999,7 +1019,7 @@ export default function BoardPage() {
               {isSubx ? `카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""} · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준`
                 : !snap ? "\u00a0"
                 : isFormTopic ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}신청·결과는 탈리 제출 시각 · 사람은 전화번호로 세고 처음 신청한 날 기준 · 방문·스크롤은 GA4 세션 · 구매는 신청한 날부터의 주문</>
-                : topicId ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}고객은 처음 산 날 기준 · 방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장</>
+                : topicId ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}고객은 처음 산 날 기준{curTopic?.submit ? " · 결과 제출은 탈리 제출 시각, 낸 사람은 전화번호로 산 고객에 잇는다" : ""} · 방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장</>
                 : <>기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</>}
             </p>
           </div>
