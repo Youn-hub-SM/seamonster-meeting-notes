@@ -1,13 +1,13 @@
 "use client";
 
 // AI 에이전트 — 에이전트마다 보고서가 쌓이는 화면.
-//  위 탭 = 에이전트, 실행 줄 = [업무 요청](버전을 나눠 쓰는 에이전트만 버전 고르기가 붙는다), 예약 줄 = 매주 n요일 n시까지 초안 작성, 아래 = 보고서 목록(최신순).
+//  위 탭 = 에이전트, 실행 줄 = [업무 요청], 예약 줄 = 매주 n요일 n시까지 초안 작성, 아래 = 보고서 목록(최신순).
 //  보고서 한 장의 흐름: 작성 중 → 결재 대기 → 담당자가 [결재](초안 그대로) 또는 [피드백 보내기](에이전트가 고친 수정본) → 실제 요청서 작성.
-//  에이전트 목록은 app/lib/agents/registry.ts — 버전 고르기·버전 기록·버전 탭은 versions 가 있는 에이전트에만 나온다(도매 생산 요청서는 버전이 없다).
+//  에이전트 목록은 app/lib/agents/registry.ts — 거기 한 줄이면 이 화면에 탭이 생긴다. 버전은 없다(늘 지금 지침 하나).
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
-import { AGENTS, agentOf, runVersionId, nextTargetLabel, DEFAULT_SCHEDULE, WEEKDAYS, type AgentMeta, type AgentReport, type AgentSchedule, type DraftItem } from "@/app/lib/agents/registry";
+import { AGENTS, agentOf, nextTargetLabel, DEFAULT_SCHEDULE, WEEKDAYS, type AgentMeta, type AgentReport, type AgentSchedule, type DraftItem } from "@/app/lib/agents/registry";
 import { qty, dateTime, dateShort } from "@/app/lib/format";
 import { Md } from "./Md";
 import { IdeasSection, AdMaterials } from "./AdCopy";
@@ -90,7 +90,6 @@ function ReportCard({ r, agent, open, isAdmin, onToggle, onChange, onRemove }: C
       <button type="button" className="ag-card-head" onClick={onToggle} aria-expanded={open}>
         <div className="ag-meta">
           <span className="ag-meta-time">{dateTime(r.created_at)}</span>
-          {agent.versions && <Pill tone="muted">{r.version}</Pill>}
           {r.created_by && <span>{r.created_by}</span>}
           {running && <Pill tone="muted">{revising ? "피드백 반영 중" : "작성 중"}</Pill>}
           {failed && <Pill tone="danger">실패</Pill>}
@@ -271,11 +270,8 @@ export default function AgentsPage() {
   const toast = useToast();
   const [agentId, setAgentId] = useState(AGENTS[0].id);
   const agent = agentOf(agentId) ?? AGENTS[0];
-  const [version, setVersion] = useState(runVersionId(agent));
   const [reports, setReports] = useState<AgentReport[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
   const [more, setMore] = useState(false);
-  const [filter, setFilter] = useState("전체");
   const [openId, setOpenId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -296,15 +292,14 @@ export default function AgentsPage() {
       const j = await (await fetch(`/api/agents/reports?agent=${encodeURIComponent(id)}`, { cache: "no-store" })).json();
       if (seq !== reqSeq.current) return;
       if (!j.ok) throw new Error(j.error);
-      setReports(j.reports); setCounts(j.counts || {}); setMore(!!j.more); setPending(j.pending || "");
+      setReports(j.reports); setMore(!!j.more); setPending(j.pending || "");
       setOpenId((cur) => cur ?? j.reports[0]?.id ?? null); // 처음엔 가장 최근 보고서를 펼쳐 둔다
     } catch (e) { if (seq === reqSeq.current) setError(e instanceof Error ? e.message : "보고서를 불러오지 못했습니다."); }
     finally { if (seq === reqSeq.current) setLoading(false); }
   }, []);
 
   useEffect(() => {
-    setVersion(runVersionId(agentOf(agentId) ?? AGENTS[0]));
-    setFilter("전체"); setOpenId(null); setReports([]);
+    setOpenId(null); setReports([]);
     load(agentId);
   }, [agentId, load]);
 
@@ -333,17 +328,15 @@ export default function AgentsPage() {
   const start = async () => {
     setStarting(true); setError("");
     try {
-      const j = await (await fetch("/api/agents/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent: agentId, version }) })).json();
+      const j = await (await fetch("/api/agents/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent: agentId }) })).json();
       if (!j.ok) throw new Error(j.error);
       const now = new Date().toISOString();
       const placeholder: AgentReport = {
-        id: j.id, agent: agentId, version, status: "running", instruction: null, summary: null, body_md: null, draft: [], ideas: [], facts: null, tool_log: [],
+        id: j.id, agent: agentId, status: "running", instruction: null, summary: null, body_md: null, draft: [], ideas: [], facts: null, tool_log: [],
         model: null, usage: null, est_usd: null, error: null, created_by: null, created_at: now, finished_at: null,
         request_id: null, request_no: null, applied: null, applied_by: null, applied_at: null, feedback: null, feedback_by: null, feedback_at: null,
       };
       setReports((list) => [placeholder, ...list]);
-      setCounts((c) => ({ ...c, [version]: (c[version] || 0) + 1 }));
-      setFilter("전체");
     } catch (e) { toast.error(e instanceof Error ? e.message : "업무를 요청하지 못했습니다."); }
     finally { setStarting(false); }
   };
@@ -358,11 +351,6 @@ export default function AgentsPage() {
     } catch (e) { toast.error(e instanceof Error ? e.message : "보고서를 불러오지 못했습니다."); }
   };
 
-  const versions = agent.versions ?? [];   // 버전을 나눠 쓰는 에이전트만 — 비어 있으면 버전에 관한 것은 화면에 나오지 않는다
-  const runnable = versions.filter((v) => !v.retired);
-  const latest = runVersionId(agent);
-  const total = Object.values(counts).reduce((s, n) => s + n, 0);
-  const shown = filter === "전체" ? reports : reports.filter((r) => r.version === filter);
   const busyRun = starting || !!runningIds;
 
   return (
@@ -382,46 +370,21 @@ export default function AgentsPage() {
 
       <section className="b2b-form-section" style={{ marginTop: "var(--sm-space-4)" }}>
         <div className="ag-run">
-          {versions.length > 0 && (
-            <select className="b2b-input ag-run-version" value={version} onChange={(e) => setVersion(e.target.value)} aria-label="에이전트 버전">
-              {runnable.map((v) => <option key={v.id} value={v.id}>{v.id}{v.id === latest ? " (최신)" : ""}</option>)}
-            </select>
-          )}
           <button type="button" className="b2b-btn-primary" onClick={start} disabled={busyRun || !!pending}>{runningIds ? "작업 중" : starting ? "요청하는 중" : "업무 요청"}</button>
         </div>
         {!pending && <ScheduleRow agentId={agentId} noun={agent.kind === "ideas" ? "목록" : "초안"} />}
-        {versions.length > 0 && (
-          <details className="ag-versions">
-            <summary>버전 기록 {versions.length}개</summary>
-            {versions.map((v) => (
-              <div key={v.id} className="ag-version">
-                <div className="ag-version-id">{v.id}{v.retired ? " (종료)" : ""}<span className="ag-version-date">{v.date} · 보고서 {qty(counts[v.id] || 0)}장</span></div>
-                <ul>{v.changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
-              </div>
-            ))}
-          </details>
-        )}
       </section>
 
       {agent.kind === "ideas" && <AdMaterials key={agentId} />}
 
-      {versions.length > 1 && (
-        <div className="sm-tabs ag-filter" role="tablist" aria-label="버전으로 거르기">
-          <button type="button" className={`sm-tab ${filter === "전체" ? "is-active" : ""}`} onClick={() => setFilter("전체")}>전체<span className="sm-tab-count">{qty(total)}</span></button>
-          {versions.map((v) => (
-            <button key={v.id} type="button" className={`sm-tab ${filter === v.id ? "is-active" : ""}`} onClick={() => setFilter(v.id)}>{v.id}<span className="sm-tab-count">{qty(counts[v.id] || 0)}</span></button>
-          ))}
-        </div>
-      )}
-
-      <div style={{ marginTop: versions.length > 1 ? 0 : "var(--sm-space-5)" }}>
+      <div style={{ marginTop: "var(--sm-space-5)" }}>
         {loading ? <div className="b2b-loading">불러오는 중...</div>
-          : shown.length === 0 ? <div className="b2b-empty">{filter === "전체" ? "작성된 보고서가 없습니다." : `${filter} 보고서가 없습니다.`}</div>
-          : shown.map((r) => (
+          : reports.length === 0 ? <div className="b2b-empty">작성된 보고서가 없습니다.</div>
+          : reports.map((r) => (
             <ReportCard key={r.id} r={r} agent={agent} isAdmin={isAdmin} open={openId === r.id}
               onToggle={() => setOpenId((cur) => (cur === r.id ? null : r.id))}
               onChange={(nr) => setReports((list) => list.map((x) => (x.id === nr.id ? nr : x)))}
-              onRemove={(id) => { setReports((list) => list.filter((x) => x.id !== id)); setCounts((c) => ({ ...c, [r.version]: Math.max(0, (c[r.version] || 0) - 1) })); }} />
+              onRemove={(id) => setReports((list) => list.filter((x) => x.id !== id))} />
           ))}
         {more && !loading && <div className="ag-more"><button type="button" className="b2b-btn-secondary" onClick={loadMore}>이전 보고서 더 보기</button></div>}
       </div>

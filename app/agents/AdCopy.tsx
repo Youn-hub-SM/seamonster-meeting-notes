@@ -210,7 +210,7 @@ export function AdMaterials() {
         </span>
       </div>
 
-      <details className="ag-versions">
+      <details className="ag-fold">
         <summary>리뷰 분석 자료{insight.updated_at ? ` · ${dateTime(insight.updated_at)}${insight.source ? ` ${insight.source}` : ""}` : ""}</summary>
         <div className="ag-insight">
           {insightDraft == null ? (
@@ -230,7 +230,7 @@ export function AdMaterials() {
         </div>
       </details>
 
-      <details className="ag-versions" open={refs.length === 0}>
+      <details className="ag-fold" open={refs.length === 0}>
         <summary>타사 레퍼런스 {qty(refs.length)}건</summary>
         <div className="ag-ref-form">
           <label className="b2b-field"><span className="b2b-field-label">브랜드</span><input className="b2b-input" value={form.brand} onChange={set("brand")} maxLength={100} /></label>

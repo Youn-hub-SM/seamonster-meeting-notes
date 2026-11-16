@@ -1,15 +1,7 @@
 // AI 에이전트 등록부 — 화면(/agents)과 서버가 같이 읽는다(클라이언트 안전: DB·SDK import 없음).
-//  에이전트 = 정해진 일을 맡은 AI.
-//  버전을 나눠 쓰는 에이전트(versions 가 있는 것)만 버전 고르기·버전 기록이 화면에 나온다.
-//   새 버전 = versions 맨 앞에 한 줄 + 서버 실행기(app/lib/agents/run.ts STAGED)에 같은 id 로 등록. 더는 실행하지 않을 버전은 retired: true.
-//  versions 가 없는 에이전트(도매 생산 요청서 — 2026-11-16 대표: "항상 최신 버전만 사용")는 버전이 없다. 지침을 고치면 그것이 곧 지금 에이전트다.
+//  에이전트 = 정해진 일을 맡은 AI. 버전은 없다(2026-11-16 대표: "항상 최신 버전만 사용") — 지침을 고치면 그것이 곧 지금 에이전트다.
+//  새 에이전트 = 여기 한 줄 + 서버 실행기(app/lib/agents/run.ts RUNNERS 또는 STAGED)에 같은 id 로 등록.
 
-export type AgentVersionMeta = {
-  id: string;          // v1, v2 … (agent_reports.version)
-  date: string;        // 이 버전을 낸 날(YYYY-MM-DD)
-  changes: string[];   // 이 버전이 하는 일·앞 버전과 달라진 점(한 줄씩)
-  retired?: true;
-};
 export type AgentMeta = {
   id: string;          // agent_reports.agent
   name: string;        // 화면 이름
@@ -17,7 +9,6 @@ export type AgentMeta = {
   kind?: "ideas";      // 보고서 모양. 없으면 요청서 초안(품목·수량 → 결재). "ideas" = 소재 목록(결재 없음, 피드백으로 다시 쓰기)
   stages?: string[];   // 단계로 나눠 실행하는 에이전트의 단계 이름(순서대로) — 단계마다 함수 호출이 따로라 한 단계가 270초 안에만 끝나면 된다
   schedule?: AgentSchedule; // 예약 기본값(없으면 DEFAULT_SCHEDULE)
-  versions?: AgentVersionMeta[]; // 버전을 나눠 쓰는 에이전트만. 최신이 맨 앞
 };
 
 export const AGENTS: AgentMeta[] = [
@@ -33,64 +24,10 @@ export const AGENTS: AgentMeta[] = [
     kind: "ideas",
     stages: ["고객 목소리 분석", "타깃 트렌드 조사", "소재 기획", "카피 작성"],
     schedule: { on: false, weekday: 1, hour: 9 },
-    versions: [
-      {
-        id: "v5", date: "2026-11-12",
-        changes: [
-          "후킹에서 걱정이나 질문을 꺼내면 같은 광고 안에서 답함 — 답을 다음 편으로 미루지 않음",
-          "소재는 광고 한 편만 봐도 뜻이 서게 기획하고, 걱정에서 출발하는 소재는 무엇으로 답할지까지 정함",
-          "일부 고객의 말을 부풀리지 않되 '한 고객이 알려 준 방법'처럼 어색하게 쓰지 않음 — 얼마나 넓게 말할지는 리뷰 분석 자료의 건수로 가늠",
-        ],
-      },
-      {
-        id: "v4", date: "2026-11-12", retired: true,
-        changes: [
-          "리뷰를 매번 160건씩 읽는 대신, 전체 리뷰(약 3만 5천 건)를 분석해 둔 '리뷰 분석 자료'를 읽음",
-          "주제별 최근 90일 건수를 실행할 때마다 다시 세어 요즘 늘어난 이야기를 가림",
-          "첫 단계는 최근 4주 글에서 분석 자료에 없는 새 이야기만 뽑음",
-          "공식몰 리뷰에서 리뷰 앱 자동 문구와 스마트스토어 복사본을 뺌",
-        ],
-      },
-      {
-        id: "v3", date: "2026-11-12", retired: true,
-        changes: [
-          "중량·개수 같은 상품 숫자는 상품 마스터의 규격에 있는 값만 씀",
-          "정부·기관·전문가 권장, 인증, 통계는 광고 문구에 쓰지 않고 근거에만 적음",
-          "일부 고객의 말을 모두의 일처럼 넓혀 쓰지 않음",
-          "본문을 짧은 본문(3~4줄)과 긴 본문 둘로 냄",
-        ],
-      },
-      {
-        id: "v2", date: "2026-11-11", retired: true,
-        changes: [
-          "소재 작성을 '소재 기획'과 '카피 작성' 두 단계로 나눔 — v1 은 한 번에 쓰다가 시간 초과로 실패",
-          "품질 우선: 모든 단계를 생각 강도 높음으로 실행하고 단계마다 시간을 800초까지 씀",
-          "문구는 소재 4건씩 나눠 동시에 작성 — 한 묶음이 실패해도 나머지는 남음",
-          "피드백이 말하지 않은 소재는 문구까지 그대로 둠",
-        ],
-      },
-      {
-        id: "v1", date: "2026-11-11", retired: true,
-        changes: [
-          "맡은 일은 메타 광고 신규 소재 목록 작성 하나 — 광고를 켜거나 끄지 않음",
-          "공식몰 리뷰·스마트스토어 문의·VOC 에서 고객이 쓰는 말과 구매 이유를 뽑음",
-          "타깃의 최근 경향을 웹에서 조사하고 출처를 남김",
-          "메타 광고 성과에서 효율이 좋았던 소구와 아직 해 보지 않은 소구를 가림",
-          "담당자가 올린 타사 광고 레퍼런스를 참고(문구를 베끼지 않음)",
-          "소재마다 후킹·스토리·제안과 광고 본문, 근거를 적음",
-          "지난 목록과 피드백을 읽어 같은 소재를 되풀이하지 않음",
-        ],
-      },
-    ],
   },
 ];
 
 export const agentOf = (id: string): AgentMeta | undefined => AGENTS.find((a) => a.id === id);
-// 버전 없는 에이전트의 보고서에 적는 값(agent_reports.version 은 빈 값을 못 받는다) — 화면에는 나오지 않는다
-export const NO_VERSION = "latest";
-// 지금 실행할 버전 id — 버전을 나눠 쓰는 에이전트는 종료하지 않은 맨 앞 버전
-export const runVersionId = (a: AgentMeta): string => (a.versions ? (a.versions.find((v) => !v.retired) ?? a.versions[0]).id : NO_VERSION);
-export const versionOf = (a: AgentMeta, id: string): AgentVersionMeta | undefined => a.versions?.find((v) => v.id === id);
 
 // ── 보고서(화면 계약) ──
 export type AgentReportStatus = "running" | "done" | "error";
@@ -125,7 +62,7 @@ export type AdIdea = {
   hook: string;          // ① 후킹(첫 문장·첫 1~3초)
   story: string;         // ② 스토리(문제→공감→해결)
   offer: string;         // ③ 제안(혜택·행동 유도)
-  short_text?: string;   // (v3~) 짧은 본문(3~4줄)
+  short_text?: string;   // 짧은 본문(3~4줄) — 2026-11-12 이전 보고서에는 없다
   primary_text: string;  // 광고 본문(긴 것)
   headline: string;      // 제목
   visual: string;        // 비주얼·촬영 안내
@@ -135,7 +72,6 @@ export type AgentToolLog = { name: string; title: string; sql?: string; ok: bool
 export type AgentReport = {
   id: string;
   agent: string;
-  version: string;
   status: AgentReportStatus;
   instruction: string | null;
   summary: string | null;

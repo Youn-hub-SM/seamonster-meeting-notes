@@ -29,7 +29,7 @@ function toReport(r: Row): AgentReport {
   }
   const ideas = agentOf(String(r.agent))?.kind === "ideas"; // 소재 목록 에이전트는 draft 칸에 소재 배열이 들어 있다
   return {
-    id: String(r.id), agent: String(r.agent), version: String(r.version), status,
+    id: String(r.id), agent: String(r.agent), status,
     instruction: (r.instruction as string | null) ?? null,
     summary: (r.summary as string | null) ?? null,
     body_md: (r.body_md as string | null) ?? null,
@@ -72,15 +72,6 @@ export async function getReport(sb: SupabaseClient, id: string): Promise<AgentRe
   return data ? toReport(data as Row) : null;
 }
 
-// 버전별 장수(필터 탭 숫자) — 행 전체를 읽지 않고 version 만.
-export async function countByVersion(sb: SupabaseClient, agent: string): Promise<Record<string, number>> {
-  const { data, error } = await sb.from("agent_reports").select("version").eq("agent", agent).limit(5000);
-  if (error) throw error;
-  const out: Record<string, number> = {};
-  for (const r of (data ?? []) as { version: string }[]) out[r.version] = (out[r.version] || 0) + 1;
-  return out;
-}
-
 // 같은 에이전트가 지금 일하는 중인가(겹쳐 실행 방지) — 살아 있는 running 행의 id. 피드백 반영 중인 행도 센다.
 export async function runningReportId(sb: SupabaseClient, agent: string): Promise<string | null> {
   const { data, error } = await sb.from("agent_reports").select("id, created_at, facts").eq("agent", agent).eq("status", "running").limit(20);
@@ -89,8 +80,9 @@ export async function runningReportId(sb: SupabaseClient, agent: string): Promis
   return live ? String(live.id) : null;
 }
 
-export async function startReport(sb: SupabaseClient, p: { agent: string; version: string; instruction: string | null; created_by: string | null }): Promise<string> {
-  const { data, error } = await sb.from("agent_reports").insert({ agent: p.agent, version: p.version, instruction: p.instruction, created_by: p.created_by, status: "running" }).select("id").single();
+// version 칸(164, not null)은 버전을 쓰던 때의 흔적이다 — 지금은 늘 'latest' 를 적고 어디서도 읽지 않는다.
+export async function startReport(sb: SupabaseClient, p: { agent: string; instruction: string | null; created_by: string | null }): Promise<string> {
+  const { data, error } = await sb.from("agent_reports").insert({ agent: p.agent, version: "latest", instruction: p.instruction, created_by: p.created_by, status: "running" }).select("id").single();
   if (error) throw error;
   return String((data as { id: string }).id);
 }
@@ -158,15 +150,15 @@ export async function failRevision(sb: SupabaseClient, prev: AgentReport, messag
   }).eq("id", prev.id);
 }
 
-// 다음 실행의 참고 사례 — 같은 에이전트의 최근 완료 보고서(첫 초안·확정·피드백). 버전은 가리지 않는다(피드백은 일에 대한 것).
-export type PriorCase = { date: string; version: string; summary: string | null; draft: { sku: string; name: string; qty: number }[]; applied: { sku: string; qty: number; draft_qty: number | null }[] | null; feedback: string | null };
+// 다음 실행의 참고 사례 — 같은 에이전트의 최근 완료 보고서(첫 초안·확정·피드백).
+export type PriorCase = { date: string; summary: string | null; draft: { sku: string; name: string; qty: number }[]; applied: { sku: string; qty: number; draft_qty: number | null }[] | null; feedback: string | null };
 export async function priorCases(sb: SupabaseClient, agent: string, limit = 4, exceptId?: string): Promise<PriorCase[]> {
-  const { data, error } = await sb.from("agent_reports").select("id, created_at, version, summary, draft, applied, feedback, facts")
+  const { data, error } = await sb.from("agent_reports").select("id, created_at, summary, draft, applied, feedback, facts")
     .eq("agent", agent).eq("status", "done").order("created_at", { ascending: false }).limit(limit + 1);
   if (error) return [];
   return ((data ?? []) as Row[]).filter((r) => r.id !== exceptId).slice(0, limit).map((r) => ({
     date: new Date(Date.parse(String(r.created_at)) + 9 * 3600e3).toISOString().slice(0, 10),
-    version: String(r.version), summary: (r.summary as string | null) ?? null,
+    summary: (r.summary as string | null) ?? null,
     draft: (r.facts as Facts | null)?.first_draft ?? arr<DraftItem>(r.draft).map((d) => ({ sku: d.sku, name: d.name, qty: d.qty })),
     applied: r.applied == null ? null : arr<AppliedItem>(r.applied).map((a) => ({ sku: a.sku, qty: a.qty, draft_qty: a.draft_qty })),
     feedback: (r.feedback as string | null) ?? null,

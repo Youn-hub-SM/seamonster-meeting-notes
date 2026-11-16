@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { agentOf, PENDING_164 } from "@/app/lib/agents/registry";
-import { listReports, countByVersion, isPending164 } from "@/app/lib/agents/store";
+import { listReports, isPending164 } from "@/app/lib/agents/store";
 import { startAgentRun, AgentStartError } from "@/app/lib/agents/run";
 
 export const dynamic = "force-dynamic";
@@ -13,28 +13,26 @@ async function actor(req: NextRequest): Promise<string | null> {
   return (await verifySession(token)) || resolveUserName(token);
 }
 
-// GET ?agent=&before= — 그 에이전트의 보고서 목록(최신순) + 버전별 장수
+// GET ?agent=&before= — 그 에이전트의 보고서 목록(최신순)
 export async function GET(req: NextRequest) {
   try {
     const agent = req.nextUrl.searchParams.get("agent") || "";
     if (!agentOf(agent)) return NextResponse.json({ ok: false, error: "없는 에이전트입니다." }, { status: 400 });
     const before = req.nextUrl.searchParams.get("before");
-    const sb = supabaseAdmin();
-    const [list, counts] = await Promise.all([listReports(sb, agent, before), before ? Promise.resolve(null) : countByVersion(sb, agent)]);
-    return NextResponse.json({ ok: true, ...list, counts });
+    return NextResponse.json({ ok: true, ...(await listReports(supabaseAdmin(), agent, before)) });
   } catch (err) {
-    if (isPending164(err)) return NextResponse.json({ ok: true, reports: [], more: false, counts: {}, pending: PENDING_164 });
+    if (isPending164(err)) return NextResponse.json({ ok: true, reports: [], more: false, pending: PENDING_164 });
     console.error("[agents/reports GET]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "보고서를 불러오지 못했습니다") }, { status: 500 });
   }
 }
 
-// POST { agent, version?, instruction? } — 업무 요청(version 은 버전을 나눠 쓰는 에이전트만, 없으면 지금 버전)([업무 요청] 버튼) = 보고서 작성 시작. '작성 중' 행의 id 를 바로 돌려주고, 작성은 after() 로 끝까지 돈다(창을 닫아도 계속).
+// POST { agent, instruction? } — 업무 요청([업무 요청] 버튼) = 보고서 작성 시작. '작성 중' 행의 id 를 바로 돌려주고, 작성은 after() 로 끝까지 돈다(창을 닫아도 계속).
 export async function POST(req: NextRequest) {
   try {
-    const b = (await req.json()) as { agent?: string; version?: string; instruction?: string };
+    const b = (await req.json()) as { agent?: string; instruction?: string };
     const instruction = String(b.instruction || "").trim().slice(0, 1000) || null;
-    const { id, run } = await startAgentRun(supabaseAdmin(), { agent: String(b.agent || ""), version: b.version ? String(b.version) : undefined, instruction, who: await actor(req), origin: req.nextUrl.origin });
+    const { id, run } = await startAgentRun(supabaseAdmin(), { agent: String(b.agent || ""), instruction, who: await actor(req), origin: req.nextUrl.origin });
     after(run);
     return NextResponse.json({ ok: true, id });
   } catch (err) {

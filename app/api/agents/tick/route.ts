@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 800; // 단계형 에이전트의 한 단계 740초(staged.ts STAGE_MS) + 저장·넘기기. 요청서 에이전트는 그 안에서 270초 기한을 따로 지킨다(Pro + Fluid 한도 800)
 
 // POST — 예약 신호. Supabase pg_cron 이 매시 45분에 두드린다(migration 165, Authorization: Bearer DIGEST_CRON_KEY).
-//  에이전트마다 예약 설정(/agents 화면)을 보고 지금이 '목표 시각 15분 전'이면 초안을 작성한다(버전을 나눠 쓰는 에이전트는 지금 버전).
+//  에이전트마다 예약 설정(/agents 화면)을 보고 지금이 '목표 시각 15분 전'이면 초안을 작성한다.
 //  같은 목표 시각은 한 번만(agent_schedule_last). 차례가 아니면 즉시 끝난다 — 설정을 바꿔도 SQL 을 다시 만질 필요가 없다.
 //  미들웨어 보호 밖(로그인 쿠키 없이 온다) — 아래 키 검증이 유일한 문이다.
 export async function POST(req: NextRequest) {
