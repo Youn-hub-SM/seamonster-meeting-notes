@@ -173,11 +173,13 @@ function DateControl({ range, base, min, onChange }: { range: Range; base: strin
     </div>
   );
 }
-function FilterControl({ label, options, value, onChange }: { label: string; options: string[]; value: string[] | null; onChange: (v: string[] | null) => void }) {
+// keepOne = 마지막 하나는 끌 수 없다([모두 해제]도 없다) — 정기배송 분석처럼 빈 선택이 '전체'로 읽히는 곳에서 쓴다
+function FilterControl({ label, options, value, onChange, keepOne }: { label: string; options: string[]; value: string[] | null; onChange: (v: string[] | null) => void; keepOne?: boolean }) {
   const { open, setOpen, ref } = usePop();
   const sel = value ?? options;
   const toggle = (o: string) => {
     const next = sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o];
+    if (keepOne && !next.length) return;
     onChange(next.length === options.length ? null : next);
   };
   const text = value == null ? "전체" : value.length === 0 ? "없음" : value.length === 1 ? value[0] : `${value.length}개`;
@@ -190,12 +192,55 @@ function FilterControl({ label, options, value, onChange }: { label: string; opt
         <div className="bd-pop">
           <div className="bd-pop-tools">
             <button type="button" className="b2b-link-btn" onClick={() => onChange(null)}>전체 선택</button>
-            <button type="button" className="b2b-link-btn" onClick={() => onChange([])}>모두 해제</button>
+            {!keepOne && <button type="button" className="b2b-link-btn" onClick={() => onChange([])}>모두 해제</button>}
           </div>
           <div className="bd-pop-checks">
             {options.map((o) => (
               <label key={o} className="bd-check"><input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} /><span>{o}</span></label>
             ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 정기배송 분석 탭의 선택칸 — 다른 탭의 기간·필터와 같은 모양. 값은 넣어 둔 정기배송 분석 화면의 필터를 그대로 움직인다(useSubEmbed).
+function SubDateControl({ from, to, min, max, onChange }: { from: string; to: string; min: string; max: string; onChange: (from: string, to: string) => void }) {
+  const { open, setOpen, ref } = usePop();
+  const [f, setF] = useState(from), [t, setT] = useState(to);
+  useEffect(() => { setF(from); setT(to); }, [from, to]);
+  const on = !!(from || to);
+  const bad = !!(f && t && f > t);
+  return (
+    <div className="bd-ctl" ref={ref}>
+      <button type="button" className={`bd-ctl-btn${on ? " is-on" : ""}`} aria-expanded={open} disabled={!max} onClick={() => setOpen(!open)}>
+        <span className="bd-ctl-k">신청일</span><strong>{on ? `${from || min} ~ ${to || max}` : "전체 기간"}</strong><span className="bd-ctl-caret">▾</span>
+      </button>
+      {open && (
+        <div className="bd-pop">
+          <div className="bd-pop-tools"><button type="button" className="b2b-link-btn" onClick={() => { onChange("", ""); setOpen(false); }}>전체 기간</button></div>
+          <div className="bd-pop-custom bd-pop-solo">
+            <label className="b2b-field"><span className="b2b-field-label">시작일</span><input type="date" className="b2b-input" value={f} min={min} max={max} onChange={(e) => setF(e.target.value)} /></label>
+            <label className="b2b-field"><span className="b2b-field-label">종료일</span><input type="date" className="b2b-input" value={t} min={min} max={max} onChange={(e) => setT(e.target.value)} /></label>
+            <button type="button" className="b2b-btn-primary" disabled={bad} onClick={() => { onChange(f, t); setOpen(false); }}>기간 적용</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function SectionControl({ nav, go }: { nav: { id: string; label: string; top: number }[]; go: (top: number) => void }) {
+  const { open, setOpen, ref } = usePop();
+  return (
+    <div className="bd-ctl" ref={ref}>
+      <button type="button" className="bd-ctl-btn" aria-expanded={open} disabled={!nav.length} onClick={() => setOpen(!open)}>
+        <span className="bd-ctl-k">구역</span><strong>바로 가기</strong><span className="bd-ctl-caret">▾</span>
+      </button>
+      {open && (
+        <div className="bd-pop">
+          <div className="bd-pop-list">
+            {nav.map((x) => <button key={x.id} type="button" className="bd-pop-item" onClick={() => { go(x.top); setOpen(false); }}>{x.label}</button>)}
           </div>
         </div>
       )}
@@ -612,18 +657,23 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
 //  계산을 다시 짜지 않는 까닭: 두 화면의 숫자가 한 글자도 다르지 않아야 비교가 된다. 그 화면이 스스로 문서 높이와 구역 위치를 알려 오므로
 //  안쪽 스크롤 없이 한 장으로 이어지고, 위 띠의 구역 버튼이 그 자리로 옮겨 준다.
 type SubNav = { id: string; label: string; top: number };
+type SubSet = { options: string[]; selected: string[] };
+type SubFilters = { statuses: SubSet; cycles: SubSet; products: SubSet; dateFrom: string; dateTo: string; dateMin: string; dateMax: string; shown: number; total: number };
+type SubFilterPatch = { statuses?: string[]; cycles?: string[]; products?: string[]; dateFrom?: string; dateTo?: string };
 const SUB_SRC = `/subscription-dashboard.html?board=1&v=${process.env.NEXT_PUBLIC_BUILD || "dev"}`;
 function useSubEmbed() {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(0);
   const [nav, setNav] = useState<SubNav[]>([]);
+  const [filters, setFilters] = useState<SubFilters | null>(null);
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       if (e.origin !== window.location.origin || e.source !== frame.current?.contentWindow) return;
-      const d = e.data as { type?: string; height?: number; sections?: SubNav[] } | null;
+      const d = e.data as { type?: string; height?: number; sections?: SubNav[]; filters?: SubFilters } | null;
       if (!d || d.type !== "sm-sub-board") return;
       if (typeof d.height === "number" && d.height > 0) setHeight(d.height);
       if (Array.isArray(d.sections)) setNav(d.sections);
+      if (d.filters && Array.isArray(d.filters.statuses?.options)) setFilters(d.filters);
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -635,7 +685,9 @@ function useSubEmbed() {
     const barH = bar && getComputedStyle(bar).position === "sticky" ? bar.getBoundingClientRect().height : 0;
     window.scrollTo({ top: f.getBoundingClientRect().top + window.scrollY + top - barH - 12, behavior: "smooth" });
   };
-  return { frame, height, nav, go };
+  // 선택칸에서 고른 값을 넣어 둔 화면의 필터에 보낸다 — 그 화면이 원래의 필터 적용을 그대로 돌리고 새 상태를 다시 알려 온다
+  const setFilter = (patch: SubFilterPatch) => frame.current?.contentWindow?.postMessage({ type: "sm-sub-filter", ...patch }, window.location.origin);
+  return { frame, height, nav, go, filters, setFilter };
 }
 
 export default function BoardPage() {
@@ -789,7 +841,7 @@ export default function BoardPage() {
           <div className="bd-heading">
             <h1 className="bd-title">주요 지표</h1>
             <p className="bd-basis">
-              {isSubx ? "카페24 정기배송 신청 전체 · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준"
+              {isSubx ? `카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""} · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준`
                 : !snap ? "\u00a0"
                 : topicId ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}고객은 처음 산 날 기준 · 방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장</>
                 : <>기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</>}
@@ -809,8 +861,14 @@ export default function BoardPage() {
             {TOPICS.map((t) => <button key={t.id} type="button" className={`sm-tab ${page === `t:${t.id}` ? "is-active" : ""}`} onClick={() => setPage(`t:${t.id}`)}>{t.name}</button>)}
           </div>
           {isSubx ? (
-            <div className="sm-tabs bd-secnav" role="group" aria-label="구역으로 이동">
-              {sub.nav.map((x) => <button key={x.id} type="button" className="sm-tab" onClick={() => sub.go(x.top)}>{x.label}</button>)}
+            <div className="bd-controls">
+              <SectionControl nav={sub.nav} go={sub.go} />
+              <SubDateControl from={sub.filters?.dateFrom ?? ""} to={sub.filters?.dateTo ?? ""} min={sub.filters?.dateMin ?? ""} max={sub.filters?.dateMax ?? ""} onChange={(from, to) => sub.setFilter({ dateFrom: from, dateTo: to })} />
+              {([["상태", "statuses"], ["배송주기", "cycles"], ["상품", "products"]] as const).map(([label, key]) => {
+                const f = sub.filters?.[key];
+                const all = !f || f.selected.length === f.options.length || f.selected.length === 0;   // 그 화면에서는 빈 선택도 전체다
+                return <FilterControl key={key} label={label} keepOne options={f?.options ?? []} value={all ? null : f.selected} onChange={(x) => sub.setFilter({ [key]: x ?? f?.options ?? [] })} />;
+              })}
             </div>
           ) : snap && range ? (
             <div className="bd-controls">

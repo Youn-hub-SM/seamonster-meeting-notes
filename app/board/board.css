@@ -26,9 +26,8 @@
 .bd-state > i { width: 6px; height: 6px; border-radius: 50%; background: var(--sm-success); }
 .bd-state.is-busy > i { background: var(--sm-orange); }
 .bd-pages { flex-wrap: nowrap; }
-.bd-pages .sm-tab, .bd-secnav .sm-tab { white-space: nowrap; }
+.bd-pages .sm-tab { white-space: nowrap; }
 .bd-controls { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-2); }
-.bd-secnav { margin-left: auto; flex-wrap: wrap; }
 
 /* 컨트롤 — 누르면 아래로 열리는 작은 창(떠 있는 면) */
 .bd-ctl { position: relative; }
@@ -46,6 +45,7 @@
 .bd-pop-item:hover { background: var(--sm-bg-subtle); }
 .bd-pop-item.is-active { background: var(--sm-orange-light); font-weight: 600; }
 .bd-pop-custom { display: flex; flex-direction: column; gap: var(--sm-space-3); min-width: 180px; padding-left: var(--sm-space-4); border-left: 1px solid var(--sm-border-light); }
+.bd-pop-solo { padding-left: 0; border-left: 0; }   /* 왼쪽 목록 없이 날짜 칸만 있는 창 */
 .bd-pop-tools { display: flex; gap: var(--sm-space-3); padding-bottom: var(--sm-space-2); margin-bottom: var(--sm-space-2); border-bottom: 1px solid var(--sm-border-light); }
 .bd-pop-checks { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
 .bd-check { display: flex; align-items: center; gap: var(--sm-space-2); padding: 6px var(--sm-space-1); border-radius: var(--sm-radius); font-size: var(--sm-fs-base); cursor: pointer; white-space: nowrap; }
@@ -104,7 +104,7 @@
 @media (max-width: 1100px) {
   .bd-bar { position: static; }   /* 좁은 화면에서는 띠가 여러 줄이 돼 화면을 가린다 — 붙이지 않는다 */
   .bd-c4, .bd-c6, .bd-c8 { grid-column: 1 / -1; }
-  .bd-controls, .bd-secnav { margin-left: 0; }
+  .bd-controls { margin-left: 0; }
   .bd-pop { right: auto; left: 0; }
 }
 @media (max-width: 700px) {

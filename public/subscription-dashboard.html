@@ -359,7 +359,7 @@
   html.board body { font-size: 12px; }
   /* 주요 지표의 카드와 같은 면(2026-11-16 대표가 고른 분위기) — 모서리 16·옅은 선·옅은 그림자·안 여백 20. 이 보기에서만 쓴다 */
   html.board .card, html.board .filter-card { padding: 20px; margin-bottom: 0; border: 1px solid var(--border-light); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
-  html.board .filter-card { padding: 0; }
+  html.board .filter-card { display: none !important; }   /* 필터는 주요 지표 위쪽 줄의 선택칸(신청일·상태·배송주기·상품)이 맡는다 — 제외 기본값은 저장된 값 그대로 적용 */
   html.board .card-head { margin-bottom: 16px; gap: 8px; }
   html.board .card-title { font-size: 15px; }
   html.board .card-sub { margin-top: 2px; }
@@ -795,10 +795,11 @@ function boardNotify() {
     .sort((a, b) => a.top - b.top);
   // 높이는 내용(.main)의 높이로 — 문서 높이(scrollHeight)는 창 높이보다 작아지지 않아, 한 번 늘린 뒤에는 목록을 접어도 줄지 않는다
   const height = Math.ceil(document.querySelector(".main").getBoundingClientRect().height);
-  const sig = height + "|" + sections.map((x) => x.id + ":" + x.top).join(",");
+  const filters = boardFilterState();
+  const sig = height + "|" + sections.map((x) => x.id + ":" + x.top).join(",") + "|" + JSON.stringify(filters);
   if (sig === boardNotify.last) return;   // 달라졌을 때만 알린다
   boardNotify.last = sig;
-  window.parent.postMessage({ type: "sm-sub-board", height, sections }, location.origin);
+  window.parent.postMessage({ type: "sm-sub-board", height, sections, filters }, location.origin);
 }
 // 오늘 상태 타일의 증감·추세선 — 날마다 저장된 히스토리 스냅샷(/api/subscription/snapshots, 분석 히스토리 그래프와 같은 자료)에서 만든다.
 //  [값 칸 id, 스냅샷 칸, 단위, 증감 표기(pct = %, pp = %p, both = 신청·해지 건수), 좋은 방향, 이 날짜부터만(기준이 바뀐 지표)]
@@ -908,6 +909,35 @@ function boardFolds() {
     };
     (head.children.length > 1 ? head.lastElementChild : head).appendChild(btn);
   }
+}
+// 필터 — 주요 지표 위쪽 줄의 선택칸이 이 화면의 필터(상태·배송주기·상품 칩, 신청일 기간)를 대신 누른다.
+//  지금 상태를 알려 주고(boardFilterState), 부모가 보낸 선택(sm-sub-filter)을 칩·날짜 칸에 옮긴 뒤 원래의 applyFilters 를 그대로 부른다 — 계산은 한 벌.
+function boardFilterState() {
+  const set = (id) => ({ options: [...document.querySelectorAll(`#${id} .chip`)].map((c) => c.dataset.val), selected: getChipSelected(id) });
+  const dates = allOrdersUnfiltered.map((o) => o.signDate).filter(Boolean).sort();
+  return {
+    statuses: set("fStatuses"), cycles: set("fCycles"), products: set("fProducts"),
+    dateFrom: document.getElementById("fDateFrom").value, dateTo: document.getElementById("fDateTo").value,
+    dateMin: dates[0] || "", dateMax: dates[dates.length - 1] || "",
+    shown: orders.length, total: allOrdersUnfiltered.length,
+  };
+}
+if (BOARD) {
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || e.source !== window.parent) return;
+    const d = e.data || {};
+    if (d.type !== "sm-sub-filter" || !rawRows.length) return;
+    const pick = (id, list) => {
+      if (!Array.isArray(list)) return;
+      const on = new Set(list);
+      document.querySelectorAll(`#${id} .chip`).forEach((c) => c.classList.toggle("on", on.has(c.dataset.val)));
+    };
+    pick("fStatuses", d.statuses); pick("fCycles", d.cycles); pick("fProducts", d.products);
+    const ok = (v) => typeof v === "string" && (v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v));
+    if (ok(d.dateFrom)) document.getElementById("fDateFrom").value = d.dateFrom;
+    if (ok(d.dateTo)) document.getElementById("fDateTo").value = d.dateTo;
+    applyFilters();
+  });
 }
 if (BOARD) {
   window.addEventListener("load", () => {
