@@ -4,6 +4,8 @@
 //  도매 몫(2026-11-16 대표: "소매요청서는 도매요청서 반영해야해. 도매요청서가 먼저 들어올거니까"):
 //   도매 요청서가 먼저 작성되고(보통 화요일), 제조사가 만든 물량은 소매 칸으로 들어온 뒤 도매 칸으로 옮겨진다. 그래서 열려 있는 도매 생산 요청서('도매 납품')의
 //   잔여(요청 − 이동 완료)는 소매 재고에 걸린 청구다 — 목표에 더해 함께 생산을 요청한다. 도매 재고·도매 출고는 보지 않는다(도매에 얼마가 필요한지는 도매 요청서가 정했다).
+//   반영 기준(2026-11-16 대표: "도매요청서가 결재된다면 반영. 확정 전이라면 확정필요로 남겨줘"): 결재되어 요청서로 작성된 것이면 '확정 필요' 상태여도 더한다.
+//   그 요청서의 상태는 건드리지 않고, 초안의 알림 줄에 '확정 필요'라고 남긴다. 아직 결재하지 않은 도매 초안(에이전트 보고서)은 요청서가 아니라 더하지 않는다 — 알림만.
 //   두 번 세지 않는 까닭: 지난주 도매 요청분은 지난주 제조사 요청서에 들어 있고, 그 제조사 요청서의 잔여(입고 예정·확정 전 요청)를 아래 수식이 뺀다.
 //  수식은 재고 목록 소매 탭의 권장 생산(production-inventory getInventoryRows '소매')에서 출발한다:
 //   목표 = 평상시 하루 출고 × (오늘 → 다음 요청분 판매 가능일).
@@ -47,16 +49,25 @@ async function loadPast(sb: SupabaseClient, since: string): Promise<{ ok: boolea
   return { ok: true, heads: (data ?? []) as unknown as PastHead[] };
 }
 
+// 결재를 기다리는 도매 생산 요청서 초안(도매 에이전트 보고서 — 작성은 끝났고 아직 결재·피드백 전) 가운데 가장 최근 것의 작성일(한국 날짜). 없거나 못 읽으면 null.
+async function pendingWholesaleDraft(sb: SupabaseClient, since: string): Promise<string | null> {
+  const { data, error } = await sb.from("agent_reports").select("created_at").eq("agent", "wholesale-request").eq("status", "done").is("applied", null)
+    .gte("created_at", `${since}T00:00:00+09:00`).order("created_at", { ascending: false }).limit(1);
+  const at = error ? null : (data?.[0] as { created_at?: string } | undefined)?.created_at;
+  return at ? new Date(Date.parse(at) + 9 * 3600e3).toISOString().slice(0, 10) : null;
+}
+
 async function collect(sb: SupabaseClient): Promise<Collected> {
   const today = kstTodayIso();
   const warnings: string[] = [];
-  const [rt, prod, bundles, reqDraft, reqConfirmed, past] = await Promise.all([
+  const [rt, prod, bundles, reqDraft, reqConfirmed, past, pendingDraft] = await Promise.all([
     getInventoryRows("소매"),
     readProducts(sb),
     sb.from("product_bundles").select("parent_id").limit(5000),
     loadRequests(sb, { status: "요청" }),
     loadRequests(sb, { status: "진행중" }),
     loadPast(sb, addDays(today, -PAST_DAYS)),
+    pendingWholesaleDraft(sb, addDays(today, -7)),
   ]);
   if (!rt.inboundOk) warnings.push("확정된 요청서의 입고 예정을 집계하지 못했습니다 — 수식 권장이 이미 요청한 양을 빼지 못한 값입니다.");
   if (!rt.settingsOk) warnings.push("행사 일정·추가 확보 설정을 읽지 못했습니다 — 하루 출고에 행사 출고가 섞였을 수 있습니다.");
@@ -86,6 +97,10 @@ async function collect(sb: SupabaseClient): Promise<Collected> {
   // 이번 주(월요일부터)에 작성된 도매 요청서가 있는가 — 없으면 이번 주 도매 몫이 아직 안 들어온 것일 수 있다
   const weekStart = addDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7));
   const wholesaleThisWeek = wholesaleOpen.some((q) => q.request_date >= weekStart);
+  // 결재는 됐지만 아직 확정 전인 도매 요청서 — 수량에는 반영하고 '확정 필요'라고 남긴다(상태는 바꾸지 않는다)
+  const unconfirmed = wholesaleOpen.filter((q) => q.status === "요청" && q.items.some((it) => it.requested_qty - it.received_qty > 0)).map((q) => q.req_no || "번호 없음");
+  if (unconfirmed.length) warnings.push(`도매 생산 요청서 ${unconfirmed.join("·")}: 확정 필요 상태입니다. 결재된 요청서라 수량에 반영했습니다.`);
+  if (pendingDraft) warnings.push(`결재를 기다리는 도매 생산 요청서 초안이 있습니다(${pendingDraft.slice(5)} 작성). 결재 전이라 반영하지 않았습니다. 도매 초안을 결재한 뒤 다시 [업무 요청]하세요.`);
 
   // 아직 확정하지 않은 제조사 요청서('요청' = 화면의 '확정 필요')의 품목별 잔여 — 확정된 것은 getInventoryRows 의 입고 예정에 이미 들어 있다
   const isMine = (q: { purpose: string }) => q.purpose === PURPOSE;
@@ -175,7 +190,7 @@ async function collect(sb: SupabaseClient): Promise<Collected> {
     modelFacts: {
       기준일: kstTodayLabel(), 다음요청일: s.nextDraft, 생산시작예정일: defaultProdStart(today), 생산종료예정일: dueDate,
       이번요청판매가능일: s.sellable, 다음요청분판매가능일: s.nextSellable, 부족기준일수: rt.leadDays, 목표일수: rt.horizonDays, 출고평균일수: rt.velocitySpanDays,
-      이번주도매요청서: wholesaleThisWeek,
+      이번주도매요청서: wholesaleThisWeek, 결재대기도매초안: pendingDraft,
       경고: warnings, rows, open_requests: openRequests, wholesale_requests: wholesaleRequests, past_requests: pastRequests,
     },
     rowCount: rows.length, bySku, products, bundleIds, warnings,
@@ -217,7 +232,7 @@ const SYSTEM = `당신은 씨몬스터(냉동 순살 생선 — 소매와 B2B �
   · 단위kg: 판매 단위 1개의 중량, 권장kg: 수식권장을 kg 으로 바꾼 값. 없는 품목은 중량이 등록되지 않은 품목입니다.
   · 있을 때만 나오는 칸 — 마감지난도매요청(마감일이 지난 도매 요청서의 잔여 — 도매요청에 들어 있는 양), 행사포함하루출고(행사 출고를 빼기 전 하루 평균), 행사예정(목표일수 안에 남은 행사 예상 판매량), 추가확보·추가확보사유(담당자가 목표에 더하거나 뺀 양), 마감지난입고예정(생산 종료일이 지났는데 아직 안 들어온 양), 지난요청(최근 6주 제조사 요청서에서 이 품목을 요청한 날짜와 수량, 최신순)
 - facts.open_requests: 열려 있는 제조사 요청서(확정 필요·확정). facts.past_requests: 최근 6주 제조사 요청서 목록.
-- facts.wholesale_requests: 열려 있는 도매 생산 요청서와 품목별 잔여. facts.이번주도매요청서: 이번 주(월요일부터)에 작성된 도매 생산 요청서가 있으면 true 입니다.
+- facts.wholesale_requests: 열려 있는 도매 생산 요청서(결재되어 작성된 것 — 상태는 '확정 필요' 또는 '확정')와 품목별 잔여. facts.이번주도매요청서: 이번 주(월요일부터)에 작성된 도매 생산 요청서가 있으면 true 입니다. facts.결재대기도매초안: 아직 결재하지 않은 도매 초안이 있으면 그 작성일, 없으면 null 입니다.
 - 회사 해석 기준: '생산 요청' 절에 제조사의 생산 제약이 있습니다. 아래 [제조사 제약]대로 따릅니다.
 - 지난 보고서: 당신이 전에 낸 첫 초안, 요청서로 확정된 수량, 담당자의 피드백입니다. 담당자가 고친 방향을 같은 상황에 미리 적용합니다.
 - 담당자 피드백(있을 때만): 당신이 낸 초안과 그에 대한 담당자의 피드백입니다. 피드백이 말한 것은 그대로 반영하고, 말하지 않은 품목과 수량은 초안 그대로 둡니다. 피드백이 '요청하지 않는다'는 뜻이면 items 를 비워 제출합니다. 피드백의 뜻이 여러 가지로 읽히면 수량이 적은 쪽으로 정하고 '확인 필요'에 어떻게 읽었는지 적습니다.
@@ -234,7 +249,7 @@ const SYSTEM = `당신은 씨몬스터(냉동 순살 생선 — 소매와 B2B �
 
 [판단 기준]
 1. 생산이 필요한 품목 = 소매재고와 이미 요청한 양을 합쳐도 다음요청분판매가능일까지의 소매 판매와 도매 요청을 채우지 못하는 품목입니다. 출발점은 수식권장이고, 수식권장이 0인 품목은 넣지 않습니다(피드백·덧붙인 말·회사 규칙이 시킬 때만 예외).
-2. 도매요청은 적힌 그대로 더합니다. 줄이거나 늘리지 않습니다. 도매 수량의 판단은 도매 생산 요청서의 몫입니다. 도매 요청서가 아직 '확정 필요' 상태여도 더합니다. 도매요청이 있는 품목은 이유에 소매 몫과 도매 몫을 나눠 적습니다(예: 소매 120 + 도매 요청 60). 마감지난도매요청이 있으면 수량에는 넣되 요청번호와 함께 '확인 필요'에 적습니다. 이번주도매요청서가 false 이면 '확인 필요'에 "이번 주 도매 생산 요청서가 아직 없습니다. 이번 주 도매 몫이 빠졌을 수 있습니다"라고 적습니다.
+2. 도매요청은 적힌 그대로 더합니다. 줄이거나 늘리지 않습니다. 도매 수량의 판단은 도매 생산 요청서의 몫입니다. 결재되어 요청서로 작성된 도매 생산 요청서는 아직 '확정 필요' 상태여도 더합니다. 그 요청서의 상태는 그대로 두고, 더한 요청서 가운데 '확정 필요' 상태인 것은 요청번호와 함께 '확인 필요'에 "확정 필요"라고 적습니다. 아직 결재되지 않은 도매 초안(facts.결재대기도매초안에 작성일이 있으면 그런 초안이 있는 것)은 요청서가 아니므로 더하지 않고, '확인 필요'에 "도매 초안을 결재한 뒤 다시 요청해야 합니다"라고 적습니다. 도매요청이 있는 품목은 이유에 소매 몫과 도매 몫을 나눠 적습니다(예: 소매 120 + 도매 요청 60). 마감지난도매요청이 있으면 수량에는 넣되 요청번호와 함께 '확인 필요'에 적습니다. 이번주도매요청서가 false 이면 '확인 필요'에 "이번 주 도매 생산 요청서가 아직 없습니다. 이번 주 도매 몫이 빠졌을 수 있습니다"라고 적습니다.
 3. 소매 출고 추이를 봅니다. 최근7일출고가 하루출고 × 7 보다 뚜렷이 많거나 적으면 어느 쪽이 앞으로 2~3주를 대표하는지 판단해 소매 몫을 올리거나 내리고, 그 판단을 이유에 적습니다. 최근7일출고·최근30일출고에는 행사 출고가 들어 있으니, 행사포함하루출고나 행사예정이 있는 품목은 행사 때문에 늘어난 것인지 먼저 봅니다.
 4. 행사 물량은 이 요청서에 더하지 않습니다. 행사는 프로모션 요청서가 따로 맡습니다. 행사예정이 있는 품목은 수량을 평상시 기준으로 정하고, 행사예정 수량을 '확인 필요'에 적습니다.
 5. 입고예정과 확정전요청은 이미 요청된 양입니다. 같은 양을 다시 요청하지 않습니다. 마감지난입고예정이 있는 품목은 그 양이 실제로 들어올지 알 수 없으니 수량은 그대로 두고 '확인 필요'에 적습니다.
