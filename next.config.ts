@@ -14,7 +14,8 @@ const HOLD_AGENTS = false;
 const HELD = "/__held-in-production"; // 없는 주소 — 404
 
 const nextConfig: NextConfig = {
-  env: { NEXT_PUBLIC_HOLD_AGENTS: HOLD_AGENTS ? "1" : "" },
+  // NEXT_PUBLIC_BUILD = 배포(커밋)마다 바뀌는 값 — 클라이언트 화면이 정적 HTML(iframe)을 부를 때 쿼리에 붙여 옛 파일이 남지 않게 한다(/board 정기배송 분석 탭)
+  env: { NEXT_PUBLIC_HOLD_AGENTS: HOLD_AGENTS ? "1" : "", NEXT_PUBLIC_BUILD: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) || "dev" },
   // 파도소리 주소에서 /favicon.ico 를 직접 요청하면(북마크·일부 브라우저) 씨몬스터 파비콘 대신 파도소리 아이콘.
   //  정적 파일이라 미들웨어(matcher 제외)로는 못 막는다 — 파일보다 먼저 도는 beforeFiles 리라이트로.
   //  대표 규칙: 파도소리 주소에서는 씨몬스터 업무도우미가 전혀 보이면 안 된다.

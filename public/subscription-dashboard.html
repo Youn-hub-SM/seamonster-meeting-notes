@@ -320,6 +320,29 @@
     cursor: pointer;
     max-height: 320px; overflow-y: auto;
   }
+
+  /* ── 주요 지표용 보기(?board=1) — /board 의 '정기배송 분석' 탭이 이 화면을 그대로 넣는다. 계산은 한 벌, 보는 순서와 군더더기만 다르다. ──
+     · 구역 제목(.sec-title)으로 묶고, 오늘 상태 → 추세 → 잔존 → 구성 → 회원 → 발송 → 기록 순으로 놓는다(기록 = 히스토리·상태 변화가 맨 아래).
+     · 쓰는 동작(CSV 업로드·결과 저장·기록 삭제·제외 기본값 저장)은 숨긴다 — 주요 지표는 보는 화면이다.
+     · 높이는 부모 창이 맞춘다(안쪽 스크롤 없음). */
+  .sec-title { display: none; }
+  html.board, html.board body { background: transparent; }
+  html.board .main { max-width: none; padding: 0; display: flex; flex-direction: column; }
+  html.board .page-head, html.board #emptyState, html.board .priv-note, html.board #snapshotSection, html.board .history-del,
+  html.board .filter-group:has(#saveExcludeBtn) { display: none !important; }
+  html.board #dashboard { order: 1; }
+  html.board #secHistory { order: 2; }
+  html.board #historySection { order: 3; }
+  html.board #transitionSection { order: 4; }
+  html.board #boardWait { order: 0; }
+  html.board .sec-title { display: block; font-size: 13px; font-weight: 600; color: var(--text-sub); margin: 32px 0 12px; scroll-margin-top: 12px; }
+  html.board #dashboard > .sec-title:first-of-type { margin-top: 0; }
+  html.board .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 0; }
+  html.board #secMixGrid { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 1100px) { html.board #secMixGrid { grid-template-columns: 1fr; } }
+  html.board .filter-card { margin-top: 32px; margin-bottom: 0; }
+  #boardWait { display: none; }
+  html.board #boardWait { display: block; padding: 48px 0; text-align: center; color: var(--text-sub); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -338,6 +361,8 @@
     </div>
   </div>
 
+  <div id="boardWait">불러오는 중...</div>
+  <h2 class="sec-title" id="secHistory" data-nav="기록">기록 — 날마다 쌓인 숫자와 상태 변화</h2>
   <!-- 분석 히스토리 (추세) — CSV 업로드 없이도 항상 표시 -->
   <section class="card" id="historySection">
     <div class="card-head">
@@ -480,6 +505,7 @@
     </section>
 
     <!-- KPI -->
+    <h2 class="sec-title" id="secKpi" data-nav="오늘 상태">오늘 상태</h2>
     <section class="kpi-grid">
       <div class="kpi accent">
         <div class="kpi-label">활성 회원 수</div>
@@ -519,6 +545,7 @@
     </section>
 
     <!-- 시계열 -->
+    <h2 class="sec-title" id="secTrend" data-nav="추세">추세</h2>
     <div class="grid-2">
       <section class="card">
         <div class="card-head">
@@ -542,6 +569,7 @@
     </div>
 
     <!-- 생존 / 코호트 -->
+    <h2 class="sec-title" id="secSurvival" data-nav="잔존">잔존</h2>
     <div class="grid-2">
       <section class="card">
         <div class="card-head">
@@ -572,7 +600,8 @@
     </div>
 
     <!-- 분포 차트 -->
-    <div class="grid-2">
+    <h2 class="sec-title" id="secMix" data-nav="구성">구성 — 어종·지역·주기</h2>
+    <div class="grid-2" id="secMixGrid">
       <section class="card">
         <div class="card-head"><div><div class="card-title">어종 Top 10</div><div class="card-sub">신청건당 1회 카운트 (같은 신청 내 중복 옵션 제외)</div></div></div>
         <div class="chart-wrap"><canvas id="speciesChart"></canvas></div>
@@ -588,6 +617,7 @@
     </div>
 
     <!-- 테이블 -->
+    <h2 class="sec-title" id="secMembers" data-nav="회원·신청">회원·신청</h2>
     <section class="card">
       <div class="card-head">
         <div><div class="card-title">재구매 회원 랭킹</div><div class="card-sub">2건 이상 신청한 회원</div></div>
@@ -649,7 +679,7 @@
     </section>
 
     <!-- 결과 스냅샷 저장 -->
-    <section class="card">
+    <section class="card" id="snapshotSection">
       <div class="card-head">
         <div>
           <div class="card-title">결과 스냅샷 저장</div>
@@ -667,6 +697,7 @@
     </section>
 
     <!-- 발송 일정 (보조 도구 — 운영 픽업용) -->
+    <h2 class="sec-title" id="secShip" data-nav="발송 일정">발송 일정</h2>
     <section class="card" id="shippingSection">
       <div class="card-head">
         <div>
@@ -691,6 +722,26 @@
 
 <script>
 "use strict";
+
+// =========================== 주요 지표용 보기(?board=1) ===========================
+// /board 의 '정기배송 분석' 탭이 iframe 으로 넣는다. 부모 창이 높이를 맞추도록 문서 높이와 구역 위치를 알린다(같은 출처에만).
+const BOARD = new URLSearchParams(location.search).has("board");
+if (BOARD) document.documentElement.classList.add("board");
+function boardNotify() {
+  if (!BOARD || window.parent === window) return;
+  const sections = [...document.querySelectorAll(".sec-title")].filter((el) => el.offsetParent !== null)
+    .map((el) => ({ id: el.id, label: el.dataset.nav || el.textContent, top: Math.round(el.getBoundingClientRect().top + window.scrollY) }))
+    .sort((a, b) => a.top - b.top);
+  window.parent.postMessage({ type: "sm-sub-board", height: Math.ceil(document.documentElement.scrollHeight), sections }, location.origin);
+}
+if (BOARD) {
+  window.addEventListener("load", () => {
+    document.getElementById("filterBody").classList.remove("open");   // 필터는 접어 둔다(펼치면 그대로 쓸 수 있다)
+    document.getElementById("filterHead").classList.remove("open");
+    new ResizeObserver(boardNotify).observe(document.body);
+    boardNotify();
+  });
+}
 
 // =========================== 차트 색·규격 ===========================
 // 이 화면은 Chart.js(캔버스)를 쓴다. 캔버스는 CSS 변수를 못 읽으므로 색을 런타임에
@@ -940,6 +991,7 @@ function ingestRows(rows, meta) {
   applyFilters();
   document.getElementById("emptyState").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
+  document.getElementById("boardWait").style.display = "none";
   document.getElementById("resetBtn").style.display = "inline-block";
   document.getElementById("dataInfo").textContent = meta.source === "api"
     ? `카페24 자동 수집 · ${meta.label || dataTodayISO} 기준 · 신청일 ${dates[0]} ~ ${dates[dates.length-1]} · 이름·연락처·주소는 저장하지 않습니다${meta.complete === false ? " · 주의: 마지막 수집에서 일부 기간을 못 받아 그 기간 신청은 이전 상태일 수 있습니다" : ""}`
@@ -2404,16 +2456,24 @@ document.getElementById("saveExcludeBtn").onclick = async () => {
   try {
     const res = await fetch("/api/subscription/data", { cache: "no-store" });
     const j = await res.json();
-    if (!res.ok || !j.ok || !Array.isArray(j.rows) || !j.rows.length) return;
+    if (!res.ok || !j.ok || !Array.isArray(j.rows) || !j.rows.length) { document.getElementById("boardWait").textContent = "수집된 정기배송 데이터가 없습니다."; return; }
     autoData = j;
     if (rawRows.length) { applyDataSourceUi(); return; } // 그사이 CSV 를 올렸으면 그대로 두고 버튼만
     loadAuto();
-  } catch (e) { /* CSV 업로드로 진행 */ }
+  } catch (e) { document.getElementById("boardWait").textContent = "정기배송 데이터를 불러오지 못했습니다."; /* CSV 업로드로 진행 */ }
 })();
 
 // 분석 갱신 시 미리보기도 갱신 (render() 끝부분에서 호출)
 const _origRender = render;
-render = function() { _origRender(); renderSnapshotPreview(); };
+render = function() { _origRender(); renderSnapshotPreview(); boardNotify(); };
+// 주요 지표용 보기 — 그릴 때마다 높이를 다시 알린다(크기 감시는 화면이 가려져 있으면 돌지 않는다). 펼치기·접기·칩 누름 뒤에도 한 번.
+if (BOARD) {
+  for (const name of ["renderHistory", "renderTransitions", "renderShippingSchedule", "renderOrdersTable"]) {
+    const orig = window[name];
+    if (typeof orig === "function") window[name] = function () { const r = orig.apply(this, arguments); boardNotify(); return r; };
+  }
+  document.addEventListener("click", () => setTimeout(boardNotify, 80));
+}
 </script>
 </body>
 </html>

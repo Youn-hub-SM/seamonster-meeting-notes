@@ -31,7 +31,7 @@ const PRESETS: Preset[] = [
 ];
 type Range = { preset: string; from: string; to: string };
 type Filters = { salesCh: string[] | null; media: string[] | null; gaCh: string[] | null }; // null = 전체
-const PAGES = [["summary", "요약"], ["sales", "매출"], ["ads", "광고·유입"], ["sub", "정기배송·고객"]] as const;
+const PAGES = [["summary", "요약"], ["sales", "매출"], ["ads", "광고·유입"], ["sub", "정기배송·고객"], ["subx", "정기배송 분석"]] as const;
 type PageKey = (typeof PAGES)[number][0];
 
 // ── 증감 ── good = 어느 쪽이 좋은가(none = 판정하지 않는 숫자: 광고비 등)
@@ -626,6 +626,37 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   );
 }
 
+// ── 정기배송 분석 탭 — 정기배송 분석 화면(public/subscription-dashboard.html)을 주요 지표용 보기(?board=1)로 그대로 넣는다(2026-11-16 대표:
+//   "정기배송 분석도 주요지표로 — 이미 있는 정기배송 필드와 별개로 넣고 비교, 전부 들어가 있어야, 가독성 주의").
+//  계산을 다시 짜지 않는 까닭: 두 화면의 숫자가 한 글자도 다르지 않아야 비교가 된다. 그 화면이 스스로 문서 높이와 구역 위치를 알려 오므로
+//  안쪽 스크롤 없이 한 장으로 이어지고, 위 띠의 구역 버튼이 그 자리로 옮겨 준다.
+type SubNav = { id: string; label: string; top: number };
+const SUB_SRC = `/subscription-dashboard.html?board=1&v=${process.env.NEXT_PUBLIC_BUILD || "dev"}`;
+function useSubEmbed() {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(0);
+  const [nav, setNav] = useState<SubNav[]>([]);
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || e.source !== frame.current?.contentWindow) return;
+      const d = e.data as { type?: string; height?: number; sections?: SubNav[] } | null;
+      if (!d || d.type !== "sm-sub-board") return;
+      if (typeof d.height === "number" && d.height > 0) setHeight(d.height);
+      if (Array.isArray(d.sections)) setNav(d.sections);
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+  // 구역으로 옮기기 — 붙어 있는 위 띠(.bd-bar)에 가리지 않게 그 높이만큼 덜 내린다
+  const go = (top: number) => {
+    const f = frame.current; if (!f) return;
+    const bar = document.querySelector(".bd-bar");
+    const barH = bar && getComputedStyle(bar).position === "sticky" ? bar.getBoundingClientRect().height : 0;
+    window.scrollTo({ top: f.getBoundingClientRect().top + window.scrollY + top - barH - 12, behavior: "smooth" });
+  };
+  return { frame, height, nav, go };
+}
+
 export default function BoardPage() {
   const [snap, setSnap] = useState<BoardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -667,6 +698,8 @@ export default function BoardPage() {
 
   // 주제 묶음 — 그 주제 탭을 볼 때만. 본 묶음이 새로 계산되면(builtAt) 다시 받는다
   const topicId = page.startsWith("t:") ? page.slice(2) : "";
+  const isSubx = page === "subx";   // 정기배송 분석 탭 — 주요 지표 묶음과 무관하게 그 화면이 스스로 불러온다
+  const sub = useSubEmbed();
   const topicKey = topicId && snap ? `${topicId}|${snap.builtAt}` : "";
   const haveTopicKey = topicState.key;
   useEffect(() => {
@@ -778,11 +811,19 @@ export default function BoardPage() {
             {TOPICS.map((t) => <button key={t.id} type="button" className={`sm-tab ${page === `t:${t.id}` ? "is-active" : ""}`} onClick={() => setPage(`t:${t.id}`)}>{t.name}</button>)}
           </div>
           <div className="bd-bar-right">
-            {snap && <span className="bd-state">{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
-            <button type="button" className="b2b-btn-secondary" onClick={rebuild} disabled={busy || loading}>{busy ? "계산 중..." : "다시 계산"}</button>
+            {!isSubx && snap && <span className="bd-state">{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
+            {!isSubx && <button type="button" className="b2b-btn-secondary" onClick={rebuild} disabled={busy || loading}>{busy ? "계산 중..." : "다시 계산"}</button>}
           </div>
         </div>
-        {snap && range && (
+        {isSubx && (
+          <div className="bd-controls">
+            <div className="sm-tabs bd-secnav" role="group" aria-label="구역으로 이동">
+              {sub.nav.map((s) => <button key={s.id} type="button" className="sm-tab" onClick={() => sub.go(s.top)}>{s.label}</button>)}
+            </div>
+            <span className="bd-basis">카페24 정기배송 신청 전체 · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준</span>
+          </div>
+        )}
+        {!isSubx && snap && range && (
           <div className="bd-controls">
             <DateControl range={range} base={snap.base} min={snap.days[0]} onChange={setRange} />
             <FilterControl label="판매 채널" options={salesOptions} value={filters.salesCh} onChange={(x) => setFilters((f) => ({ ...f, salesCh: x }))} />
@@ -795,8 +836,9 @@ export default function BoardPage() {
         )}
       </header>
       <main className="bd-canvas">
-        {error && <div className="b2b-error bd-c12">{error}</div>}
-        {loading && !snap ? <div className="b2b-loading bd-c12">불러오는 중...</div>
+        {!isSubx && error && <div className="b2b-error bd-c12">{error}</div>}
+        {isSubx ? <iframe ref={sub.frame} src={SUB_SRC} title="정기배송 분석" className="bd-embed bd-c12" style={sub.height ? { height: sub.height } : undefined} />
+          : loading && !snap ? <div className="b2b-loading bd-c12">불러오는 중...</div>
           : !snap ? (refreshing ? <div className="b2b-loading bd-c12">처음 계산하는 중...</div> : null)
           : topicId ? (
             !curTopic ? <div className="b2b-empty bd-c12">없는 주제입니다.</div>
