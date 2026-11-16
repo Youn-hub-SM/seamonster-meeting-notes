@@ -29,9 +29,8 @@ if (!mallId || !clientId || !clientSecret) {
 const code = (process.argv[2] || "").trim();
 if (!code) {
   // 재고 수정(channel-commands)까지 쓰므로 read+write 둘 다 요청 — 앱 권한에도 '상품 수정'이 있어야 한다
-  // mall.write_order = 주문 쓰기(정기배송 일시정지·해지·배송일 변경 — 정기배송 묶음 관리, 2026-11-14) — 앱 권한에 '주문 쓰기'가 있어야 한다
   // mall.read_community = 게시판 읽기(공식몰 리뷰 수집 cafe24-review-sync.mjs, 2026-11-12) — 앱 권한에 '게시판 읽기'가 있어야 한다
-  const url = `https://${mallId}.cafe24api.com/api/v2/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent("mall.read_product,mall.write_product,mall.read_order,mall.write_order,mall.read_community")}&state=seamonster`;
+  const url = `https://${mallId}.cafe24api.com/api/v2/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent("mall.read_product,mall.write_product,mall.read_order,mall.read_community")}&state=seamonster`;
   console.log("아래 URL 을 브라우저에서 열어 [허용] 후, 이동된 주소창의 code= 값을 복사해 다시 실행하세요:");
   console.log(url);
   process.exit(0);
