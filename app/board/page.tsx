@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { StackedBar, LineChart, Sparkline, Donut, ChartLegend, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 import { won } from "@/app/lib/format";
-import { spanOf, spanSum, addSeries, cut, sumOf, pctChange, ratio, lastKnown, shiftDay, daysBetween, TOPICS, type BoardSnapshot, type BoardDetail, type Span, type TopicDef, type TopicSnapshot } from "@/app/lib/board-types";
+import { spanOf, spanSum, addSeries, cut, sumOf, pctChange, ratio, shiftDay, daysBetween, TOPICS, type BoardSnapshot, type BoardDetail, type Span, type TopicDef, type TopicSnapshot } from "@/app/lib/board-types";
 
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
@@ -35,7 +35,8 @@ const PRESETS: Preset[] = [
 type Range = { preset: string; from: string; to: string };
 type Filters = { salesCh: string[] | null; media: string[] | null; gaCh: string[] | null }; // null = 전체
 // '정기배송·고객' 쪽은 2026-11-16 삭제(대표: "크게 역할을 하지 못한다") — 정기배송은 '정기배송 분석' 탭이 맡는다
-const PAGES = [["summary", "요약"], ["sales", "매출"], ["ads", "광고·유입"], ["subx", "정기배송 분석"]] as const;
+// '요약' 쪽은 2026-11-17 삭제(대표: "요약 대시보드는 필요없겠다") — 첫 화면은 '매출'이다. 다시 만들지 않는다
+const PAGES = [["sales", "매출"], ["ads", "광고·유입"], ["subx", "정기배송 분석"]] as const;
 type PageKey = (typeof PAGES)[number][0];
 
 // ── 증감 ── good = 어느 쪽이 좋은가(none = 판정하지 않는 숫자: 광고비 등)
@@ -53,11 +54,6 @@ function ppDelta(cur: number | null, prev: number | null, good: Good): Delta { /
   if (cur == null || prev == null) return null;
   const r = Math.round((cur - prev) * 10) / 10;
   return { text: `${arrow(r)} ${Math.abs(r)}%p`.trim(), tone: toneOf(r, r === 0, good) };
-}
-function absDelta(cur: number | null, prev: number | null, unit: string, good: Good): Delta {
-  if (cur == null || prev == null) return null;
-  const r = cur - prev;
-  return { text: `${arrow(r)} ${Math.abs(r).toLocaleString()}${unit}`.trim(), tone: toneOf(r, r === 0, good) };
 }
 const DeltaText = ({ d }: { d: Delta }) => (d ? <span className={`bd-delta is-${d.tone}`}>{d.text}</span> : <span className="bd-delta is-flat">-</span>);
 
@@ -295,10 +291,8 @@ function buildView(s: BoardSnapshot, sp: Span, f: Filters) {
   const gaRows = gaSel.map((c) => { const x = spanSum(c.sessions, sp), p = spanSum(c.purchases, sp); return { name: c.name, sessions: x.cur, prevSessions: x.prev, purchases: p.cur, conv: ratio(p.cur * 100, x.cur) }; })
     .filter((r) => r.sessions > 0).sort((a, b) => b.sessions - a.sessions);
 
-  // 정기배송(요약의 이용중 회원·매출의 정기배송 매출)
+  // 정기배송(매출 쪽의 정기배송 매출)
   const sub = s.sub.ok ? s.sub : null;
-  const active = sub ? { cur: lastKnown(sub.active, sp.i1), prev: sp.prev ? lastKnown(sub.active, sp.prev.i1) : null } : null;
-  const pause = sub ? lastKnown(sub.pause, sp.i1) : null;
   const subRevS = sub ? spanSum(sub.subRev, sp) : null;
   const allRev = sales ? spanSum(addSeries(sales.channels.map((c) => c.rev), N), sp) : null; // 정기배송 매출 비중의 분모는 전체 채널
 
@@ -306,7 +300,7 @@ function buildView(s: BoardSnapshot, sp: Span, f: Filters) {
     win, prevWin, hasPrev: !!sp.prev, days, labels, sales, rev, orders, revS, ordS, aov, aovSeries, chRows,
     meta, naver, naverEx, spend, hasAds, spendS, mRoas, nRoas, naverPending, mediaRows,
     ga, sessions, gaPurchases, sesS, purS, conv, gaRows,
-    sub, active, pause, subRevS, allRev,
+    sub, subRevS, allRev,
   };
 }
 type View = ReturnType<typeof buildView>;
@@ -341,7 +335,6 @@ const ScoreSpend = ({ v, s }: { v: View; s: BoardSnapshot }) => (
     note={v.hasAds ? (v.naverPending ? "네이버 광고비 일부 받는 중" : prevNote(v.spendS?.prev != null ? `${moneyCompact(Math.round(v.spendS.prev))}원` : null)) : (why(s.meta) ?? why(s.naver))} spark={v.hasAds ? v.win(v.spend) : undefined} />
 );
 const ScoreSessions = ({ v, s }: { v: View; s: BoardSnapshot }) => <Score label="방문" value={cnt(v.sesS?.cur, "회")} delta={pctDelta(v.sesS?.cur ?? null, v.sesS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.sesS?.prev, "회")) : why(s.ga)} spark={v.ga ? v.win(v.sessions) : undefined} />;
-const ScoreActive = ({ v }: { v: View }) => <Score label="정기배송 이용중" value={cnt(v.active?.cur, "명")} delta={absDelta(v.active?.cur ?? null, v.active?.prev ?? null, "명", "up")} note={v.pause != null ? `일시정지 ${v.pause.toLocaleString()}명` : undefined} spark={v.sub ? v.win(v.sub.active) : undefined} />;
 const ScoreSubRev = ({ v }: { v: View }) => {
   const share = v.subRevS && v.allRev ? ratio(v.subRevS.cur * 100, v.allRev.cur) : null;
   return <Score label="정기배송 매출" value={wonS(v.subRevS?.cur)} delta={pctDelta(v.subRevS?.cur ?? null, v.subRevS?.prev ?? null, "up")} note={share != null ? `전체의 ${share.toFixed(1)}%` : undefined} spark={v.sub ? v.win(v.sub.subRev) : undefined} />;
@@ -377,21 +370,6 @@ function ChannelDonut({ v }: { v: View }) {
 }
 
 // ── 쪽 ──
-function SummaryPage({ v, s }: { v: View; s: BoardSnapshot }) {
-  return (
-    <>
-      <Errors list={[failOf("매출", s.sales), failOf("메타 광고", s.meta), failOf("네이버 광고", s.naver), failOf("GA4", s.ga), failOf("정기배송", s.sub)].filter(Boolean)} />
-      <Scores><ScoreRev v={v} /><ScoreOrders v={v} /><ScoreAov v={v} /><ScoreSpend v={v} s={s} /><ScoreSessions v={v} s={s} /><ScoreActive v={v} /></Scores>
-      <Card w={8} title="매출 추이" right={<CompareLegend v={v} />}><CompareLine v={v} values={v.rev} fmtAxis={moneyCompact} fmtTip={won} unit="원" /></Card>
-      <Card w={4} title="채널별 매출 비중"><ChannelDonut v={v} /></Card>
-      <Card w={6} title="광고비 추이" right={<ChartLegend items={mediaLegend(v)} />}><SpendLine v={v} /></Card>
-      <Card w={6} title="방문 추이" right={v.ga ? <CompareLegend v={v} /> : undefined}>
-        {v.ga ? <CompareLine v={v} values={v.sessions} unit="회" /> : <div className="b2b-empty">방문 숫자가 없습니다.</div>}
-      </Card>
-    </>
-  );
-}
-
 type DetailState = { key: string; data: BoardDetail | null; loading: boolean; error: string };
 function SalesPage({ v, s, detail }: { v: View; s: BoardSnapshot; detail: DetailState }) {
   const top = v.chRows.slice(0, 5), rest = v.chRows.slice(5);
@@ -1043,7 +1021,7 @@ export default function BoardPage() {
   const [refreshing, setRefreshing] = useState(false); // 서버가 응답 뒤에 새 묶음을 계산하는 중
   const [busy, setBusy] = useState(false);             // [다시 계산] 진행 중
   const [error, setError] = useState("");
-  const [page, setPage] = useState<PageKey | `t:${string}`>("summary");   // t:<id> = 주제 보고서
+  const [page, setPage] = useState<PageKey | `t:${string}`>("sales");   // t:<id> = 주제 보고서
   const [range, setRange] = useState<Range | null>(null);
   const [filters, setFilters] = useState<Filters>({ salesCh: null, media: null, gaCh: null });
   const [detail, setDetail] = useState<DetailState>({ key: "", data: null, loading: false, error: "" });
@@ -1247,7 +1225,6 @@ export default function BoardPage() {
               : <TopicPage tv={tView} t={tData} def={curTopic} />
           )
           : !view ? <div className="b2b-empty bd-c12">고른 기간에 숫자가 없습니다.</div>
-          : page === "summary" ? <SummaryPage v={view} s={snap} />
           : page === "sales" ? <SalesPage v={view} s={snap} detail={shownDetail} />
           : <AdsPage v={view} s={snap} />}
       </main>
