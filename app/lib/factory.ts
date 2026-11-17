@@ -42,10 +42,16 @@ export interface FactoryProduct {
   updated_at?: string;
 }
 
+// 선택 칸(2026-11-17) — 거래처(partner)·테잎색(tape_color)을 입출고 창·재고 목록에 보일지. b2b_settings kv 'factory_fields'.
+export interface FactoryFields { partner: boolean; tape_color: boolean }
+export const DEFAULT_FACTORY_FIELDS: FactoryFields = { partner: true, tape_color: true };
+
 // 로트 = 품목 × 제조일자 × 박스 중량 (factory.stock_lots 뷰 1행, 단위 kg · 박스 수 = kg ÷ box_kg)
 export interface StockLot {
   mfg_date: string | null;
   box_kg: number | null;        // 박스 중량(없으면 kg 만)
+  tape_colors: string[];        // 이 로트 입고 때 적은 테잎색(최근 순, 고유)
+  partners: string[];           // 이 로트 입고 때 적은 거래처(최근 순, 고유)
   kg: number;                   // 현재 kg
   in_kg: number;
   out_kg: number;
@@ -91,6 +97,7 @@ export interface HistEvent {
   box_kg?: number | null;       // 참고: 박스 중량(입고 때 적은 값)
   boxes?: number | null;        // 참고: 박스 수(부호 있음)
   partner?: string | null;
+  tape_color?: string | null;   // 입고 때 적은 테잎색(009)
   memo?: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;

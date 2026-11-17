@@ -127,6 +127,13 @@
 
 /* ── 입고·출고·조정 창 ───────────────────────────────────────────── */
 .fac-txn-modal { max-width: 720px; }
+.fac-txn-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fac-fields { position: relative; font-size: 12px; }
+.fac-fields-pop {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; background: #fff; border: 1px solid var(--sm-border); border-radius: 10px; box-shadow: var(--sm-shadow-float); white-space: nowrap;
+}
+.fac-f-tape .b2b-input { width: 110px; }
 .fac-txn-meta { display: grid; grid-template-columns: 170px 1fr 1.3fr; gap: 10px; }
 .fac-txn-search { font-size: 16px; padding: 12px 14px; }
 .fac-search-wrap { position: relative; }

@@ -28,6 +28,7 @@ function describe(e: HistEvent): string {
   const parts = [lotLabel({ mfg_date: e.mfg_date ?? null, box_kg: e.box_kg })];
   if (e.txn_type === "조정" && e.target_kg != null && e.kg != null) parts.push(`실사 ${kgStr(e.target_kg)}(이전 ${kgStr(kgNum(e.target_kg - e.kg))})`);
   if (e.partner) parts.push(e.partner);
+  if (e.tape_color) parts.push(`테잎 ${e.tape_color}`);
   const head = e.kind === "취소" ? `${e.txn_type} 기록 취소 · ` : "";
   return head + parts.join(" · ");
 }
@@ -63,7 +64,7 @@ export default function FactoryHistoryPage() {
     const q = kw.trim();
     return events
       .filter((e) => kind === "전체" || e.kind === kind)
-      .filter((e) => !q || matchKoQuery(`${e.name || ""} ${e.sku || ""} ${e.who || ""} ${e.partner || ""} ${e.memo || ""}`, q));
+      .filter((e) => !q || matchKoQuery(`${e.name || ""} ${e.sku || ""} ${e.who || ""} ${e.partner || ""} ${e.tape_color || ""} ${e.memo || ""}`, q));
   }, [events, kind, kw]);
 
   // 기간 합계(kg) — 거래일이 기간 안이고 취소 안 된 기록만(입력만 기간 안인 지난 날짜 기록은 빼고)

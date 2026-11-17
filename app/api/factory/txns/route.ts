@@ -21,10 +21,13 @@ const num = (v: unknown) => (v == null ? null : Number(v));
 type TxnRow = {
   id: string; batch_id: string; product_id: string; txn_date: string; type: TxnType;
   mfg_date: string | null; kg: number | string; target_kg: number | string | null;
-  box_kg: number | string | null; boxes: number | null; partner: string | null; memo: string | null;
+  box_kg: number | string | null; boxes: number | null; partner: string | null; tape_color?: string | null; memo: string | null;
   created_by: string | null; created_at: string; cancelled_at: string | null; cancelled_by: string | null;
 };
-const COLS = "id, batch_id, product_id, txn_date, type, mfg_date, kg, target_kg, box_kg, boxes, partner, memo, created_by, created_at, cancelled_at, cancelled_by";
+// 열 목록은 string 으로 둔다 — 리터럴이면 supabase 가 결과 타입을 추론하지만 폴백(COLS_NO_TAPE)과 타입이 어긋난다. 결과는 TxnRow 로 캐스팅.
+const COLS: string = "id, batch_id, product_id, txn_date, type, mfg_date, kg, target_kg, box_kg, boxes, partner, tape_color, memo, created_by, created_at, cancelled_at, cancelled_by";
+const COLS_NO_TAPE: string = COLS.replace(", tape_color", ""); // 009 미적용 폴백
+const isMissingTape = (e: { message?: string } | null) => !!e?.message && /tape_color/.test(e.message);
 
 // GET ?from=&to= — 히스토리: 기록(입고·출고·조정) + 기록 취소(취소한 날) + 품목 변경(바꾼 날). 최신순.
 //  기록은 거래일이 기간 안이거나 **입력한 날**이 기간 안이면 나온다 — 지난 날짜로 넣은 기록도 입력한 날 이력에서 보인다.
@@ -37,10 +40,12 @@ export async function GET(req: NextRequest) {
     const productId = sp.get("product_id") || "";
     if (productId) {
       if (!UUID_RE.test(productId)) return NextResponse.json({ ok: false, error: "품목이 올바르지 않습니다." }, { status: 400 });
-      const { data, error } = await factoryDb().from("stock_txns").select(COLS).eq("product_id", productId)
+      let { data, error } = await factoryDb().from("stock_txns").select(COLS).eq("product_id", productId)
         .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT);
+      if (isMissingTape(error)) ({ data, error } = await factoryDb().from("stock_txns").select(COLS_NO_TAPE).eq("product_id", productId)
+        .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT));
       if (error) throw error;
-      const rows = ((data || []) as TxnRow[]).map((t) => ({ ...t, kg: Number(t.kg), target_kg: num(t.target_kg), box_kg: num(t.box_kg) }));
+      const rows = ((data || []) as unknown as TxnRow[]).map((t) => ({ ...t, kg: Number(t.kg), target_kg: num(t.target_kg), box_kg: num(t.box_kg) }));
       return NextResponse.json({ ok: true, rows, capped: rows.length >= LIMIT });
     }
 
@@ -51,12 +56,14 @@ export async function GET(req: NextRequest) {
     const toTs = new Date(Date.parse(`${to}T00:00:00Z`) + 15 * 3600e3).toISOString(); // to 다음 날 00:00 KST
 
     const db = factoryDb();
-    const [tx, cx, ch, pr] = await Promise.all([
-      db.from("stock_txns").select(COLS)
-        .or(`and(txn_date.gte.${from},txn_date.lte.${to}),and(created_at.gte."${fromTs}",created_at.lt."${toTs}")`)
-        .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT),
-      db.from("stock_txns").select(COLS).gte("cancelled_at", fromTs).lt("cancelled_at", toTs)
-        .order("cancelled_at", { ascending: false }).limit(LIMIT),
+    const txQ = (cols: string) => db.from("stock_txns").select(cols)
+      .or(`and(txn_date.gte.${from},txn_date.lte.${to}),and(created_at.gte."${fromTs}",created_at.lt."${toTs}")`)
+      .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT);
+    const cxQ = (cols: string) => db.from("stock_txns").select(cols).gte("cancelled_at", fromTs).lt("cancelled_at", toTs)
+      .order("cancelled_at", { ascending: false }).limit(LIMIT);
+    let [tx, cx] = await Promise.all([txQ(COLS), cxQ(COLS)]);
+    if (isMissingTape(tx.error) || isMissingTape(cx.error)) [tx, cx] = await Promise.all([txQ(COLS_NO_TAPE), cxQ(COLS_NO_TAPE)]);
+    const [ch, pr] = await Promise.all([
       db.from("product_changes").select("*").gte("changed_at", fromTs).lt("changed_at", toTs)
         .order("changed_at", { ascending: false }).limit(LIMIT),
       db.from("products").select("id, sku, name, spec"),
@@ -68,14 +75,14 @@ export async function GET(req: NextRequest) {
     const base = (t: TxnRow) => ({
       txn_id: t.id, txn_type: t.type, mfg_date: t.mfg_date,
       kg: Number(t.kg), target_kg: num(t.target_kg), box_kg: num(t.box_kg), boxes: t.boxes,
-      partner: t.partner, memo: t.memo, cancelled_at: t.cancelled_at, cancelled_by: t.cancelled_by,
+      partner: t.partner, tape_color: t.tape_color ?? null, memo: t.memo, cancelled_at: t.cancelled_at, cancelled_by: t.cancelled_by,
       sku: prod.get(t.product_id)?.sku ?? null, name: prod.get(t.product_id)?.name ?? null,
     });
     const events: HistEvent[] = [
-      ...((tx.data || []) as TxnRow[]).map((t) => ({
+      ...((tx.data || []) as unknown as TxnRow[]).map((t) => ({
         key: `t:${t.id}`, kind: t.type, date: t.txn_date, at: t.created_at, who: t.created_by, ...base(t),
       })),
-      ...((cx.data || []) as TxnRow[]).map((t) => ({
+      ...((cx.data || []) as unknown as TxnRow[]).map((t) => ({
         key: `c:${t.id}`, kind: "취소" as const, date: kstDate(t.cancelled_at!), at: t.cancelled_at!, who: t.cancelled_by, ...base(t),
       })),
       ...((ch.data || []) as { id: string; sku: string | null; name: string | null; field: string; old_value: string | null; new_value: string | null; changed_by: string | null; changed_at: string }[])
@@ -95,7 +102,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { type, txn_date?, partner?, memo?, batch_id?, lines: [{ product_id, mfg_date?, kg | target_kg, box_kg?, boxes? }] }
+// POST { type, txn_date?, partner?, memo?, batch_id?, lines: [{ product_id, mfg_date?, kg | target_kg, box_kg?, boxes?, tape_color? }] }
 //  입고·출고 = kg(양수, 0.001 단위), 조정 = target_kg(실사 kg — 현재와의 차이만 기록, 오늘 날짜만).
 //  box_kg·boxes 는 입고 때 적은 참고(총 kg 계산 보조) — 없어도 된다.
 //  batch_id = 화면이 만든 입력 번호 — 응답을 못 받고 다시 눌러도 한 번만 기록된다.
@@ -133,6 +140,12 @@ export async function POST(req: NextRequest) {
       const mfg = String(l.mfg_date || "");
       if (mfg && !validDate(mfg)) return NextResponse.json({ ok: false, error: `${p.name}: 제조일자가 올바르지 않습니다.` }, { status: 400 });
       const row: Record<string, unknown> = { product_id: p.id, type, txn_date, mfg_date: mfg || null, partner, memo, box_kg: null, boxes: null };
+      // 테잎색(009) — 입고 줄마다. 60자까지
+      const tape = String(l.tape_color ?? "").trim();
+      if (tape) {
+        if (tape.length > 60) return NextResponse.json({ ok: false, error: `${p.name}: 테잎색이 너무 깁니다(60자까지).` }, { status: 400 });
+        row.tape_color = tape;
+      }
       // 참고 정보 — 적었으면 값이 맞아야 한다
       if (l.box_kg !== undefined && l.box_kg !== null && String(l.box_kg) !== "") {
         const bk = kgNum(Number(l.box_kg));
@@ -165,6 +178,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await db.rpc("post_stock_txns", { p_rows: rows, p_actor: u.name, p_batch: batch });
     if (error) {
       if ((error as { code?: string }).code === "P0001") return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+      if (/tape_color/.test(error.message)) return NextResponse.json({ ok: false, error: "DB 준비 전입니다 — supabase/migrations/factory/009_tape_color.sql 을 적용하세요." }, { status: 503 });
       throw error;
     }
     const saved = (data || []) as TxnRow[];

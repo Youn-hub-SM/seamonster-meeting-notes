@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { HIST_COLOR, boxBreakdown, boxGroups, boxQty, boxSummary, boxesOf, kgStr, kgNum, lotLabel, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
+import { DEFAULT_FACTORY_FIELDS, HIST_COLOR, boxBreakdown, boxGroups, boxQty, boxSummary, boxesOf, kgStr, kgNum, lotLabel, signedKg, type FactoryFields, type StockRow, type TxnType } from "@/app/lib/factory";
 import TxnForm from "./TxnForm";
 import { today, daysAgo } from "./util";
 
@@ -37,6 +37,16 @@ export default function FactoryStockPage() {
   const [form, setForm] = useState<{ type: TxnType; productId?: string } | null>(null);
   const [priceFor, setPriceFor] = useState<StockRow | null>(null);
   const [historyFor, setHistoryFor] = useState<StockRow | null>(null);
+  // 선택 칸 설정 + 이전에 적은 값(드롭다운) — 입출고 창이 쓰고, 로트 줄 표시도 이 설정을 따른다
+  const [fields, setFields] = useState<FactoryFields>(DEFAULT_FACTORY_FIELDS);
+  const [suggest, setSuggest] = useState<{ partners: string[]; tape_colors: string[] }>({ partners: [], tape_colors: [] });
+  const loadFields = useCallback(async () => {
+    try {
+      const j = await (await fetch("/api/factory/fields", { cache: "no-store" })).json();
+      if (j.ok) { setFields(j.fields); setSuggest({ partners: j.partners || [], tape_colors: j.tape_colors || [] }); }
+    } catch { /* 설정을 못 읽으면 기본값(둘 다 보임) */ }
+  }, []);
+  useEffect(() => { loadFields(); }, [loadFields]);
 
   const range = useMemo(() => {
     if (pmode === "지정") return { from: cfrom, to: cto };
@@ -126,7 +136,11 @@ export default function FactoryStockPage() {
           {r.lots.filter((l) => l.kg !== 0 || open.has(`${r.id}:all`)).map((l) => (
             <div key={`${l.mfg_date || "none"}|${l.box_kg ?? ""}`} className={`fac-lot ${l.kg === 0 ? "is-zero" : ""}`}>
               <span className="fac-lot-name">{lotLabel(l)}</span>
-              <span className="fac-sub">{l.in_date ? `입고 ${l.in_date}` : ""}{l.adj_kg ? ` · 조정 ${signedKg(l.adj_kg)}` : ""}</span>
+              <span className="fac-sub">
+                {[l.in_date ? `입고 ${l.in_date}` : "", l.adj_kg ? `조정 ${signedKg(l.adj_kg)}` : "",
+                  fields.tape_color && l.tape_colors.length ? `테잎 ${l.tape_colors.join("/")}` : "",
+                  fields.partner && l.partners.length ? l.partners.join("/") : ""].filter(Boolean).join(" · ")}
+              </span>
               <span className="fac-lot-qty">{kgStr(l.kg)}{boxesOf(l.kg, l.box_kg) != null && <small>{boxQty(boxesOf(l.kg, l.box_kg)!)}</small>}</span>
             </div>
           ))}
@@ -273,8 +287,9 @@ export default function FactoryStockPage() {
 
       {form && (
         <TxnForm rows={rows} initialType={form.type} initialProductId={form.productId}
+          fields={fields} suggest={suggest} onFields={setFields}
           onClose={() => setForm(null)}
-          onSaved={(msg) => { setForm(null); setNotice(msg); load(); }} />
+          onSaved={(msg) => { setForm(null); setNotice(msg); load(); loadFields(); }} />
       )}
       {priceFor && (
         <PriceModal product={priceFor} onClose={() => setPriceFor(null)}

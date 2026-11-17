@@ -31,6 +31,33 @@ async function allLots(): Promise<LotRow[]> {
 }
 
 type PeriodTxn = { id: string; product_id: string; type: "입고" | "출고"; kg: number | string };
+type InTag = { product_id: string; mfg_date: string | null; box_kg: number | string | null; partner: string | null; tape_color: string | null };
+const lotKey = (t: { product_id: string; mfg_date: string | null; box_kg: number | string | null }) => `${t.product_id}|${t.mfg_date ?? ""}|${t.box_kg == null ? "" : Number(t.box_kg)}`;
+
+// 입고 때 적은 거래처·테잎색 — 로트별로 최근 순 고유값(취소 제외). 009 미적용이면 tape_color 없이.
+async function inboundTags(): Promise<Map<string, { partners: string[]; tape_colors: string[] }>> {
+  const out = new Map<string, { partners: string[]; tape_colors: string[] }>();
+  let cols = "product_id, mfg_date, box_kg, partner, tape_color";
+  for (let at = 0; ; at += 1000) {
+    let { data, error } = await factoryDb().from("stock_txns").select(cols)
+      .is("cancelled_at", null).eq("type", "입고").order("created_at", { ascending: false }).range(at, at + 999);
+    if (error && /tape_color/.test(error.message)) {
+      cols = "product_id, mfg_date, box_kg, partner";
+      ({ data, error } = await factoryDb().from("stock_txns").select(cols)
+        .is("cancelled_at", null).eq("type", "입고").order("created_at", { ascending: false }).range(at, at + 999));
+    }
+    if (error) throw error;
+    for (const t of (data || []) as unknown as InTag[]) {
+      const k = lotKey(t);
+      const a = out.get(k) || { partners: [], tape_colors: [] };
+      const pv = (t.partner || "").trim(), tv = (t.tape_color || "").trim();
+      if (pv && !a.partners.includes(pv)) a.partners.push(pv);
+      if (tv && !a.tape_colors.includes(tv)) a.tape_colors.push(tv);
+      out.set(k, a);
+    }
+    if (!data || data.length < 1000) return out;
+  }
+}
 
 // 기간 입고·출고 — 거래일이 [from, to] 안, 취소 제외. 1000행 한도를 넘어도 잘리지 않게 id 순 페이지로 읽는다.
 async function periodTxns(from: string, to: string): Promise<PeriodTxn[]> {
@@ -59,10 +86,11 @@ export async function GET(req: NextRequest) {
     if (from > to) from = to;
     const periodDays = dayDiff(from, to) + 1;
 
-    const [pr, lotRows, ptx] = await Promise.all([
+    const [pr, lotRows, ptx, tags] = await Promise.all([
       factoryDb().from("products").select("*").eq("stock_tracked", true).order("name").order("sku"),
       allLots(),
       periodTxns(from, to),
+      inboundTags(),
     ]);
     if (pr.error) throw pr.error;
     // 007 미적용 — 옛 뷰(boxes 열)가 돌아온다
@@ -88,6 +116,8 @@ export async function GET(req: NextRequest) {
       const lots: StockLot[] = (byProduct.get(p.id) || []).map((l) => ({
         mfg_date: l.mfg_date,
         box_kg: l.box_kg == null ? null : Number(l.box_kg),
+        tape_colors: tags.get(lotKey(l))?.tape_colors ?? [],
+        partners: tags.get(lotKey(l))?.partners ?? [],
         kg: kgNum(Number(l.kg) || 0),
         in_kg: kgNum(Number(l.in_kg) || 0),
         out_kg: kgNum(Number(l.out_kg) || 0),
