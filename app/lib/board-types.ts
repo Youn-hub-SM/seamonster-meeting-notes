@@ -87,11 +87,12 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
 //  주제는 두 가지다(2026-11-16): 상품 주문이 전환인 주제(productLike)와, 탈리 폼 신청이 전환인 주제(forms — 상품 주문·고객 집계를 하지 않는다).
-export const TOPIC_VERSION = 7;
+export const TOPIC_VERSION = 8;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
-  forms?: { apply: { id: string; label: string }; result: { id: string; label: string } | null };   // 탈리 폼 ID(신청·결과). result null = 결과 폼이 아직 정해지지 않음
+  // 탈리 폼 ID(신청·결과). result null = 결과 폼이 아직 정해지지 않음. result.textNames = 의견 목록에 보여 줄 주관식 문항(submit.textNames 와 같은 꼴)
+  forms?: { apply: { id: string; label: string }; result: { id: string; label: string; textNames?: [match: string, name: string][] } | null };
   // 상품 주문형 주제의 결과 제출 탈리 폼(산 뒤 미션을 마치고 내는 폼) — 산 고객과 전화번호로 잇는다. label = 화면의 '평가(…)' 구역 제목에 쓰는 폼 이름.
   //  scaleMax = 폼 안 설문 척도 문항의 만점(있으면 문항별 평균 점수를 보여 준다), scaleNames = [문항 제목에 든 구절, 화면에 쓸 짧은 이름]
   //  textNames = 의견 목록에 보여 줄 주관식 문항 [문항 제목에 든 구절, 화면에 쓸 짧은 이름] — 여기 적은 문항의 답만 묶음에 담는다(이름·연락처 문항은 적지 않는다)
@@ -122,16 +123,16 @@ export const TOPICS: TopicDef[] = [
     // 다이어트 챌린지(2026-11-16 대표) = seamonster.kr/diet 에서 탈리 폼으로 신청 → 미션을 마치면 탈리 폼으로 결과 제출. 주로 메타 '다이어트 챌린지' 캠페인으로 들어온다.
     //  신청 폼 ArKkkW 는 /diet 페이지에 박혀 있는 폼이다. 결과 폼 q4r7Dd 는 미션을 마친 사람이 내는 '챌린지 인증' 폼이다(후기 링크 2개·연락처).
     //  상품이 정해져 있지 않다(선정된 뒤 원하는 제품을 산다) — 구매는 '신청한 사람이 신청한 날부터 산 주문'으로 본다(전화번호 → 고객 키).
+    //  재구매·재재구매 = 미션을 마친(인증 폼을 낸) 사람이 인증한 다음 날부터 한 주문이 1번 이상·2번 이상(2026-11-17 대표: 적립금 환급이라 재재구매부터가 제대로 된 지표).
     id: "diet", name: "다이어트 챌린지",
     basis: "페이지 /diet · 탈리 신청 폼·인증 폼 · 메타 '다이어트 챌린지' 캠페인",
-    forms: { apply: { id: "ArKkkW", label: "챌린지 신청" }, result: { id: "q4r7Dd", label: "인증 폼" } },   // 인증 폼은 한 사람이 한 번 제출, 연락처 칸으로 신청과 잇는다(2026-11-16 대표)
+    forms: { apply: { id: "ArKkkW", label: "챌린지 신청" }, result: { id: "q4r7Dd", label: "인증 폼", textNames: [["참여 소감", "참여 소감"]] } },   // 인증 폼은 한 사람이 한 번 제출, 연락처 칸으로 신청과 잇는다(2026-11-16 대표)
     productLike: [],
     landing: { label: "/diet", paths: ["/diet", "/diet/", "/diet/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
     gaItemNames: [],
     metaCampaignLike: ["다이어트 챌린지"],
   },
 ];
-export const TOPIC_REPEAT_DAYS = 30;   // 재구매율을 재는 창 — 처음 산 날부터 30일 안
 
 export type TopicSales = {
   ok: true;
@@ -139,13 +140,16 @@ export type TopicSales = {
   items: { name: string; channel: string; rev: number[]; orders: number[]; qty: number[] }[]; // 날짜 × 채널 × '주문 상품명 / 옵션'
 };
 // 고객 — 그 상품을 '처음 산 날'로 센다(한 고객은 하루에만 들어가므로 기간으로 더해도 겹치지 않는다)
+//  재구매 = 처음 산 다음 날부터 기준일까지 주제 밖의 상품을 주문한 것. 주문 1번 이상 = 재구매, 2번 이상 = 재재구매(주문 1건 키로 센다).
+//  total = 180일 밖까지 포함한 전체 기간 합계(2026-11-17 대표: "재구매 추적은 전체로").
 export type TopicCust = {
   ok: true;
   first: number[];     // 그날 처음 산 고객 수
   fresh: number[];     // 그중 씨몬스터 첫 주문이 그날인 고객(신규)
-  conv: number[];      // 그중 그 뒤(다음 날부터 기준일까지) 다른 상품을 산 고객
-  conv30: number[];    // 그중 30일 안에 다른 상품을 산 고객
-  convRev: number[];   // 그 뒤 다른 상품 구매 매출
+  rep1: number[];      // 그중 재구매한 고객(그 뒤 주문 1번 이상)
+  rep2: number[];      // 그중 재재구매한 고객(그 뒤 주문 2번 이상)
+  repRev: number[];    // 그 뒤 다른 상품 구매 매출
+  total: { first: number; rep1: number; rep2: number };
   after: { name: string; customers: number[]; rev: number[] }[];   // 그 뒤에 산 상품(처음 산 날 기준 배열) — 고객 수가 많은 15개
 };
 // 랜딩 페이지(GA4) — 단계는 세션 수(그 페이지에서 그 이벤트가 있었던 방문), 주문서 진입은 그 상품의 결제 시작 수량
@@ -163,14 +167,19 @@ export type TopicMeta = {
   campaignOnly: boolean;   // true = 광고 단위로 받지 못해 캠페인 단위로 받음
 };
 // 탈리 폼(신청·결과) — 날짜는 제출 시각의 한국 날짜. 사람은 전화번호로 센다(번호를 못 찾은 제출은 1건을 1명으로 — 구매·결과와 잇지 못한다).
-//  묶음에는 건수만 담는다(이름·전화번호는 계산할 때만 쓰고 저장하지 않는다).
+//  묶음에는 건수와 주관식 의견 글만 담는다(이름·전화번호·링크는 계산할 때만 쓰고 저장하지 않는다).
+//  날짜 칸은 180일 안, total 은 그 밖까지 포함한 전체 기간 합계.
 export type TopicForms = {
   ok: true;
   apply: number[];              // 그날 신청 제출 건수
   people: number[];             // 그날 처음 신청한 사람
   result: number[] | null;      // 그날 결과 제출 건수(null = 결과 폼이 정해지지 않음)
-  done: number[];               // 신청일 기준 — 그날 처음 신청한 사람 중 지금까지 결과를 낸 사람
-  buy: { ok: true; people: number[]; rev: number[] } | Fail;   // 신청일 기준 — 신청한 날부터 기준일까지 주문이 있는 사람과 그 매출(모든 채널)
+  done: number[];               // 신청일 기준 — 그날 처음 신청한 사람 중 지금까지 결과를 낸 사람(미션 완료)
+  // 주문(모든 채널) — 신청일 기준. people·rev = 신청한 날부터 기준일까지 주문이 있는 사람과 그 매출.
+  //  rep1·rep2·repRev = 미션을 마친 사람 중 결과를 낸 다음 날부터 주문이 1번 이상(재구매)·2번 이상(재재구매)인 사람과 그 매출.
+  buy: { ok: true; people: number[]; rev: number[]; rep1: number[]; rep2: number[]; repRev: number[]; total: { buy: number; rep1: number; rep2: number } } | Fail;
+  total: { people: number; done: number };
+  opinions: { day: string; score: number | null; parts: [name: string, text: string][] }[];   // 결과 폼의 주관식 의견(최근 것부터) — 180일 안의 제출
   noPhone: number;              // 전화번호를 찾지 못한 신청 건수
   resultUnmatched: number;      // 결과 제출 중 신청한 사람과 잇지 못한 건수
   truncated: boolean;           // 제출이 많아 일부만 받음
@@ -180,7 +189,11 @@ export type TopicForms = {
 export type TopicSubmit = {
   ok: true;
   count: number[];      // 그날 결과 제출 건수
-  done: number[];       // 처음 산 날 기준 — 그날 처음 산 고객 중 지금까지 결과를 낸 사람
+  done: number[];       // 처음 산 날 기준 — 그날 처음 산 고객 중 지금까지 결과를 낸 사람(미션 완료)
+  rep1: number[];       // 그중 재구매한 사람(처음 산 다음 날부터 주제 밖 상품 주문 1번 이상)
+  rep2: number[];       // 그중 재재구매한 사람(2번 이상)
+  repRev: number[];     // 그 재구매 매출
+  total: { done: number; rep1: number; rep2: number };   // 180일 밖까지 포함한 전체 기간 합계
   unmatched: number;    // 전화번호가 없거나 그 상품을 산 기록을 찾지 못한 제출 건수
   truncated: boolean;   // 제출이 많아 일부만 받음
   survey: { label: string; sum: number[]; n: number[] }[];   // 설문 척도 문항(폼의 순서대로) — 그날 제출의 점수 합과 응답 수. 평균은 화면이 기간 합계끼리 나눈다

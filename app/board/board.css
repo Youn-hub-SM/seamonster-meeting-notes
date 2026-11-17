@@ -129,6 +129,9 @@
 .bd-section { grid-column: 1 / -1; margin: var(--sm-space-3) 0 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-black); }
 .bd-section:first-of-type { margin-top: 0; }
 
+/* 전체 기간 추적 줄 — 숫자 줄과 같은 타일을 단계 수만큼 한 줄에(처음 산 고객 → 미션 완료 → 재구매 → 재재구매) */
+.bd-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sm-space-5); }
+
 /* 의견 목록 — 댓글처럼 한 줄에 하나씩, 카드 안에서 세로로 스크롤한다(옆의 설문 표와 높이를 맞춘다) */
 .bd-feed { max-height: 329px; overflow-y: auto; padding-right: var(--sm-space-2); }
 .bd-feed-item { padding: var(--sm-space-3) 0; border-bottom: 1px solid var(--sm-border-light); }
