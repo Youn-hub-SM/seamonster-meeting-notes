@@ -125,6 +125,10 @@
 .bd-table-wrap th.bd-w45 { width: 45%; }
 .bd-path { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 구역 제목 — 주제 탭을 같은 순서로 읽게 나눈다(주요 지표 → 유입·광고·실적 → 평가 → 재구매 추적). 한 줄 전체 */
+.bd-section { grid-column: 1 / -1; margin: var(--sm-space-3) 0 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-black); }
+.bd-section:first-of-type { margin-top: 0; }
+
 /* 의견 목록 — 댓글처럼 한 줄에 하나씩, 카드 안에서 세로로 스크롤한다(옆의 설문 표와 높이를 맞춘다) */
 .bd-feed { max-height: 329px; overflow-y: auto; padding-right: var(--sm-space-2); }
 .bd-feed-item { padding: var(--sm-space-3) 0; border-bottom: 1px solid var(--sm-border-light); }

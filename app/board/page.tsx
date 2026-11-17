@@ -76,6 +76,8 @@ function Card({ w, title, right, children }: { w: 4 | 6 | 8 | 12; title: string;
     </section>
   );
 }
+// 구역 제목 — 주제 탭은 구역 넷을 같은 순서로 놓는다(주요 지표 → 페이지 유입·광고 효과·실적 → 평가 → 재구매 추적)
+const Section = ({ title }: { title: string }) => <h2 className="bd-section">{title}</h2>;
 // 숫자 줄 — 흰 판 하나(Scores) 위에 테두리 없는 타일(Score): 이름 · 큰 숫자와 작은 단위 · 증감 배지와 직전 값 · 작은 추세선
 function Scores({ children }: { children: React.ReactNode }) {
   return <section className="bd-card bd-strip bd-c12">{children}</section>;
@@ -622,13 +624,17 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
     { key: "n", label: "응답", num: true, sort: (r) => r.n, cell: (r) => r.n.toLocaleString() },
   ];
   const subCell = (v: string) => (tv.submit ? v : "-");
-  const cCols: Col<CRow>[] = [
+  const keyCols: Col<CRow>[] = [
     { key: "key", label: tv.byWeek ? "처음 산 주" : "처음 산 날", sort: (r) => r.key, cell: (r) => (tv.byWeek ? `${md(r.from)}~${md(r.to)}` : `${md(r.from)} (${weekday(r.from)})`) },
     { key: "first", label: "처음 산 고객", num: true, bar: true, sort: (r) => r.first, cell: (r) => r.first.toLocaleString() },
-    ...(hasSubmit ? [
-      { key: "done", label: "결과 제출", num: true, sort: (r) => r.done, cell: (r) => subCell(r.done.toLocaleString()) },
-      { key: "doneRate", label: "제출률", num: true, sort: (r) => ratio(r.done, r.first) ?? -1, cell: (r) => subCell(pct1(ratio(r.done * 100, r.first)) ?? "-") },
-    ] as Col<CRow>[] : []),
+  ];
+  const dCols: Col<CRow>[] = [   // 평가 — 처음 산 날(주)별 결과 제출
+    ...keyCols,
+    { key: "done", label: "결과 제출", num: true, sort: (r) => r.done, cell: (r) => subCell(r.done.toLocaleString()) },
+    { key: "doneRate", label: "제출률", num: true, sort: (r) => ratio(r.done, r.first) ?? -1, cell: (r) => subCell(pct1(ratio(r.done * 100, r.first)) ?? "-") },
+  ];
+  const cCols: Col<CRow>[] = [   // 재구매 추적 — 처음 산 날(주)별 재구매
+    ...keyCols,
     { key: "conv30", label: `${TOPIC_REPEAT_DAYS}일 안 재구매`, num: true, sort: (r) => (r.mature ? r.conv30 : -1), cell: (r) => (r.mature ? r.conv30.toLocaleString() : "집계 중") },
     { key: "rate30", label: "재구매율", num: true, sort: (r) => (r.mature ? ratio(r.conv30, r.first) ?? -1 : -1), cell: (r) => (r.mature ? pct1(ratio(r.conv30 * 100, r.first)) ?? "-" : "집계 중") },
     { key: "conv", label: "지금까지 재구매", num: true, sort: (r) => r.conv, cell: (r) => r.conv.toLocaleString() },
@@ -661,20 +667,21 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
         tv.submit?.truncated ? "탈리: 제출이 많아 일부만 받았습니다." : "",
         t.ga?.ok && t.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다." : "",
         t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 단위로 보여 줍니다." : ""].filter(Boolean)} />
+      <Section title="주요 지표" />
       <Scores>
-      <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `매출 ${moneyCompact(tv.revS?.cur ?? 0)}원` : "조회 실패"} spark={tv.sales ? tv.win(tv.orders) : undefined} />
-      <Score label="처음 산 고객" value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명${tv.submit ? ` · 결과 제출 ${subDone.toLocaleString()}명` : ""}` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />
-      <Score label="페이지 전환율" value={pct2(tv.convRate?.cur)} delta={ppDelta(tv.convRate?.cur ?? null, tv.convRate?.prev ?? null, "up")} note={tv.ga ? `방문 ${(tv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={tv.ga ? tv.win(tv.ga.visits) : undefined} />
-      <Score label="메타 광고비" value={wonS(tv.spendS?.cur)} delta={pctDelta(tv.spendS?.cur ?? null, tv.spendS?.prev ?? null, "none")} note={tv.meta ? `클릭 ${(tv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={tv.meta ? tv.win(tv.spend) : undefined} />
-      <Score label="주문 1건당 광고비" value={wonS(tv.cpa?.cur == null ? null : Math.round(tv.cpa.cur))} delta={pctDelta(tv.cpa?.cur ?? null, tv.cpa?.prev ?? null, "down")} note={tv.meta ? `메타 집계 구매 ${(tv.purS?.cur ?? 0).toLocaleString()}건 · ROAS ${fix2(roas) ?? "-"}` : whyX(t.meta)} />
-      <Score label={`${TOPIC_REPEAT_DAYS}일 안 재구매율`} value={pct1(tv.rate30)} note={tv.cust ? (tv.matureFirst > 0 ? `${TOPIC_REPEAT_DAYS}일 지난 ${tv.matureFirst.toLocaleString()}명 중 ${tv.matureConv30.toLocaleString()}명` : `${TOPIC_REPEAT_DAYS}일 지난 고객 없음`) : "조회 실패"} />
+        <Score label="페이지 전환율" value={pct2(tv.convRate?.cur)} delta={ppDelta(tv.convRate?.cur ?? null, tv.convRate?.prev ?? null, "up")} note={tv.ga ? `방문 ${(tv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={tv.ga ? tv.win(tv.ga.visits) : undefined} />
+        <Score label="메타 광고비" value={wonS(tv.spendS?.cur)} delta={pctDelta(tv.spendS?.cur ?? null, tv.spendS?.prev ?? null, "none")} note={tv.meta ? `클릭 ${(tv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={tv.meta ? tv.win(tv.spend) : undefined} />
+        <Score label="주문 1건당 광고비" value={wonS(tv.cpa?.cur == null ? null : Math.round(tv.cpa.cur))} delta={pctDelta(tv.cpa?.cur ?? null, tv.cpa?.prev ?? null, "down")} note={tv.meta ? `메타 집계 구매 ${(tv.purS?.cur ?? 0).toLocaleString()}건 · ROAS ${fix2(roas) ?? "-"}` : whyX(t.meta)} />
+        <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `매출 ${moneyCompact(tv.revS?.cur ?? 0)}원${hasSubmit && tv.cust ? ` · 처음 산 고객 ${first.toLocaleString()}명` : ""}` : "조회 실패"} spark={tv.sales ? tv.win(tv.orders) : undefined} />
+        {hasSubmit
+          ? <Score label="결과 제출" value={tv.submit ? cnt(subDone, "명") : null} note={tv.submit ? `제출률 ${pctOf(tv.subRate)} · 제출 ${(tv.subCntS?.cur ?? 0).toLocaleString()}건` : "조회 실패"} spark={tv.submit ? tv.win(tv.submit.count) : undefined} />
+          : <Score label="처음 산 고객" value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />}
+        <Score label={`${TOPIC_REPEAT_DAYS}일 안 재구매율`} value={pct1(tv.rate30)} note={tv.cust ? (tv.matureFirst > 0 ? `${TOPIC_REPEAT_DAYS}일 지난 ${tv.matureFirst.toLocaleString()}명 중 ${tv.matureConv30.toLocaleString()}명` : `${TOPIC_REPEAT_DAYS}일 지난 고객 없음`) : "조회 실패"} />
       </Scores>
-      <Card w={8} title="주문 추이" right={tv.sales ? <CompareLegend v={tv} /> : undefined}>
-        {tv.sales ? <CompareLine v={tv} values={tv.orders} unit="건" /> : <div className="b2b-empty">{noSales}</div>}
-      </Card>
-      <Card w={4} title="신규·기존 고객">
-        {first > 0 ? <DonutCard data={[["신규", fresh], ["기존", Math.max(0, first - fresh)]]} colors={[C_CUR, C_NAVER]} center={first.toLocaleString()} centerSub="명" fmt={(n) => `${n.toLocaleString()}명`} />
-          : <div className="b2b-empty">이 기간에 처음 산 고객이 없습니다.</div>}
+
+      <Section title="페이지 유입 · 광고 효과 · 구매 실적" />
+      <Card w={6} title="페이지 방문 추이" right={tv.ga ? <CompareLegend v={tv} /> : undefined}>
+        {tv.ga ? <CompareLine v={tv} values={tv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
       </Card>
       <Card w={6} title={`${def.landing?.label ?? "페이지"} 단계별 전환`}><DataTable rows={tv.funnel} cols={fCols} rowKey={(r) => r.label} sortKey="idx" empty={noGa} /></Card>
       <Card w={6} title="유입 경로별 방문"><DataTable rows={tv.sourceRows} cols={sCols} rowKey={(r) => r.name} sortKey="sessions" empty={noGa} /></Card>
@@ -682,51 +689,64 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
         {tv.meta ? <LineChart periods={tv.labels} fmtAxis={moneyCompact} fmtTip={won} unit="원" series={[{ key: "광고비", values: tv.win(tv.spend), color: C_CUR }, { key: "구매액", values: tv.win(tv.value), color: C_NAVER }]} />
           : <div className="b2b-empty">{noAds}</div>}
       </Card>
-      <Card w={6} title="광고별"><DataTable rows={tv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
-      <Card w={hasSubmit ? 12 : 6} title={`${tv.byWeek ? "처음 산 주별" : "처음 산 날별"} ${hasSubmit ? "결과 제출·재구매" : "재구매"}`} right={subNote ? <span className="bd-card-note">{subNote}</span> : undefined}>
-        <DataTable rows={cohortRows} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty="이 기간에 처음 산 고객이 없습니다."
-          foot={["합계", first.toLocaleString(), ...(hasSubmit ? [subCell(subDone.toLocaleString()), subCell(pct1(tv.subRate) ?? "-")] : []),
-            tv.matureConv30.toLocaleString(), pct1(tv.rate30) ?? "-", cohortRows.reduce((a, r) => a + r.conv, 0).toLocaleString(), won(cohortRows.reduce((a, r) => a + r.convRev, 0))]} />
+      <Card w={12} title="광고별"><DataTable rows={tv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
+      <Card w={8} title="주문 추이" right={tv.sales ? <CompareLegend v={tv} /> : undefined}>
+        {tv.sales ? <CompareLine v={tv} values={tv.orders} unit="건" /> : <div className="b2b-empty">{noSales}</div>}
       </Card>
-      <Card w={6} title="재구매한 상품 상위 15"><DataTable rows={tv.afterRows} cols={nCols} rowKey={(r) => r.name} sortKey="customers" empty="이 기간에 처음 산 고객의 재구매가 없습니다." /></Card>
-      {hasSubmit && (
-        <Card w={6} title="결과 제출 추이" right={tv.submit ? <CompareLegend v={tv} /> : undefined}>
-          {tv.submit ? <CompareLine v={tv} values={tv.submit.count} unit="건" /> : <div className="b2b-empty">{noSubmit}</div>}
-        </Card>
-      )}
-      {hasSubmit && scaleMax > 0 && (
-        <>
-          <Card w={6} title="설문 평균 점수" right={surveyNote ? <span className="bd-card-note">{surveyNote}</span> : undefined}>
-            <DataTable rows={tv.surveyRows} cols={vCols} rowKey={(r) => r.name} sortKey="avg" empty={noSurvey} />
-          </Card>
-          {hasOpinion && (
-            <Card w={6} title="추가 의견" right={tv.opinionRows.length ? <span className="bd-card-note">{tv.opinionRows.length.toLocaleString()}건</span> : undefined}>
-              {tv.opinionRows.length ? (
-                <div className="bd-feed" tabIndex={0}>
-                  {tv.opinionRows.map((o, i) => (
-                    <div className="bd-feed-item" key={`${o.day}-${i}`}>
-                      <div className="bd-feed-meta">{md(o.day)} ({weekday(o.day)}){o.score != null ? ` · 평균 ${o.score.toFixed(1)}점` : ""}</div>
-                      {o.parts.map(([name, text], k) => <p className="bd-feed-text" key={k}><span className="bd-feed-tag">{name}</span>{text}</p>)}
-                    </div>
-                  ))}
-                </div>
-              ) : <div className="b2b-empty">{noOpinion}</div>}
-            </Card>
-          )}
-          <Card w={6} title={`설문 평균 점수 추이(${tv.byWeek ? "주별" : "날짜별"})`}>
-            {tv.surveyRows.length
-              ? <LineChart periods={tv.surveyTrend.map((b) => b.label)} yMax={scaleMax} fmtTip={(v) => v.toFixed(1)} unit="점" series={[{ key: "전체 평균", values: tv.surveyTrend.map((b) => (b.n > 0 ? b.sum / b.n : null)), color: C_CUR }]} />
-              : <div className="b2b-empty">{noSurvey}</div>}
-          </Card>
-        </>
-      )}
-      <Card w={6} title="페이지 방문 추이" right={tv.ga ? <CompareLegend v={tv} /> : undefined}>
-        {tv.ga ? <CompareLine v={tv} values={tv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
+      <Card w={4} title="신규·기존 고객">
+        {first > 0 ? <DonutCard data={[["신규", fresh], ["기존", Math.max(0, first - fresh)]]} colors={[C_CUR, C_NAVER]} center={first.toLocaleString()} centerSub="명" fmt={(n) => `${n.toLocaleString()}명`} />
+          : <div className="b2b-empty">이 기간에 처음 산 고객이 없습니다.</div>}
       </Card>
-      <Card w={hasSubmit && scaleMax > 0 && hasOpinion ? 12 : 6} title="상품·옵션별 주문">
+      <Card w={12} title="상품·옵션별 주문">
         <DataTable rows={tv.itemRows} cols={iCols} rowKey={(r) => r.key} sortKey="rev" empty={noSales}
           foot={["합계", "", won(tv.revS?.cur ?? 0), (tv.ordS?.cur ?? 0).toLocaleString()]} />
       </Card>
+
+      {hasSubmit && (
+        <>
+          <Section title={`${def.name} 평가(${def.submit?.label ?? "제출 폼"})`} />
+          <Card w={6} title="결과 제출 추이" right={tv.submit ? <CompareLegend v={tv} /> : undefined}>
+            {tv.submit ? <CompareLine v={tv} values={tv.submit.count} unit="건" /> : <div className="b2b-empty">{noSubmit}</div>}
+          </Card>
+          {scaleMax > 0 && (
+            <>
+              <Card w={6} title={`설문 평균 점수 추이(${tv.byWeek ? "주별" : "날짜별"})`}>
+                {tv.surveyRows.length
+                  ? <LineChart periods={tv.surveyTrend.map((b) => b.label)} yMax={scaleMax} fmtTip={(v) => v.toFixed(1)} unit="점" series={[{ key: "전체 평균", values: tv.surveyTrend.map((b) => (b.n > 0 ? b.sum / b.n : null)), color: C_CUR }]} />
+                  : <div className="b2b-empty">{noSurvey}</div>}
+              </Card>
+              <Card w={hasOpinion ? 6 : 12} title="설문 평균 점수" right={surveyNote ? <span className="bd-card-note">{surveyNote}</span> : undefined}>
+                <DataTable rows={tv.surveyRows} cols={vCols} rowKey={(r) => r.name} sortKey="avg" empty={noSurvey} />
+              </Card>
+              {hasOpinion && (
+                <Card w={6} title="추가 의견" right={tv.opinionRows.length ? <span className="bd-card-note">{tv.opinionRows.length.toLocaleString()}건</span> : undefined}>
+                  {tv.opinionRows.length ? (
+                    <div className="bd-feed" tabIndex={0}>
+                      {tv.opinionRows.map((o, i) => (
+                        <div className="bd-feed-item" key={`${o.day}-${i}`}>
+                          <div className="bd-feed-meta">{md(o.day)} ({weekday(o.day)}){o.score != null ? ` · 평균 ${o.score.toFixed(1)}점` : ""}</div>
+                          {o.parts.map(([name, text], k) => <p className="bd-feed-text" key={k}><span className="bd-feed-tag">{name}</span>{text}</p>)}
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className="b2b-empty">{noOpinion}</div>}
+                </Card>
+              )}
+            </>
+          )}
+          <Card w={scaleMax > 0 ? 12 : 6} title={`${tv.byWeek ? "처음 산 주별" : "처음 산 날별"} 결과 제출`} right={subNote ? <span className="bd-card-note">{subNote}</span> : undefined}>
+            <DataTable rows={cohortRows} cols={dCols} rowKey={(r) => r.key} sortKey="key" empty="이 기간에 처음 산 고객이 없습니다."
+              foot={["합계", first.toLocaleString(), subCell(subDone.toLocaleString()), subCell(pct1(tv.subRate) ?? "-")]} />
+          </Card>
+        </>
+      )}
+
+      <Section title="재구매 추적" />
+      <Card w={6} title={`${tv.byWeek ? "처음 산 주별" : "처음 산 날별"} 재구매`}>
+        <DataTable rows={cohortRows} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty="이 기간에 처음 산 고객이 없습니다."
+          foot={["합계", first.toLocaleString(), tv.matureConv30.toLocaleString(), pct1(tv.rate30) ?? "-", cohortRows.reduce((a, r) => a + r.conv, 0).toLocaleString(), won(cohortRows.reduce((a, r) => a + r.convRev, 0))]} />
+      </Card>
+      <Card w={6} title="재구매한 상품 상위 15"><DataTable rows={tv.afterRows} cols={nCols} rowKey={(r) => r.name} sortKey="customers" empty="이 기간에 처음 산 고객의 재구매가 없습니다." /></Card>
     </>
   );
 }
@@ -830,14 +850,20 @@ function FormTopicPage({ fv, t, def }: { fv: FormView; t: TopicSnapshot; def: To
     { key: "cpc", label: "클릭당 광고비(원)", num: true, sort: (r) => r.cpc ?? 0, cell: (r) => (r.cpc == null ? "-" : won(Math.round(r.cpc))) },
   ];
   type CRow = FormView["cohort"][number];
-  const cCols: Col<CRow>[] = [
+  const keyCols: Col<CRow>[] = [
     { key: "key", label: fv.byWeek ? "신청한 주" : "신청한 날", sort: (r) => r.key, cell: (r) => (fv.byWeek ? `${md(r.from)}~${md(r.to)}` : `${md(r.from)} (${weekday(r.from)})`) },
     { key: "people", label: "신청한 사람", num: true, bar: true, sort: (r) => r.people, cell: (r) => r.people.toLocaleString() },
+  ];
+  const dCols: Col<CRow>[] = [   // 평가 — 신청한 날(주)별 결과 제출
+    ...keyCols,
+    { key: "done", label: "결과 제출", num: true, sort: (r) => r.done, cell: (r) => (fv.hasResult ? r.done.toLocaleString() : "-") },
+    { key: "doneRate", label: "완료율", num: true, sort: (r) => ratio(r.done, r.people) ?? -1, cell: (r) => (fv.hasResult ? pct1(ratio(r.done * 100, r.people)) ?? "-" : "-") },
+  ];
+  const cCols: Col<CRow>[] = [   // 구매 추적 — 신청한 날(주)별 구매
+    ...keyCols,
     { key: "buy", label: "신청 뒤 구매", num: true, sort: (r) => r.buy, cell: (r) => (fv.buy ? r.buy.toLocaleString() : "-") },
     { key: "buyRate", label: "구매율", num: true, sort: (r) => ratio(r.buy, r.people) ?? -1, cell: (r) => (fv.buy ? pct1(ratio(r.buy * 100, r.people)) ?? "-" : "-") },
     { key: "buyRev", label: "구매 매출(원)", num: true, sort: (r) => r.buyRev, cell: (r) => (fv.buy ? won(r.buyRev) : "-") },
-    { key: "done", label: "결과 제출", num: true, sort: (r) => r.done, cell: (r) => (fv.hasResult ? r.done.toLocaleString() : "-") },
-    { key: "doneRate", label: "완료율", num: true, sort: (r) => ratio(r.done, r.people) ?? -1, cell: (r) => (fv.hasResult ? pct1(ratio(r.done * 100, r.people)) ?? "-" : "-") },
   ];
   const noForm = t.forms && !t.forms.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 신청이 없습니다.";
   const noGa = whyX(t.ga) === "연결 안 됨" ? "GA4가 연결되지 않았습니다." : "페이지 숫자가 없습니다.", noAds = whyX(t.meta) === "연결 안 됨" ? "메타 광고가 연결되지 않았습니다." : "이 기간에 광고 숫자가 없습니다.";
@@ -849,35 +875,46 @@ function FormTopicPage({ fv, t, def }: { fv: FormView; t: TopicSnapshot; def: To
         fv.forms?.truncated ? "탈리: 제출이 많아 일부만 받았습니다." : "",
         t.ga?.ok && t.ga.truncated ? "GA4: 행이 많아 일부만 받았습니다." : "",
         t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 단위로 보여 줍니다." : ""].filter(Boolean)} />
+      <Section title="주요 지표" />
       <Scores>
-        <Score label="신청 건수" value={cnt(fv.applyS?.cur, "건")} delta={pctDelta(fv.applyS?.cur ?? null, fv.applyS?.prev ?? null, "up")} note={fv.forms ? `신청한 사람 ${fv.people.toLocaleString()}명` : "조회 실패"} spark={fv.forms ? fv.win(fv.forms.apply) : undefined} />
         <Score label="페이지 전환율" value={pct2(fv.convRate?.cur)} delta={ppDelta(fv.convRate?.cur ?? null, fv.convRate?.prev ?? null, "up")} note={fv.ga ? `방문 ${(fv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={fv.ga ? fv.win(fv.ga.visits) : undefined} />
-        <Score label="신청 뒤 구매" value={cnt(fv.buyS?.cur, "명")} note={fv.buy ? `신청한 사람의 ${pctOf(fv.buyRate)} · 매출 ${moneyCompact(fv.buyRevS?.cur ?? 0)}원` : fv.forms ? "조회 실패" : undefined} spark={fv.buy ? fv.win(fv.buy.people) : undefined} />
-        <Score label="결과 제출" value={cnt(fv.doneS?.cur, "명")} note={!fv.forms ? undefined : fv.hasResult ? `완료율 ${pctOf(fv.doneRate)} · 제출 ${(fv.resultS?.cur ?? 0).toLocaleString()}건` : "결과 폼 미정"} spark={fv.forms?.result ? fv.win(fv.forms.result) : undefined} />
         <Score label="메타 광고비" value={wonS(fv.spendS?.cur)} delta={pctDelta(fv.spendS?.cur ?? null, fv.spendS?.prev ?? null, "none")} note={fv.meta ? `클릭 ${(fv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={fv.meta ? fv.win(fv.spend) : undefined} />
         <Score label="신청 1건당 광고비" value={wonS(fv.cpa?.cur == null ? null : Math.round(fv.cpa.cur))} delta={pctDelta(fv.cpa?.cur ?? null, fv.cpa?.prev ?? null, "down")} note={fv.meta ? `노출 ${(fv.impS?.cur ?? 0).toLocaleString()}회` : whyX(t.meta)} />
+        <Score label="신청 건수" value={cnt(fv.applyS?.cur, "건")} delta={pctDelta(fv.applyS?.cur ?? null, fv.applyS?.prev ?? null, "up")} note={fv.forms ? `신청한 사람 ${fv.people.toLocaleString()}명` : "조회 실패"} spark={fv.forms ? fv.win(fv.forms.apply) : undefined} />
+        <Score label="결과 제출" value={cnt(fv.doneS?.cur, "명")} note={!fv.forms ? undefined : fv.hasResult ? `완료율 ${pctOf(fv.doneRate)} · 제출 ${(fv.resultS?.cur ?? 0).toLocaleString()}건` : "결과 폼 미정"} spark={fv.forms?.result ? fv.win(fv.forms.result) : undefined} />
+        <Score label="신청 뒤 구매" value={cnt(fv.buyS?.cur, "명")} note={fv.buy ? `신청한 사람의 ${pctOf(fv.buyRate)} · 매출 ${moneyCompact(fv.buyRevS?.cur ?? 0)}원` : fv.forms ? "조회 실패" : undefined} spark={fv.buy ? fv.win(fv.buy.people) : undefined} />
       </Scores>
-      <Card w={8} title="신청 추이" right={fv.forms ? <CompareLegend v={fv} /> : undefined}>
-        {fv.forms ? <CompareLine v={fv} values={fv.forms.apply} unit="건" /> : <div className="b2b-empty">{noForm}</div>}
-      </Card>
-      <Card w={4} title="신청한 사람의 진행" right={loose ? <span className="bd-card-note">{loose}</span> : undefined}>
-        <DataTable rows={fv.people > 0 ? fv.steps : []} cols={pCols} rowKey={(r) => r.label} sortKey="idx" empty={noForm} />
+
+      <Section title="페이지 유입 · 광고 효과 · 신청 실적" />
+      <Card w={6} title="페이지 방문 추이" right={fv.ga ? <CompareLegend v={fv} /> : undefined}>
+        {fv.ga ? <CompareLine v={fv} values={fv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
       </Card>
       <Card w={6} title={`${def.landing?.label ?? "페이지"} 단계별 전환`}><DataTable rows={fv.funnel} cols={fCols} rowKey={(r) => r.label} sortKey="idx" empty={noGa} /></Card>
       <Card w={6} title="유입 경로별 방문"><DataTable rows={fv.sourceRows} cols={sCols} rowKey={(r) => r.name} sortKey="sessions" empty={noGa} /></Card>
       <Card w={6} title="메타 광고비 추이" right={fv.meta ? <CompareLegend v={fv} /> : undefined}>
         {fv.meta ? <CompareLine v={fv} values={fv.spend} fmtAxis={moneyCompact} fmtTip={won} unit="원" /> : <div className="b2b-empty">{noAds}</div>}
       </Card>
-      <Card w={6} title="광고별"><DataTable rows={fv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
-      <Card w={12} title={fv.byWeek ? "신청한 주별 구매·결과" : "신청한 날별 구매·결과"}>
-        <DataTable rows={cohortRows} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty={noForm}
-          foot={["합계", fv.people.toLocaleString(), fv.buy ? (fv.buyS?.cur ?? 0).toLocaleString() : "-", fv.buy ? pctOf(fv.buyRate) : "-", fv.buy ? won(fv.buyRevS?.cur ?? 0) : "-", fv.hasResult ? (fv.doneS?.cur ?? 0).toLocaleString() : "-", fv.hasResult ? pctOf(fv.doneRate) : "-"]} />
+      <Card w={12} title="광고별"><DataTable rows={fv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
+      <Card w={8} title="신청 추이" right={fv.forms ? <CompareLegend v={fv} /> : undefined}>
+        {fv.forms ? <CompareLine v={fv} values={fv.forms.apply} unit="건" /> : <div className="b2b-empty">{noForm}</div>}
       </Card>
-      <Card w={6} title="페이지 방문 추이" right={fv.ga ? <CompareLegend v={fv} /> : undefined}>
-        {fv.ga ? <CompareLine v={fv} values={fv.ga.visits} unit="회" /> : <div className="b2b-empty">{noGa}</div>}
+      <Card w={4} title="신청한 사람의 진행" right={loose ? <span className="bd-card-note">{loose}</span> : undefined}>
+        <DataTable rows={fv.people > 0 ? fv.steps : []} cols={pCols} rowKey={(r) => r.label} sortKey="idx" empty={noForm} />
       </Card>
+
+      <Section title={`${def.name} 평가(${def.forms?.result?.label ?? "결과 폼"})`} />
       <Card w={6} title="결과 제출 추이" right={fv.forms?.result ? <CompareLegend v={fv} /> : undefined}>
         {fv.forms?.result ? <CompareLine v={fv} values={fv.forms.result} unit="건" /> : <div className="b2b-empty">{fv.forms ? noResult : noForm}</div>}
+      </Card>
+      <Card w={6} title={`${fv.byWeek ? "신청한 주별" : "신청한 날별"} 결과 제출`}>
+        <DataTable rows={cohortRows} cols={dCols} rowKey={(r) => r.key} sortKey="key" empty={noForm}
+          foot={["합계", fv.people.toLocaleString(), fv.hasResult ? (fv.doneS?.cur ?? 0).toLocaleString() : "-", fv.hasResult ? pctOf(fv.doneRate) : "-"]} />
+      </Card>
+
+      <Section title="구매 추적" />
+      <Card w={12} title={`${fv.byWeek ? "신청한 주별" : "신청한 날별"} 구매`}>
+        <DataTable rows={cohortRows} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty={noForm}
+          foot={["합계", fv.people.toLocaleString(), fv.buy ? (fv.buyS?.cur ?? 0).toLocaleString() : "-", fv.buy ? pctOf(fv.buyRate) : "-", fv.buy ? won(fv.buyRevS?.cur ?? 0) : "-"]} />
       </Card>
     </>
   );

@@ -92,7 +92,7 @@ export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
   forms?: { apply: { id: string; label: string }; result: { id: string; label: string } | null };   // 탈리 폼 ID(신청·결과). result null = 결과 폼이 아직 정해지지 않음
-  // 상품 주문형 주제의 결과 제출 탈리 폼(산 뒤 미션을 마치고 내는 폼) — 산 고객과 전화번호로 잇는다.
+  // 상품 주문형 주제의 결과 제출 탈리 폼(산 뒤 미션을 마치고 내는 폼) — 산 고객과 전화번호로 잇는다. label = 화면의 '평가(…)' 구역 제목에 쓰는 폼 이름.
   //  scaleMax = 폼 안 설문 척도 문항의 만점(있으면 문항별 평균 점수를 보여 준다), scaleNames = [문항 제목에 든 구절, 화면에 쓸 짧은 이름]
   //  textNames = 의견 목록에 보여 줄 주관식 문항 [문항 제목에 든 구절, 화면에 쓸 짧은 이름] — 여기 적은 문항의 답만 묶음에 담는다(이름·연락처 문항은 적지 않는다)
   submit?: { id: string; label: string; scaleMax?: number; scaleNames?: [match: string, name: string][]; textNames?: [match: string, name: string][] };
@@ -110,7 +110,7 @@ export const TOPICS: TopicDef[] = [
     //  주관식 의견 = 참여 소감(모든 제출) + 설문의 아쉬운 점·다음 제품 희망. 2026-11-17 대표: "댓글창처럼 평점 우측에 쭉 스크롤되게".
     id: "trial", name: "이유식 체험단",
     basis: "공식몰 상품번호 172 주문 · 페이지 /baby · 탈리 제출 폼 · 메타 '이유식 체험단' 캠페인",
-    submit: { id: "J9Lpyz", label: "체험단 제출", scaleMax: 8,
+    submit: { id: "J9Lpyz", label: "제출 폼", scaleMax: 8,
       scaleNames: [["배송 상태", "배송 상태"], ["지퍼백 포장", "지퍼백 포장"], ["조리 과정", "조리 과정"], ["조리 후 식감", "조리 후 식감"], ["조리 후 향", "조리 후 향"], ["가격 대비", "가격 대비 만족도"], ["아이의 반응", "아이의 반응"], ["다시 활용", "다시 쓸 의향"]],
       textNames: [["참여 소감", "참여 소감"], ["아쉬운 점", "아쉬운 점"], ["다음 이유식용 제품", "다음 제품 희망"]] },
     productLike: ["이유식 생선 체험단 패키지", "첫 생선일기 전용 패키지"],   // 172 의 지금 이름과 예전 이름
@@ -124,7 +124,7 @@ export const TOPICS: TopicDef[] = [
     //  상품이 정해져 있지 않다(선정된 뒤 원하는 제품을 산다) — 구매는 '신청한 사람이 신청한 날부터 산 주문'으로 본다(전화번호 → 고객 키).
     id: "diet", name: "다이어트 챌린지",
     basis: "페이지 /diet · 탈리 신청 폼·인증 폼 · 메타 '다이어트 챌린지' 캠페인",
-    forms: { apply: { id: "ArKkkW", label: "챌린지 신청" }, result: { id: "q4r7Dd", label: "챌린지 인증" } },   // 인증 폼은 한 사람이 한 번 제출, 연락처 칸으로 신청과 잇는다(2026-11-16 대표)
+    forms: { apply: { id: "ArKkkW", label: "챌린지 신청" }, result: { id: "q4r7Dd", label: "인증 폼" } },   // 인증 폼은 한 사람이 한 번 제출, 연락처 칸으로 신청과 잇는다(2026-11-16 대표)
     productLike: [],
     landing: { label: "/diet", paths: ["/diet", "/diet/", "/diet/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
     gaItemNames: [],
