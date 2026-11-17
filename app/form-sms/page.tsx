@@ -106,7 +106,7 @@ export default function FormSmsPage() {
       {!data.configured && <div className="b2b-error">솔라피 키(SOLAPI_API_KEY·SOLAPI_API_SECRET)가 설정되지 않았습니다.</div>}
       {!data.hasTallyKey && <div className="b2b-error">Tally API 키가 없어 신청을 가져올 수 없습니다. 관리자 › 설정 › 연결의 Tally 에 API 키를 저장하세요.</div>}
       {data.tallyError && <div className="b2b-error">{data.tallyError}</div>}
-      {tickStale && <div className="sm-warn">예약 신호가 {data.tickMinutes}분마다 오지 않습니다. 정한 시각에 보내려면 migration 168 을 적용하세요.</div>}
+      {tickStale && <div className="sm-warn">예약 신호가 {data.tickMinutes}분마다 오지 않습니다. 관리자에게 알리세요(예약 신호는 Vercel 크론이 보냅니다).</div>}
       {data.last?.error && <div className="b2b-error">{dateTime(data.last.at)} {data.last.error}</div>}
       {error && <div className="b2b-error">{error}</div>}
 

@@ -8,7 +8,7 @@ import { reindexNow } from "@/app/lib/ms365-docs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // 크론 틱 뒤 after(문서 색인 35초) 몫 포함
+export const maxDuration = 60; // 크론 틱 뒤 after(문서 색인 35초 — 한 시간에 한 번) 몫 포함
 
 const COOKIE = "b2b_auth";
 async function userOf(req: NextRequest): Promise<string | null> {
@@ -46,12 +46,11 @@ async function readMarkers(keys: string[]): Promise<Map<string, string>> {
 const RETRY_WINDOW = 15;
 
 // GET — 크론이 호출(Authorization: Bearer CRON_SECRET/DIGEST_CRON_KEY 또는 ?key=).
-//  발송 시각은 설정(digest_config.times, KST HH:MM 5분 단위 목록)이 정한다 — 설정에서 바꾸면
-//  SQL 을 다시 만질 필요 없이 즉시 반영된다.
-//  · 주 발송: Supabase pg_cron 틱(migration 092)이 5분마다 ?gate=times 로 호출 → 최근 15분 안에 지난
-//    시각 중 가장 늦은 것이 아직 안 나갔으면 그 시각으로 발송(정각 칸에서 실패하면 다음 두 틱이 다시 시도).
-//  · 예비: vercel.json 크론 2개(06시대·16시대, Hobby 는 ±59분) — 최근 75분 안에 지난 시각 중 가장 늦은 것이
-//    미발송이면 대신 보낸다. 그 밖의 시각(예: 08:30)은 틱 재시도 창만 있다.
+//  발송 시각은 설정(digest_config.times, KST HH:MM 5분 단위 목록)이 정한다 — 설정에서 바꾸면 즉시 반영된다.
+//  · 발송: Vercel 크론(vercel.json, 5분마다 — 2026-11-18 Pro) → 최근 15분 안에 지난 시각 중 가장 늦은 것이
+//    아직 안 나갔으면 그 시각으로 발송(정각 칸에서 실패하면 다음 두 틱이 다시 시도).
+//  · 옛 신호: Supabase pg_cron 틱(migration 092, ?gate=times)은 170 으로 끄기 전까지 계속 오지만 아무 일도 하지 않는다 —
+//    두 신호가 겹치면 같은 알림이 두 번 나갈 수 있어서다(pg_cron 은 정각, Vercel 크론은 15~30초 뒤에 온다).
 //  · dedup: 시각별·하루 1회(digest_sent_HHMM). Teams 발송이 성공했을 때만 기록한다.
 //  · 알림 내용의 조회가 일부 실패하면 그 섹션만 '확인 못 함'으로 표시해 보낸다(b2b-digest.ts).
 //    본 조회가 모두 실패하면 기록하지 않고 다음 시도로 넘기며, 마지막 시도에서도 실패하면 짧은 실패 알림을 한 번 보낸다.
@@ -70,16 +69,20 @@ export async function GET(req: NextRequest) {
   const isAdmin = name === "관리자" || name === "현석";
   if (!isCron && !isAdmin) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
 
-  // 회사 문서함 본문 색인(2026-10-27) — 크론 틱마다(아침·오후) 바뀐 파일만. 미연결·표 없음이면 조용히 건너뛴다.
-  if (isCron) {
+  // 옛 pg_cron 틱(092)은 ?gate=times 를 붙여 온다 — Vercel 크론으로 옮긴 뒤로는 받기만 하고 끝낸다(migration 170 으로 끈다).
+  if (isCron && sp.get("gate") === "times") return NextResponse.json({ ok: true, skipped: "moved-to-vercel-cron" });
+
+  const kstNow = new Date(Date.now() + 9 * 3600_000);
+  const nowMin = kstNow.getUTCHours() * 60 + kstNow.getUTCMinutes();
+  // 회사 문서함 본문 색인(2026-10-27) — 한 시간에 한 번(정각 칸의 틱), 바뀐 파일만. 미연결·표 없음이면 조용히 건너뛴다.
+  //  2026-11-18 까지는 5분 틱마다 돌아 문서함 목록을 하루 288번 훑었다(이 경로의 평균 실행 시간 13초의 원인).
+  if (isCron && kstNow.getUTCMinutes() < 5) {
     after(async () => { try { await reindexNow({ budgetMs: 35_000 }); } catch (e) { console.error("[schedule-digest] 문서 색인 실패", errMsg(e)); } });
   }
 
   const cfg = await getDigestConfig();
   const times = (cfg.times?.length ? [...cfg.times] : ["06:00", "16:00"]).sort();
   const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
-  const kstNow = new Date(Date.now() + 9 * 3600_000);
-  const nowMin = kstNow.getUTCHours() * 60 + kstNow.getUTCMinutes();
   const today = kstDateStr();
   const keyFor = (t: string) => `digest_sent_${t.replace(":", "")}`; // 값 = 마지막 발송일
   const failKeyFor = (t: string) => `digest_fail_${t.replace(":", "")}`; // 값 = 실패 알림을 보낸 날
@@ -92,7 +95,7 @@ export async function GET(req: NextRequest) {
   if (isCron && sp.get("send") !== "1") {
     if (!cfg.enabled) return NextResponse.json({ ok: true, skipped: "disabled" });
 
-    const gate = sp.get("gate") === "times";
+    const gate = true;   // 크론은 늘 5분 틱이다(예비 크론의 75분 소급 창은 2026-11-18 Vercel 크론 통합으로 쓰지 않는다)
     const tick = Math.floor(nowMin / 5) * 5;
     // 대상 = 창 안에서 지난 시각 중 가장 늦은 것. 그게 이미 나갔으면 더 이른 시각을 소급하지 않는다(새 알림이 이미 최신).
     //  예비 창을 75분으로 제한하는 이유: 배포 직후 등에 한나절 전 시각까지 소급 발송하면 뜬금없는 알림이 된다.

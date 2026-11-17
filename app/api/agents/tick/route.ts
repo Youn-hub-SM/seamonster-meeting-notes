@@ -7,14 +7,24 @@ import { startAgentRun, AgentStartError } from "@/app/lib/agents/run";
 export const dynamic = "force-dynamic";
 export const maxDuration = 800; // 단계형 에이전트의 한 단계 740초(staged.ts STAGE_MS) + 저장·넘기기. 요청서 에이전트는 그 안에서 270초 기한을 따로 지킨다(Pro + Fluid 한도 800)
 
-// POST — 예약 신호. Supabase pg_cron 이 매시 45분에 두드린다(migration 165, Authorization: Bearer DIGEST_CRON_KEY).
-//  에이전트마다 예약 설정(/agents 화면)을 보고 지금이 '목표 시각 15분 전'이면 초안을 작성한다.
-//  같은 목표 시각은 한 번만(agent_schedule_last). 차례가 아니면 즉시 끝난다 — 설정을 바꿔도 SQL 을 다시 만질 필요가 없다.
-//  미들웨어 보호 밖(로그인 쿠키 없이 온다) — 아래 키 검증이 유일한 문이다.
-export async function POST(req: NextRequest) {
+const authed = (req: NextRequest) => {
   const authz = req.headers.get("authorization") || "";
-  const ok = [process.env.DIGEST_CRON_KEY, process.env.CRON_SECRET].some((k) => !!k && authz === `Bearer ${k}`);
-  if (!ok) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
+  return [process.env.DIGEST_CRON_KEY, process.env.CRON_SECRET].some((k) => !!k && authz === `Bearer ${k}`);
+};
+
+// POST — 옛 예약 신호(Supabase pg_cron, migration 165). 2026-11-18 Vercel 크론(GET)으로 옮긴 뒤로는 받기만 하고 끝낸다 —
+//  두 신호가 같은 분에 와서 같은 초안을 두 번 쓰지 않게. migration 170 으로 끈다.
+export async function POST(req: NextRequest) {
+  if (!authed(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
+  return NextResponse.json({ ok: true, skipped: "moved-to-vercel-cron" });
+}
+
+// GET — 예약 신호. Vercel 크론이 매시 45분에 두드린다(vercel.json, Authorization: Bearer CRON_SECRET).
+//  에이전트마다 예약 설정(/agents 화면)을 보고 지금이 '목표 시각 15분 전'이면 초안을 작성한다.
+//  같은 목표 시각은 한 번만(agent_schedule_last). 차례가 아니면 즉시 끝난다 — 설정을 바꿔도 크론을 다시 만질 필요가 없다.
+//  미들웨어 보호 밖(로그인 쿠키 없이 온다) — 키 검증이 유일한 문이다.
+export async function GET(req: NextRequest) {
+  if (!authed(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
 
   await markTick().catch(() => {});
   const now = Date.now();

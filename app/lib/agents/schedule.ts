@@ -1,7 +1,7 @@
 // 에이전트 예약 설정 — 서버 전용(b2b_settings kv). 순수 계산(dueTargetKey·nextTargetLabel)은 registry.ts.
 //  agent_schedule:<agent>      = {on, weekday, hour} JSON
 //  agent_schedule_last:<agent> = 마지막으로 실행한 목표 시각 키(YYYY-MM-DDTHH) — 같은 목표를 두 번 실행하지 않는다
-//  agent_tick_last             = 예약 신호(pg_cron, migration 165)가 마지막으로 온 시각 — 화면이 '신호가 안 온다'를 알린다
+//  agent_tick_last             = 예약 신호(Vercel 크론 — vercel.json)가 마지막으로 온 시각 — 화면이 '신호가 안 온다'를 알린다
 import { getKv, setKv } from "../b2b-settings";
 import { DEFAULT_SCHEDULE, defaultScheduleOf, type AgentSchedule } from "./registry";
 

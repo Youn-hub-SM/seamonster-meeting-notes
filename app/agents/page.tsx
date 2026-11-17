@@ -263,7 +263,7 @@ function ScheduleRow({ agentId, noun }: { agentId: string; noun: string }) {
         <button type="button" className="b2b-btn-secondary" onClick={save} disabled={saving || !dirty}>예약 저장</button>
         {saved.on && !dirty && <span className="ag-sched-next">다음 {noun} {nextTargetLabel(saved, now)}</span>}
       </div>
-      {tickLate && <div className="sm-warn" style={{ marginTop: "var(--sm-space-3)" }}>예약 신호가 오지 않습니다. 운영 배포 뒤 supabase/migrations/165_agent_tick.sql 을 적용하세요.</div>}
+      {tickLate && <div className="sm-warn" style={{ marginTop: "var(--sm-space-3)" }}>예약 신호가 오지 않습니다. 관리자에게 알리세요(예약 신호는 Vercel 크론이 매시 45분에 보냅니다).</div>}
     </>
   );
 }

@@ -119,7 +119,7 @@ export type AgentReport = {
 };
 
 // ── 예약(초안을 매주 n요일 n시까지) ──
-//  Supabase pg_cron 이 매시 45분에 /api/agents/tick 을 두드리고(migration 165), 앱이 이 설정을 보고 작성 여부를 정한다.
+//  Vercel 크론이 매시 45분에 /api/agents/tick 을 두드리고(vercel.json — 2026-11-18 pg_cron 165 에서 옮김), 앱이 이 설정을 보고 작성 여부를 정한다.
 //  'n시까지' = 그 시각 15분 전에 시작(작성 1~4분). 요일·시각은 한국 시간.
 export type AgentSchedule = { on: boolean; weekday: number; hour: number }; // weekday 0=일 … 6=토
 export const DEFAULT_SCHEDULE: AgentSchedule = { on: false, weekday: 2, hour: 10 }; // 요청서는 보통 화요일에 쓴다(2026-11-11 대표)

@@ -2,7 +2,7 @@
 //  ■ 보내는 시각(11-14 대표: "커스텀 할 수 있게, 즉시도 포함") — rule.mode
 //    daily   = 매일 rule.time(한국 시간)에 그동안의 신청을 모아서. 하루 한 번(form_sms_daily 에 보낸 날짜).
 //    instant = 예약 신호가 올 때마다(5분 간격) 새 신청을 가져와 바로. 그래서 '즉시'는 신청 뒤 5분 안이다.
-//    예약 신호 = pg_cron 이 5분마다 /api/form-sms/tick 을 두드린다(migration 168). 보낼지는 tickFormSms 가 정한다.
+//    예약 신호 = Vercel 크론이 5분마다 /api/form-sms/tick 을 두드린다(vercel.json — 2026-11-18 pg_cron 에서 옮김). 보낼지는 tickFormSms 가 정한다.
 //  옛 흐름: 탈리 → 구글시트 앱스크립트 → 재피어 → 솔라피.  새 흐름: 탈리 API → survey_responses → 여기 → 솔라피.
 //  "신청 직후에 바로 보내지 않기 위함"(대표) — 그래서 하루 한 번 13시에 그동안의 신청을 모아서 보낸다.
 //  ■ 신청은 탈리 API 로 '가져온다'(syncTally) — 설문응답 가져오기와 같은 API 키(관리자 › 설정 › 연결 › Tally).
@@ -22,7 +22,7 @@ import { isSolapiConfigured, sendSolapiSms, SolapiRejected } from "./solapi";
 import { getTallyApiKey, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "./voc-tally";
 
 export const FORM_SMS_TABLE = "form_sms_sends";
-export const TICK_MINUTES = 5;            // 예약 신호 간격(migration 168 의 pg_cron) — '즉시'의 최대 지연
+export const TICK_MINUTES = 5;            // 예약 신호 간격(vercel.json 의 크론) — '즉시'의 최대 지연
 const RETRY_WINDOW_MIN = 60;              // 매일 발송이 탈리·솔라피 문제로 못 나갔을 때 다음 신호에 다시 해 보는 시간(그 뒤엔 다음 날)
 export const AUTO_CAP = 300;              // 자동 발송의 상한 — 대기가 이보다 많으면 설정 실수로 보고 멈춘다([지금 보내기]로만)
 const BATCH_MAX = 1000;                   // 한 번에 다루는 신청 수
