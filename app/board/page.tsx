@@ -1181,6 +1181,13 @@ export default function BoardPage() {
   const tUnit: Unit = unitPick ?? autoUnit(tSpan?.n ?? n);
   const tView = tData && tSpan && !isFormTopic ? buildTopicView(tData, tSpan, filters.salesCh, tUnit) : null;
   const fView = tData && tSpan && isFormTopic ? buildFormView(tData, tSpan, tUnit) : null;
+  // 집계 기준 — 화면 맨 아래에 작게 둔다(2026-11-17 대표: 제목 아래에 있으니 정신 사납다)
+  const baseDay = snap ? `기준일 ${snap.base} (${weekday(snap.base)})` : "";
+  const basis: string[] = isSubx ? [`카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""}`, "매일 23:59 수집", "정기배송 분석 화면과 같은 계산", "회원 수는 사람 기준"]
+    : !snap ? []
+    : isFormTopic ? [baseDay, ...(curTopic ? [curTopic.basis] : []), "신청·결과는 탈리 제출 시각", "사람은 전화번호로 세고 처음 신청한 날 기준", "방문·스크롤은 GA4 세션", "구매는 신청한 날부터의 주문", "재구매는 결과를 낸 다음 날부터의 주문"]
+    : topicId ? [baseDay, ...(curTopic ? [curTopic.basis] : []), "고객은 처음 산 날 기준", ...(curTopic?.submit ? ["결과 제출은 탈리 제출 시각, 낸 사람은 전화번호로 산 고객에 잇는다"] : []), "방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장", "재구매는 처음 산 다음 날부터 다른 상품 주문"]
+    : [baseDay, span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음", "매출은 주문일 기준 도매 포함", "광고비는 VAT 제외"];
   return (
     <div className="bd-root">
       <header className="bd-top">
@@ -1191,13 +1198,6 @@ export default function BoardPage() {
           </Link>
           <div className="bd-heading">
             <h1 className="bd-title">주요 지표</h1>
-            <p className="bd-basis">
-              {isSubx ? `카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""} · 매일 23:59 수집 · 정기배송 분석 화면과 같은 계산 · 회원 수는 사람 기준`
-                : !snap ? "\u00a0"
-                : isFormTopic ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}신청·결과는 탈리 제출 시각 · 사람은 전화번호로 세고 처음 신청한 날 기준 · 방문·스크롤은 GA4 세션 · 구매는 신청한 날부터의 주문 · 재구매는 결과를 낸 다음 날부터의 주문</>
-                : topicId ? <>기준일 {snap.base} ({weekday(snap.base)}) · {curTopic ? `${curTopic.basis} · ` : ""}고객은 처음 산 날 기준{curTopic?.submit ? " · 결과 제출은 탈리 제출 시각, 낸 사람은 전화번호로 산 고객에 잇는다" : ""} · 방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장 · 재구매는 처음 산 다음 날부터 다른 상품 주문</>
-                : <>기준일 {snap.base} ({weekday(snap.base)}) · {span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음"} · 매출은 주문일 기준 도매 포함 · 광고비는 VAT 제외</>}
-            </p>
           </div>
           <div className="bd-bar-right">
             {!isSubx && snap && <span className={`bd-state${refreshing ? " is-busy" : ""}`}><i aria-hidden="true" />{refreshing ? "새 숫자 계산 중..." : `${builtAt} 계산`}</span>}
@@ -1251,6 +1251,7 @@ export default function BoardPage() {
           : page === "sales" ? <SalesPage v={view} s={snap} detail={shownDetail} />
           : <AdsPage v={view} s={snap} />}
       </main>
+      {basis.length > 0 && <footer className="bd-basis"><span className="bd-basis-k">집계 기준</span>{basis.join(" · ")}</footer>}
     </div>
   );
 }

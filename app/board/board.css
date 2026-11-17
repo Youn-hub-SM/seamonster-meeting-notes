@@ -10,7 +10,7 @@
   background: linear-gradient(180deg, var(--sm-bg-warm) 0, var(--sm-bg-subtle) 420px);
 }
 
-/* 위쪽 — 첫 줄(.bd-top): 로고·제목과 기준 설명·계산 시각·[다시 계산]. 둘째 줄(.bd-bar): 쪽 탭 + 기간·필터(정기배송 분석 탭에서는 구역 이동) — 이 줄만 스크롤해도 붙어 있다 */
+/* 위쪽 — 첫 줄(.bd-top): 로고·제목·계산 시각·[다시 계산]. 둘째 줄(.bd-bar): 쪽 탭 + 기간·필터(정기배송 분석 탭에서는 구역 이동) — 이 줄만 스크롤해도 붙어 있다 */
 .bd-bar { position: sticky; top: 0; z-index: 30; background: var(--sm-bg-warm); border-bottom: 1px solid var(--sm-orange-border); }
 .bd-bar-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-3) var(--sm-space-4); max-width: 1800px; margin: 0 auto; padding: var(--sm-space-4) var(--sm-space-5) 0; }
 .bd-bar-nav { padding-top: var(--sm-space-3); padding-bottom: var(--sm-space-3); }
@@ -19,7 +19,6 @@
 .bd-logo img { height: 20px; width: auto; display: block; }
 .bd-heading { min-width: 0; flex: 1 1 320px; }
 .bd-title { font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-black); }
-.bd-basis { margin-top: 2px; font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
 .bd-bar-right { margin-left: auto; display: flex; align-items: center; gap: var(--sm-space-2); }
 /* 계산 시각 — 점 하나로 상태를 말한다(초록 = 계산 끝, 주황 = 새로 계산하는 중) */
 .bd-state { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--sm-space-3); background: var(--sm-white); border: 1px solid var(--sm-border-light); border-radius: var(--sm-radius); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -112,6 +111,7 @@
   .bd-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-4); }
   .bd-bar-row { padding-left: var(--sm-space-3); padding-right: var(--sm-space-3); }
   .bd-canvas { padding: var(--sm-space-3); gap: var(--sm-space-3); }
+  .bd-basis { width: calc(100% - 2 * var(--sm-space-3)); }
   .bd-card { padding: var(--sm-space-4); }
   .bd-pages { overflow-x: auto; max-width: 100%; }
   .bd-bar-right { margin-left: 0; }
@@ -124,6 +124,10 @@
 .bd-table-wrap th.bd-w30 { width: 30%; }
 .bd-table-wrap th.bd-w45 { width: 45%; }
 .bd-path { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 집계 기준 — 화면 맨 아래의 작은 글(2026-11-17 대표: 제목 아래에 있으니 정신 사납다 → 푸터처럼). 카드 격자와 같은 폭 */
+.bd-basis { width: calc(100% - 2 * var(--sm-space-5)); max-width: calc(1800px - 2 * var(--sm-space-5)); margin: 0 auto; padding: var(--sm-space-4) 0 var(--sm-space-6); border-top: 1px solid var(--sm-border); font-size: var(--sm-fs-xs); line-height: var(--sm-lh-body); color: var(--sm-text-light); }
+.bd-basis-k { margin-right: var(--sm-space-3); font-weight: 600; color: var(--sm-text-mid); }
 
 /* 구역 제목 — 주제 탭을 같은 순서로 읽게 나눈다(주요 지표 → 유입·광고·실적 → 평가 → 재구매 추적). 한 줄 전체 */
 .bd-section { grid-column: 1 / -1; margin: var(--sm-space-3) 0 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-black); }
