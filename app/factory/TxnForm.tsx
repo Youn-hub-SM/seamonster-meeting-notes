@@ -19,20 +19,21 @@ import { ORIGINS, boxBreakdown, boxSummary, kgBox, kgStr, kgNum, lotLabel, produ
 import { today } from "./util";
 
 // kg = 이 줄의 수량(입고·출고) 또는 실사 kg(조정). box_kg = 박스 중량(로트 줄은 로트의 값), boxes = 박스 수. have = 기존 로트의 현재 kg.
-type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; boxes: string; kg: string; have: number; in_date: string | null; tape_color: string };
+// partner = 이 재고가 나갈 거래처(입고 줄마다, 2026-11-17 대표: 입고처가 아니라 출고될 곳). 출고는 창 머리의 거래처 하나.
+type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; boxes: string; kg: string; have: number; in_date: string | null; tape_color: string; partner: string };
 // draft = 아직 등록 전인 새 품목(입고 저장 때 등록). product_id 는 그때까지 비어 있다.
 type Block = { key: string; product_id: string; lines: Line[]; draft?: { name: string; spec: string; origin: string } };
 const normName = (s: string) => s.trim().replace(/\s+/g, " ");
 
 let seq = 0;
 const k = () => `k${++seq}`;
-const newLine = (): Line => ({ key: k(), lot: false, mfg_date: today(), box_kg: "", boxes: "", kg: "", have: 0, in_date: null, tape_color: "" });
+const newLine = (): Line => ({ key: k(), lot: false, mfg_date: today(), box_kg: "", boxes: "", kg: "", have: 0, in_date: null, tape_color: "", partner: "" });
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 function makeLines(p: StockRow, type: TxnType): Line[] {
   if (type === "입고") return [newLine()];
   const lots = p.lots.filter((l) => (type === "출고" ? l.kg > 0 : l.kg !== 0));
-  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: l.box_kg == null ? "" : String(l.box_kg), boxes: "", kg: "", have: l.kg, in_date: l.in_date, tape_color: "" }));
+  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: l.box_kg == null ? "" : String(l.box_kg), boxes: "", kg: "", have: l.kg, in_date: l.in_date, tape_color: "", partner: "" }));
 }
 
 const TITLE: Record<TxnType, string> = { 입고: "입고", 출고: "출고", 조정: "조정" };
@@ -233,12 +234,13 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
           product_id: b.draft ? idOf.get(b.key) : b.product_id, mfg_date: l.mfg_date || null,
           box_kg: numOr(l.box_kg), boxes: bx !== null && Number.isInteger(bx) && bx > 0 ? bx : null,
           tape_color: type === "입고" && fields.tape_color ? l.tape_color.trim() || null : null,
+          partner: type === "입고" && fields.partner ? l.partner.trim() || null : null,
           ...(type === "조정" ? { target_kg: Number(l.kg) } : { kg: Number(l.kg) }),
         };
       });
       const res = await fetch("/api/factory/txns", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, txn_date: type === "조정" ? today() : date, partner: type === "조정" || !fields.partner ? "" : partner, memo, lines, batch_id: batch }),
+        body: JSON.stringify({ type, txn_date: type === "조정" ? today() : date, partner: type === "출고" && fields.partner ? partner : "", memo, lines, batch_id: batch }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
@@ -266,6 +268,13 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
         <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1" value={l.kg}
           onChange={(e) => setLine(b.key, l.key, { kg: e.target.value })} />
       </label>
+      {type === "입고" && fields.partner && (
+        <label className="fac-f fac-f-tape">
+          <span>거래처</span>
+          <input className="b2b-input" list="fac-partners" value={l.partner} placeholder="선택" autoComplete="off"
+            onChange={(e) => setLine(b.key, l.key, { partner: hangulInputValue(e) })} />
+        </label>
+      )}
       {type === "입고" && fields.tape_color && (
         <label className="fac-f fac-f-tape">
           <span>테잎색</span>
@@ -309,9 +318,10 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
               <span className="b2b-field-label">{type}일</span>
               <input className="b2b-input" type="date" value={type === "조정" ? today() : date} max={today()} disabled={type === "조정"} onChange={(e) => setDate(e.target.value)} />
             </label>
-            {type !== "조정" && fields.partner && (
+            {/* 입고의 거래처는 줄마다(재고가 나갈 곳) — 창 머리에는 출고 때만 */}
+            {type === "출고" && fields.partner && (
               <label className="b2b-field">
-                <span className="b2b-field-label">{type === "입고" ? "거래처(입고처)" : "거래처(출고처)"}</span>
+                <span className="b2b-field-label">거래처</span>
                 <input className="b2b-input" list="fac-partners" value={partner} autoComplete="off" onChange={(e) => setPartner(hangulInputValue(e))} placeholder="선택" />
               </label>
             )}

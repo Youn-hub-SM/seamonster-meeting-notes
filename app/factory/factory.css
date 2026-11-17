@@ -270,7 +270,11 @@
   .fac-txn-meta { grid-template-columns: 1fr 1fr; }
   .fac-txn-meta .fac-txn-memo { grid-column: 1 / -1; }
   .fac-txn-meta .b2b-input { font-size: 16px; }
-  .fac-line:not(.is-lot) { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; }
+  /* 입고 새 줄 — 칸이 여섯(박스 중량·박스 수·총 kg·거래처·테잎색·제조일자)까지 늘어 3칸 격자로 줄바꿈. ✕는 칸을 차지하지 않고 맨 끝 줄 오른쪽
+     (전엔 넷째 칸이 auto 라 거기 떨어진 칸이 폭 0 으로 눌려 테잎색 칸이 안 보였다 — 2026-11-17 대표 보고) */
+  .fac-line:not(.is-lot) { display: grid; grid-template-columns: repeat(3, 1fr); align-items: end; }
+  .fac-line:not(.is-lot) .fac-x { grid-column: 1 / -1; justify-self: end; }
+  .fac-f-tape .b2b-input { width: 100%; }
   .fac-f .b2b-input, .fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 100%; min-width: 0; }
   .fac-blk-new { width: 100%; }
   .fac-new-row { display: grid; grid-template-columns: 1fr 1fr; }

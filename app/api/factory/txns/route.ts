@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { type, txn_date?, partner?, memo?, batch_id?, lines: [{ product_id, mfg_date?, kg | target_kg, box_kg?, boxes?, tape_color? }] }
+// POST { type, txn_date?, partner?, memo?, batch_id?, lines: [{ product_id, mfg_date?, kg | target_kg, box_kg?, boxes?, tape_color?, partner? }] }
 //  입고·출고 = kg(양수, 0.001 단위), 조정 = target_kg(실사 kg — 현재와의 차이만 기록, 오늘 날짜만).
 //  box_kg·boxes 는 입고 때 적은 참고(총 kg 계산 보조) — 없어도 된다.
 //  batch_id = 화면이 만든 입력 번호 — 응답을 못 받고 다시 눌러도 한 번만 기록된다.
@@ -139,7 +139,10 @@ export async function POST(req: NextRequest) {
       if (!p.stock_tracked) return NextResponse.json({ ok: false, error: `${p.name}: 재고관리 사용안함 품목입니다.` }, { status: 400 });
       const mfg = String(l.mfg_date || "");
       if (mfg && !validDate(mfg)) return NextResponse.json({ ok: false, error: `${p.name}: 제조일자가 올바르지 않습니다.` }, { status: 400 });
-      const row: Record<string, unknown> = { product_id: p.id, type, txn_date, mfg_date: mfg || null, partner, memo, box_kg: null, boxes: null };
+      // 거래처 — 입고는 줄마다(이 재고가 나갈 곳), 출고는 창 머리 값. 줄에 적은 것이 있으면 그것이 우선
+      const linePartner = String(l.partner ?? "").trim();
+      if (linePartner.length > 60) return NextResponse.json({ ok: false, error: `${p.name}: 거래처가 너무 깁니다(60자까지).` }, { status: 400 });
+      const row: Record<string, unknown> = { product_id: p.id, type, txn_date, mfg_date: mfg || null, partner: linePartner || partner, memo, box_kg: null, boxes: null };
       // 테잎색(009) — 입고 줄마다. 60자까지
       const tape = String(l.tape_color ?? "").trim();
       if (tape) {
