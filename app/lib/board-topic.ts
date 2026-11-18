@@ -108,6 +108,7 @@ async function custSection(sb: SupabaseClient, def: TopicDef, days: string[], ba
   ]);
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
   const out: TopicCust = { ok: true, first: zeros(n), fresh: zeros(n), rep1: zeros(n), rep2: zeros(n), repRev: zeros(n), total: { first: 0, rep1: 0, rep2: 0 }, after: [] };
+  console.info("[board-topic] cust", def.id, JSON.stringify({ days: rows.length, firstAll: rows.reduce((a, r) => a + num(r.n), 0), earliest: rows.reduce((m, r) => (String(r.d) < m ? String(r.d) : m), "9999") }));
   for (const r of rows) {
     out.total.first += num(r.n); out.total.rep1 += num(r.rep1); out.total.rep2 += num(r.rep2);
     const i = idx.get(String(r.d)); if (i == null) continue;   // 180일보다 먼저 처음 산 고객 — 전체 기간 합계에만
@@ -316,7 +317,7 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   const rs = await timeout(tallySubs(def.submit!.id, apiKey), 60_000, "탈리");
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
   const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), rep1: zeros(n), rep2: zeros(n), repRev: zeros(n), total: { done: 0, rep1: 0, rep2: 0 },
-    unmatched: 0, truncated: rs.truncated, survey: [], surveyAnswered: zeros(n), opinions: [] };
+    unmatched: 0, noPhone: 0, truncated: rs.truncated, survey: [], surveyAnswered: zeros(n), opinions: [] };
   // 설문 척도 문항 — 폼의 순서대로. 이름은 정의에 적어 둔 짧은 이름(없으면 문항 제목 그대로)
   const names = def.submit!.scaleNames || [];
   const scaleQ = new Map<string, TopicSubmit["survey"][number]>();
@@ -334,7 +335,7 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
     if (k) byKey.set(k, (byKey.get(k) || 0) + (i != null ? 1 : 0));
     if (i == null) continue;      // 180일보다 앞선 제출 — 전체 기간 합계에만 들어간다
     out.count[i]++;
-    if (!k) out.unmatched++;
+    if (!k) out.noPhone++;
     let scoreSum = 0, scoreN = 0;
     for (const [qid, v] of s.scales) { const q = scaleQ.get(qid); if (q) { q.sum[i] += v; q.n[i]++; scoreSum += v; scoreN++; } }
     if (scoreN > 0) out.surveyAnswered[i]++;
@@ -360,6 +361,8 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   for (const [k, cnt] of byKey) if (!matched.has(k)) out.unmatched += cnt;   // 그 상품을 산 기록을 찾지 못한 제출
   out.survey = [...scaleQ.values()].filter((q) => sum(q.n) > 0);
   out.opinions = newestFirst(out.opinions);
+  // 잇기 점검용(숫자만) — 제출 수·전화번호를 못 읽은 수·사람 수·구매를 찾은 사람 수. 제출률이 이상하면 이 줄부터 본다(Vercel 로그).
+  console.info("[board-topic] submit", def.id, JSON.stringify({ subsAll: rs.subs.length, subs180: sum(out.count), noPhone: out.noPhone, people: keys.length, matched: matched.size, unmatched180: out.unmatched, done180: sum(out.done), doneAll: out.total.done, truncated: rs.truncated }));
   return out;
 }
 

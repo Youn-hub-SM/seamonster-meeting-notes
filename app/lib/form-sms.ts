@@ -42,10 +42,10 @@ export type FormSmsLast = { at: string; by: string; sent: number; failed: number
 export type SendStatus = "sending" | "sent" | "failed" | "skipped" | "unknown";
 
 const digits = (s: unknown) => String(s ?? "").replace(/\D/g, "");
-// 휴대폰 번호로 다듬기 — '+82 10-1234-5678'·'821012345678' 도 받는다. 휴대폰이 아니면 null.
+// 휴대폰 번호로 다듬기 — '+82 10-1234-5678'·'821012345678'·'+82 010-1234-5678'(국가번호 뒤에 0 을 그대로 적은 것)도 받는다. 휴대폰이 아니면 null.
 export function normalizePhone(v: unknown): string | null {
   let d = digits(v);
-  if (d.startsWith("82") && d.length >= 11) d = `0${d.slice(2)}`;
+  if (d.startsWith("82") && d.length >= 11) d = `0${d.slice(2).replace(/^0+/, "")}`;
   return /^01[016789]\d{7,8}$/.test(d) ? d : null;
 }
 export const maskPhone = (d: string) => (d.length >= 10 ? `${d.slice(0, 3)}-****-${d.slice(-4)}` : "****");
