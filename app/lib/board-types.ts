@@ -87,7 +87,7 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
 //  주제는 두 가지다(2026-11-16): 상품 주문이 전환인 주제(productLike)와, 탈리 폼 신청이 전환인 주제(forms — 상품 주문·고객 집계를 하지 않는다).
-export const TOPIC_VERSION = 9;
+export const TOPIC_VERSION = 10;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
@@ -186,7 +186,8 @@ export type TopicForms = {
   resultUnmatched: number;      // 결과 제출 중 신청한 사람과 잇지 못한 건수
   truncated: boolean;           // 제출이 많아 일부만 받음
 };
-// 결과 제출 폼(상품 주문형 주제) — 날짜는 제출 시각의 한국 날짜. 낸 사람은 전화번호 → 고객 키로 그 상품을 처음 산 날에 잇는다.
+// 결과 제출 폼(상품 주문형 주제) — 날짜는 제출 시각의 한국 날짜. **제출 = 미션 성공**(2026-11-18 대표) — 성공 수는 제출 건수(count·total.subs) 그대로 센다.
+//  구매와 잇는 것(done·rep1·rep2 — 전화번호 → 고객 키로 그 상품을 처음 산 날에)은 재구매 추적에만 쓴다. 번호가 달라 못 이은 제출도 성공이다.
 //  묶음에는 건수·점수와 주관식 의견 글만 담는다(이름·전화번호·링크는 담지 않는다).
 export type TopicSubmit = {
   ok: true;
@@ -195,7 +196,7 @@ export type TopicSubmit = {
   rep1: number[];       // 그중 재구매한 사람(처음 산 다음 날부터 주제 밖 상품 주문 1번 이상)
   rep2: number[];       // 그중 재재구매한 사람(2번 이상)
   repRev: number[];     // 그 재구매 매출
-  total: { done: number; rep1: number; rep2: number };   // 180일 밖까지 포함한 전체 기간 합계
+  total: { subs: number; done: number; rep1: number; rep2: number };   // 180일 밖까지 포함한 전체 기간 합계(subs = 제출 건수, done = 그중 구매와 이어진 사람)
   unmatched: number;    // 전화번호는 읽었지만 그 상품을 산 기록을 찾지 못한 제출 건수(180일 안)
   noPhone: number;      // 전화번호를 읽지 못한 제출 건수(180일 안) — 구매와 이을 수 없다
   truncated: boolean;   // 제출이 많아 일부만 받음

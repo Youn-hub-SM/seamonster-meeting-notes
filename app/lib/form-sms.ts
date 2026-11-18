@@ -43,11 +43,12 @@ export type SendStatus = "sending" | "sent" | "failed" | "skipped" | "unknown";
 
 const digits = (s: unknown) => String(s ?? "").replace(/\D/g, "");
 // 휴대폰 번호로 다듬기 — '+82 10-1234-5678'·'821012345678'·'+82 010-1234-5678'(국가번호 뒤에 0 을 그대로 적은 것)도 받는다. 휴대폰이 아니면 null.
+//  국가번호가 붙은 꼴: 82(한국), 1(폼의 국가가 미국으로 잡힌 채 한국 번호를 적은 경우) — 그 뒤의 0 은 있어도 없어도 된다.
 export function normalizePhone(v: unknown): string | null {
-  let d = digits(v);
-  if (d.startsWith("82") && d.length >= 11) d = `0${d.slice(2).replace(/^0+/, "")}`;
-  return /^01[016789]\d{7,8}$/.test(d) ? d : null;
+  const m = /^(?:82|1)?0?(1[016789]\d{7,8})$/.exec(digits(v));
+  return m ? `0${m[1]}` : null;
 }
+export const PHONE_LABEL = /연락처|전화|휴대폰|핸드폰|폰\s*번호|phone|mobile|tel/i;   // 연락처 문항의 제목
 export const maskPhone = (d: string) => (d.length >= 10 ? `${d.slice(0, 3)}-****-${d.slice(-4)}` : "****");
 // 문자 길이(바이트, 한글 2) — 90 이하면 단문(SMS), 넘으면 장문(LMS). 솔라피의 자동 판정과 같은 기준.
 export function smsBytes(text: string): number {
@@ -60,7 +61,7 @@ type Answer = { label?: string; value?: string };
 // 신청 답변에서 전화번호 찾기 — 질문 이름이 전화번호 같은 칸을 먼저, 없으면 값이 휴대폰 번호인 첫 칸.
 export function findPhone(answers: unknown): string | null {
   const list = (Array.isArray(answers) ? answers : []) as Answer[];
-  for (const a of list) if (/연락처|전화|휴대폰|핸드폰|폰\s*번호|phone|mobile|tel/i.test(String(a?.label ?? ""))) { const p = normalizePhone(a?.value); if (p) return p; }
+  for (const a of list) if (PHONE_LABEL.test(String(a?.label ?? ""))) { const p = normalizePhone(a?.value); if (p) return p; }
   for (const a of list) { const v = String(a?.value ?? "").trim(); if (/^[+\d][\d\s\-().]{8,18}$/.test(v)) { const p = normalizePhone(v); if (p) return p; } }
   return null;
 }

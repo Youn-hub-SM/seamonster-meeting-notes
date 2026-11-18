@@ -17,7 +17,7 @@ import { isGaConfigured, runGaReport, type GaFilter } from "./ga";
 import { readBoard, salesFingerprint } from "./board";
 import { BOARD_DAYS, TOPIC_VERSION, TOPICS, TOPIC_OPINION_MAX, shiftDay as shift, type TopicDef, type TopicSnapshot, type TopicSales, type TopicCust, type TopicGa, type TopicMeta, type TopicForms, type TopicSubmit, type Fail } from "./board-types";
 import { getTallyApiKey, tallyFetch, mapTallySubmission, type TallyQ, type TallySub } from "./voc-tally";
-import { findPhone } from "./form-sms";
+import { findPhone, PHONE_LABEL } from "./form-sms";
 import { customerKey } from "./sales-normalize";
 
 const kvData = (id: string) => `board_topic_${id}`;
@@ -108,7 +108,16 @@ async function custSection(sb: SupabaseClient, def: TopicDef, days: string[], ba
   ]);
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
   const out: TopicCust = { ok: true, first: zeros(n), fresh: zeros(n), rep1: zeros(n), rep2: zeros(n), repRev: zeros(n), total: { first: 0, rep1: 0, rep2: 0 }, after: [] };
-  console.info("[board-topic] cust", def.id, JSON.stringify({ days: rows.length, firstAll: rows.reduce((a, r) => a + num(r.n), 0), earliest: rows.reduce((m, r) => (String(r.d) < m ? String(r.d) : m), "9999") }));
+  // 점검용(2026-11-18) — 참여자가 어느 채널·어느 상품 이름·어느 달에서 잡히는지. 원인을 가린 뒤 지운다.
+  try {
+    const [byProd, byMon] = await Promise.all([
+      runQ<{ ch: string; p: string; n: number; orders: number; a: string; b: string }>(sb,
+        `select o.channel as ch, o.product_name as p, count(distinct o.customer_key)::int as n, count(distinct o.order_unit)::int as orders, min(o.order_date)::text as a, max(o.order_date)::text as b `
+        + `from sales_orders o where o.order_date <= '${base}' and (${prod}) group by 1, 2 order by 3 desc limit 20`),
+      runQ<{ m: string; n: number }>(sb, `with t as (${first}) select to_char(first_t, 'YYYY-MM') as m, count(*)::int as n from t group by 1 order by 1`),
+    ]);
+    console.info("[board-topic] cust", def.id, JSON.stringify({ firstAll: rows.reduce((a, r) => a + num(r.n), 0), byMonth: byMon.map((r) => [r.m, num(r.n)]), byProduct: byProd.map((r) => [r.ch, String(r.p).slice(0, 40), num(r.n), num(r.orders), r.a, r.b]) }));
+  } catch (e) { console.error("[board-topic] cust 점검 실패", errMsg(e)); }
   for (const r of rows) {
     out.total.first += num(r.n); out.total.rep1 += num(r.rep1); out.total.rep2 += num(r.rep2);
     const i = idx.get(String(r.d)); if (i == null) continue;   // 180일보다 먼저 처음 산 고객 — 전체 기간 합계에만
@@ -186,7 +195,7 @@ async function metaSection(def: TopicDef, days: string[]): Promise<TopicMeta> {
 // ── 탈리 폼(신청·결과) ── 전체 기간의 제출을 받는다(전체 기간 합계 total 을 내려고). 날짜 칸에는 180일 안의 것만 넣는다.
 //  사람의 날짜 = 처음 신청한 날(한 사람은 하루에만 들어가 기간으로 더해도 겹치지 않는다). 구매 = 그날부터 기준일까지의 주문(모든 채널).
 //  재구매·재재구매 = 미션을 마친(결과를 낸) 사람이 결과를 낸 다음 날부터 한 주문이 1번 이상·2번 이상.
-type FormSub = { day: string; phone: string | null; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
+type FormSub = { day: string; phone: string | null; shape: string; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // shape = 번호를 못 읽었을 때 그 답의 모양(숫자를 9 로 가린 것 — 점검용)   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
 const OPINION_CHARS = 600;   // 의견 한 편의 최대 길이
 const EMPTY_OPINION = /^(딱히\s*)?(없음|없습니다|없어요|없네요|없다|없어용)?[\s.!~\-xX]*$/;   // '없음' 같은 빈 답은 의견으로 치지 않는다
 const kstDay = (iso: string | undefined) => { const t = Date.parse(String(iso || "")); return Number.isFinite(t) ? new Date(t + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
@@ -213,7 +222,11 @@ async function tallySubs(formId: string, apiKey: string): Promise<{ subs: FormSu
           if (tx && !EMPTY_OPINION.test(tx)) texts.push([r.questionId, tx.slice(0, OPINION_CHARS)]);
         }
       }
-      subs.push({ day, phone: findPhone(mapTallySubmission(s, qmap, formId).answers), scales, texts });
+      const answers = (mapTallySubmission(s, qmap, formId).answers || []) as { label?: string; value?: unknown }[];
+      const phone = findPhone(answers);
+      let shape = "";
+      if (!phone) { const a = answers.find((x) => PHONE_LABEL.test(String(x?.label ?? ""))); shape = a ? (String(a.value ?? "").replace(/\d/g, "9").slice(0, 24) || "(빈 값)") : "(연락처 문항 없음)"; }
+      subs.push({ day, phone, shape, scales, texts });
     }
     if (!json.hasMore || list.length === 0) return { subs, truncated: false, questions: [...qmap.values()] };
   }
@@ -316,7 +329,7 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   if (!apiKey) throw new Error("탈리 API 키가 없습니다. VOC › 설정에서 탈리 API 키를 넣으세요.");
   const rs = await timeout(tallySubs(def.submit!.id, apiKey), 60_000, "탈리");
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
-  const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), rep1: zeros(n), rep2: zeros(n), repRev: zeros(n), total: { done: 0, rep1: 0, rep2: 0 },
+  const out: TopicSubmit = { ok: true, count: zeros(n), done: zeros(n), rep1: zeros(n), rep2: zeros(n), repRev: zeros(n), total: { subs: 0, done: 0, rep1: 0, rep2: 0 },
     unmatched: 0, noPhone: 0, truncated: rs.truncated, survey: [], surveyAnswered: zeros(n), opinions: [] };
   // 설문 척도 문항 — 폼의 순서대로. 이름은 정의에 적어 둔 짧은 이름(없으면 문항 제목 그대로)
   const names = def.submit!.scaleNames || [];
@@ -328,8 +341,12 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   }
   const textQ = textQuestions(rs.questions, def.submit!.textNames);
   const byKey = new Map<string, number>();   // 고객 키 → 180일 안의 제출 건수(0 = 그보다 먼저 냈다)
+  const shapes = new Map<string, number>(), byMonth = new Map<string, number>();   // 점검용 — 번호를 못 읽은 답의 모양, 달마다 제출 건수
   for (const s of rs.subs) {
     if (s.day > base) continue;   // 기준일 뒤(오늘) 제출은 다음 계산에
+    out.total.subs++;
+    byMonth.set(s.day.slice(0, 7), (byMonth.get(s.day.slice(0, 7)) || 0) + 1);
+    if (!s.phone) shapes.set(s.shape, (shapes.get(s.shape) || 0) + 1);
     const i = idx.get(s.day);
     const k = s.phone ? customerKey(s.phone) : "";
     if (k) byKey.set(k, (byKey.get(k) || 0) + (i != null ? 1 : 0));
@@ -362,7 +379,8 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   out.survey = [...scaleQ.values()].filter((q) => sum(q.n) > 0);
   out.opinions = newestFirst(out.opinions);
   // 잇기 점검용(숫자만) — 제출 수·전화번호를 못 읽은 수·사람 수·구매를 찾은 사람 수. 제출률이 이상하면 이 줄부터 본다(Vercel 로그).
-  console.info("[board-topic] submit", def.id, JSON.stringify({ subsAll: rs.subs.length, subs180: sum(out.count), noPhone: out.noPhone, people: keys.length, matched: matched.size, unmatched180: out.unmatched, done180: sum(out.done), doneAll: out.total.done, truncated: rs.truncated }));
+  console.info("[board-topic] submit", def.id, JSON.stringify({ subsAll: out.total.subs, subs180: sum(out.count), noPhone180: out.noPhone, people: keys.length, matched: matched.size, unmatched180: out.unmatched, done180: sum(out.done), doneAll: out.total.done, truncated: rs.truncated,
+    byMonth: [...byMonth.entries()].sort(), noPhoneShapes: [...shapes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10) }));
   return out;
 }
 
