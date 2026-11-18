@@ -810,13 +810,14 @@ function buildFormView(t: TopicSnapshot, sp: Span, unit: Unit) {
   const buy = forms?.buy.ok ? forms.buy : null;
   const applyS = forms ? spanSum(forms.apply, sp) : null, peopleS = forms ? spanSum(forms.people, sp) : null;
   const resultS = forms?.result ? spanSum(forms.result, sp) : null, doneS = forms && hasResult ? spanSum(forms.done, sp) : null;
+  const resPeopleS = forms?.resultPeople ? spanSum(forms.resultPeople, sp) : null;   // 그 기간에 결과를 낸 사람(숫자 줄의 '미션 완료')
   const buyS = buy ? spanSum(buy.people, sp) : null;
   const people = peopleS?.cur ?? 0;
   const buyRate = buyS ? ratio(buyS.cur * 100, people) : null, doneRate = doneS ? ratio(doneS.cur * 100, people) : null;
   const steps: { idx: number; label: string; n: number | null; rate: number | null }[] = forms ? [
     { idx: 0, label: "신청한 사람", n: people, rate: null },
-    { idx: 1, label: "신청 뒤 구매", n: buyS ? buyS.cur : null, rate: buyRate },
-    { idx: 2, label: "결과 제출", n: doneS ? doneS.cur : null, rate: doneRate },
+    { idx: 1, label: "그중 신청 뒤 구매", n: buyS ? buyS.cur : null, rate: buyRate },
+    { idx: 2, label: "그중 미션 완료", n: doneS ? doneS.cur : null, rate: doneRate },   // 이 기간에 신청한 사람 가운데(숫자 줄의 미션 완료는 이 기간에 결과를 낸 사람)
   ] : [];
   // 신청한 날(주·달)별 — 결과 제출(평가)과 구매·재구매·재재구매(추적). 재구매율의 분모는 미션을 마친(결과를 낸) 사람
   const cohort = forms ? bks.map((b) => ({ key: b.key, name: b.name, people: bsum(forms.people, b), done: bsum(forms.done, b), buy: bsum(buy?.people, b), rep1: bsum(buy?.rep1, b), rep2: bsum(buy?.rep2, b), rev: bsum(buy?.repRev, b) })) : [];
@@ -825,14 +826,15 @@ function buildFormView(t: TopicSnapshot, sp: Span, unit: Unit) {
   // 페이지 — 방문·스크롤은 GA4 세션, 신청은 탈리 제출 건수
   const ga = t.ga?.ok ? t.ga : null;
   const visitS = ga ? spanSum(ga.visits, sp) : null;
-  const convRate = visitS && applyS ? { cur: ratio(applyS.cur * 100, visitS.cur), prev: ratio(applyS.prev == null ? null : applyS.prev * 100, visitS.prev) } : null;
+  // 주요 지표는 사람 기준(2026-11-18 대표) — 전환율 = 신청자 수 ÷ 방문, 광고비도 신청자 1명당
+  const convRate = visitS && peopleS ? { cur: ratio(peopleS.cur * 100, visitS.cur), prev: ratio(peopleS.prev == null ? null : peopleS.prev * 100, visitS.prev) } : null;
   const funnel: { idx: number; label: string; n: number; from: string; rate: number | null; ofVisit: number | null }[] = [];
   if (ga && visitS) {
     const v = visitS.cur;
     let prevLabel = "방문", prevN = v;
     funnel.push({ idx: 0, label: "방문", n: v, from: "", rate: null, ofVisit: null });
     for (const x of ga.scroll) { const n = sumOf(win(x.sessions)); funnel.push({ idx: funnel.length, label: x.label, n, from: prevLabel, rate: ratio(n * 100, prevN), ofVisit: ratio(n * 100, v) }); prevLabel = x.label; prevN = n; }
-    if (applyS) funnel.push({ idx: funnel.length, label: "신청", n: applyS.cur, from: "방문", rate: ratio(applyS.cur * 100, v), ofVisit: ratio(applyS.cur * 100, v) });
+    if (peopleS) funnel.push({ idx: funnel.length, label: "신청자", n: peopleS.cur, from: "방문", rate: ratio(peopleS.cur * 100, v), ofVisit: ratio(peopleS.cur * 100, v) });
   }
   const sesTotal = ga ? sumOf(ga.sources.flatMap((x) => win(x.sessions))) : 0;
   const sourceRows = (ga ? ga.sources : []).map((x) => { const r = spanSum(x.sessions, sp); return { name: x.name, sessions: r.cur, prevSessions: r.prev }; }).filter((r) => r.sessions > 0).sort((a, b) => b.sessions - a.sessions);
@@ -842,13 +844,13 @@ function buildFormView(t: TopicSnapshot, sp: Span, unit: Unit) {
   const pick = (k: "spend" | "clicks" | "impressions") => addSeries(meta ? meta.ads.map((a) => a[k]) : [], N);
   const spend = pick("spend");
   const spendS = meta ? spanSum(spend, sp) : null, clickS = meta ? spanSum(pick("clicks"), sp) : null, impS = meta ? spanSum(pick("impressions"), sp) : null;
-  const cpa = spendS && applyS ? { cur: ratio(spendS.cur, applyS.cur), prev: ratio(spendS.prev, applyS.prev) } : null;
+  const cpa = spendS && peopleS ? { cur: ratio(spendS.cur, peopleS.cur), prev: ratio(spendS.prev, peopleS.prev) } : null;
   const adRows = (meta ? meta.ads : []).map((a) => {
     const sp1 = sumOf(win(a.spend)), imp = sumOf(win(a.impressions)), clk = sumOf(win(a.clicks));
     return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: imp, clicks: clk, ctr: ratio(clk * 100, imp), cpc: ratio(sp1, clk) };
   }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
 
-  return { win, chart, unit, forms, hasResult, buy, applyS, resultS, doneS, buyS, people, buyRate, doneRate, steps, cohort, opinionRows,
+  return { win, chart, unit, forms, hasResult, buy, applyS, peopleS, resultS, doneS, resPeopleS, buyS, people, buyRate, doneRate, steps, cohort, opinionRows,
     ga, visitS, convRate, funnel, sesTotal, sourceRows, meta, spend, spendS, clickS, impS, cpa, adRows };
 }
 type FormView = ReturnType<typeof buildFormView>;
@@ -936,9 +938,9 @@ function FormTopicPage({ fv, t, def }: { fv: FormView; t: TopicSnapshot; def: To
       <Scores>
         <Score label="페이지 전환율" value={pct2(fv.convRate?.cur)} delta={ppDelta(fv.convRate?.cur ?? null, fv.convRate?.prev ?? null, "up")} note={fv.ga ? `방문 ${(fv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={fv.ga ? fv.win(fv.ga.visits) : undefined} />
         <Score label="메타 광고비" value={wonS(fv.spendS?.cur)} delta={pctDelta(fv.spendS?.cur ?? null, fv.spendS?.prev ?? null, "none")} note={fv.meta ? `클릭 ${(fv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={fv.meta ? fv.win(fv.spend) : undefined} />
-        <Score label="신청 1건당 광고비" value={wonS(fv.cpa?.cur == null ? null : Math.round(fv.cpa.cur))} delta={pctDelta(fv.cpa?.cur ?? null, fv.cpa?.prev ?? null, "down")} note={fv.meta ? `노출 ${(fv.impS?.cur ?? 0).toLocaleString()}회` : whyX(t.meta)} />
-        <Score label="신청 건수" value={cnt(fv.applyS?.cur, "건")} delta={pctDelta(fv.applyS?.cur ?? null, fv.applyS?.prev ?? null, "up")} note={fv.forms ? `신청한 사람 ${fv.people.toLocaleString()}명` : "조회 실패"} spark={fv.forms ? fv.win(fv.forms.apply) : undefined} />
-        <Score label="결과 제출" value={cnt(fv.doneS?.cur, "명")} note={!fv.forms ? undefined : fv.hasResult ? `완료율 ${pctOf(fv.doneRate)} · 제출 ${(fv.resultS?.cur ?? 0).toLocaleString()}건` : "결과 폼 미정"} spark={fv.forms?.result ? fv.win(fv.forms.result) : undefined} />
+        <Score label="신청 1명당 광고비" value={wonS(fv.cpa?.cur == null ? null : Math.round(fv.cpa.cur))} delta={pctDelta(fv.cpa?.cur ?? null, fv.cpa?.prev ?? null, "down")} note={fv.meta ? `노출 ${(fv.impS?.cur ?? 0).toLocaleString()}회` : whyX(t.meta)} />
+        <Score label="신청자 수" value={cnt(fv.peopleS?.cur, "명")} delta={pctDelta(fv.peopleS?.cur ?? null, fv.peopleS?.prev ?? null, "up")} note={fv.forms ? `제출 ${(fv.applyS?.cur ?? 0).toLocaleString()}건` : "조회 실패"} spark={fv.forms ? fv.win(fv.forms.people) : undefined} />
+        <Score label="미션 완료" value={cnt(fv.resPeopleS?.cur, "명")} delta={pctDelta(fv.resPeopleS?.cur ?? null, fv.resPeopleS?.prev ?? null, "up")} note={!fv.forms ? undefined : fv.hasResult ? `제출 ${(fv.resultS?.cur ?? 0).toLocaleString()}건` : "결과 폼 미정"} spark={fv.forms?.resultPeople ? fv.win(fv.forms.resultPeople) : undefined} />
         <Score label="재재구매(전체 기간)" value={cnt(trackOk ? btot.rep2 : null, "명")} note={trackOk ? `${ofDone(btot.rep2)} · 재구매 ${btot.rep1.toLocaleString()}명` : !fv.forms ? undefined : fv.hasResult ? "조회 실패" : "결과 폼 미정"} />
       </Scores>
 
@@ -1171,7 +1173,7 @@ export default function BoardPage() {
   const baseDay = snap ? `기준일 ${snap.base} (${weekday(snap.base)})` : "";
   const basis: string[] = isSubx ? [`카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""}`, "매일 23:59 수집", "정기배송 분석 화면과 같은 계산", "회원 수는 사람 기준"]
     : !snap ? []
-    : isFormTopic ? [baseDay, ...(curTopic ? [curTopic.basis] : []), "신청·결과는 탈리 제출 시각", "사람은 전화번호로 세고 처음 신청한 날 기준", "방문·스크롤은 GA4 세션", "구매는 신청한 날부터의 주문", "재구매는 결과를 낸 다음 날부터의 주문"]
+    : isFormTopic ? [baseDay, ...(curTopic ? [curTopic.basis] : []), "주요 지표는 사람 기준(전화번호로 한 사람은 한 번)", "신청자는 처음 신청한 날, 미션 완료는 처음 결과를 낸 날", "방문·스크롤은 GA4 세션", "구매는 신청한 날부터의 주문", "재구매는 결과를 낸 다음 날부터의 주문"]
     : topicId ? [baseDay, ...(curTopic ? [curTopic.basis] : []), curTopic?.people ? `${curTopic.people.name}는 그 상품을 처음 산 고객, 처음 산 날 기준` : "고객은 처음 산 날 기준", ...(curTopic?.submit ? ["미션 완료 = 제출 폼 건수(제출한 날 기준)", "재구매·재재구매는 제출한 번호로 주문을 찾은 사람에서 센다", ...(curTopic.submit.legacy ? [`연락처가 없던 예전 제출은 이름으로 한 번 대조한 값(${curTopic.submit.legacy.asOf} 기준)을 더했다`] : [])] : []), "방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장", "재구매는 처음 산 다음 날부터 다른 상품 주문"]
     : [baseDay, span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음", "매출은 주문일 기준 도매 포함", "광고비는 VAT 제외"];
   return (

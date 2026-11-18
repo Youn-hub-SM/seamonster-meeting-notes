@@ -267,7 +267,7 @@ async function formsSection(sb: SupabaseClient, def: TopicDef, days: string[], b
     f.result ? tallySubs(f.result.id, apiKey) : Promise.resolve(null),
   ]), 60_000, "탈리");
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
-  const out: TopicForms = { ok: true, apply: zeros(n), people: zeros(n), result: rs ? zeros(n) : null, done: zeros(n),
+  const out: TopicForms = { ok: true, apply: zeros(n), people: zeros(n), result: rs ? zeros(n) : null, done: zeros(n), resultPeople: rs ? zeros(n) : null,
     buy: { ok: true, people: zeros(n), rev: zeros(n), rep1: zeros(n), rep2: zeros(n), repRev: zeros(n), total: { buy: 0, rep1: 0, rep2: 0 } },
     total: { people: 0, done: 0 }, opinions: [], noPhone: 0, resultUnmatched: 0, truncated: ap.truncated || !!rs?.truncated };
 
@@ -285,10 +285,13 @@ async function formsSection(sb: SupabaseClient, def: TopicDef, days: string[], b
 
   // 결과 — 날짜별 제출 건수와, 신청한 사람 가운데 결과를 낸 사람(신청일 자리에). 결과를 처음 낸 날이 재구매를 세는 기준이 된다.
   const resultDay = new Map<string, string>();   // 전화번호 → 처음 결과를 낸 날(신청한 사람만)
-  if (rs && out.result) {
+  if (rs && out.result && out.resultPeople) {
     const textQ = textQuestions(rs.questions, f.result?.textNames);
+    const anyFirst = new Map<string, string>();   // 전화번호 → 처음 결과를 낸 날(신청 여부와 무관 — 사람 수를 세는 데 쓴다)
     for (const s of rs.subs) {
       if (s.day > base) continue;
+      if (s.phone) { const cur = anyFirst.get(s.phone); if (!cur || s.day < cur) anyFirst.set(s.phone, s.day); }
+      else { const j = idx.get(s.day); if (j != null) out.resultPeople[j]++; }
       const known = !!s.phone && firstDay.has(s.phone);
       if (known) { const cur = resultDay.get(s.phone!); if (!cur || s.day < cur) resultDay.set(s.phone!, s.day); }
       const i = idx.get(s.day); if (i == null) continue;
@@ -298,6 +301,7 @@ async function formsSection(sb: SupabaseClient, def: TopicDef, days: string[], b
       if (parts.length) out.opinions.push({ day: s.day, score: null, parts });
     }
     for (const p of resultDay.keys()) { out.total.done++; const i = idx.get(firstDay.get(p)!); if (i != null) out.done[i]++; }
+    for (const d of anyFirst.values()) { const i = idx.get(d); if (i != null) out.resultPeople[i]++; }
     out.opinions = newestFirst(out.opinions);
   }
 

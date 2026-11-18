@@ -87,7 +87,7 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
 //  주제는 두 가지다(2026-11-16): 상품 주문이 전환인 주제(productLike)와, 탈리 폼 신청이 전환인 주제(forms — 상품 주문·고객 집계를 하지 않는다).
-export const TOPIC_VERSION = 13;
+export const TOPIC_VERSION = 14;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
@@ -188,6 +188,7 @@ export type TopicForms = {
   people: number[];             // 그날 처음 신청한 사람
   result: number[] | null;      // 그날 결과 제출 건수(null = 결과 폼이 정해지지 않음)
   done: number[];               // 신청일 기준 — 그날 처음 신청한 사람 중 지금까지 결과를 낸 사람(미션 완료)
+  resultPeople: number[] | null; // 그날 처음 결과를 낸 사람 수(전화번호로 한 사람은 한 번, 번호 없는 제출은 1건을 1명으로) — 숫자 줄의 '미션 완료'
   // 주문(모든 채널) — 신청일 기준. people·rev = 신청한 날부터 기준일까지 주문이 있는 사람과 그 매출.
   //  rep1·rep2·repRev = 미션을 마친 사람 중 결과를 낸 다음 날부터 주문이 1번 이상(재구매)·2번 이상(재재구매)인 사람과 그 매출.
   buy: { ok: true; people: number[]; rev: number[]; rep1: number[]; rep2: number[]; repRev: number[]; total: { buy: number; rep1: number; rep2: number } } | Fail;
