@@ -1027,6 +1027,11 @@ export default function BoardPage() {
   const [detail, setDetail] = useState<DetailState>({ key: "", data: null, loading: false, error: "" });
   const [topicState, setTopicState] = useState<{ key: string; data: TopicSnapshot | null; loading: boolean; error: string }>({ key: "", data: null, loading: false, error: "" });
   const [unitPick, setUnitPick] = useState<Unit | null>(null);   // 주제 탭의 묶음 단위 — 고르기 전에는 기간 길이로 정한다
+  // 주소의 ?tab= 으로 처음 탭을 고른다(예: /board?tab=subx — 옛 '정기배송 분석' 주소가 이리로 온다). 주제 탭은 t:<id>
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab") || "";
+    if (PAGES.some(([k]) => k === t) || TOPICS.some((x) => `t:${x.id}` === t)) setPage(t as PageKey | `t:${string}`);
+  }, []);
   const tries = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 

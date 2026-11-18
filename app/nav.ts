@@ -68,7 +68,7 @@ const NAV_ALL: NavCategory[] = [
         ],
       },
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
-      { href: "/subscription", label: "정기배송 분석", icon: "trend" },
+      // '정기배송 분석' 메뉴는 2026-11-18 삭제(대표: "주요 지표에서도 볼 수 있기 때문") — 리포트 › 주요 지표의 [정기배송 분석] 탭으로 본다
     ],
   },
   {
