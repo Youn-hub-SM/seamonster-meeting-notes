@@ -87,7 +87,7 @@ export function lastKnown(xs: Nullable, i: number): number | null {
 //  주제는 화면에서 만들지 않는다 — 대표와 같이 정한 정확한 대상을 아래 TOPICS 에 적는다(2026-11-16 대표: "자동 불러오기보다 같이 세팅").
 //  말로 넓게 찾으면 섞인다: '체험단'이 든 상품이 172 말고도 셋(139·181·176) 있고, 172 는 이름이 한 번 바뀌었다.
 //  주제는 두 가지다(2026-11-16): 상품 주문이 전환인 주제(productLike)와, 탈리 폼 신청이 전환인 주제(forms — 상품 주문·고객 집계를 하지 않는다).
-export const TOPIC_VERSION = 12;
+export const TOPIC_VERSION = 13;
 export type TopicDef = {
   id: string; name: string;
   basis: string;                      // 화면 위 집계 기준 줄에 보이는 대상 설명
@@ -96,7 +96,10 @@ export type TopicDef = {
   // 상품 주문형 주제의 결과 제출 탈리 폼(산 뒤 미션을 마치고 내는 폼) — 산 고객과 전화번호로 잇는다. label = 화면의 '평가(…)' 구역 제목에 쓰는 폼 이름.
   //  scaleMax = 폼 안 설문 척도 문항의 만점(있으면 문항별 평균 점수를 보여 준다), scaleNames = [문항 제목에 든 구절, 화면에 쓸 짧은 이름]
   //  textNames = 의견 목록에 보여 줄 주관식 문항 [문항 제목에 든 구절, 화면에 쓸 짧은 이름] — 여기 적은 문항의 답만 묶음에 담는다(이름·연락처 문항은 적지 않는다)
-  submit?: { id: string; label: string; scaleMax?: number; scaleNames?: [match: string, name: string][]; textNames?: [match: string, name: string][] };
+  //  legacy = 보정값(2026-11-18 대표: "임시로 매칭 후 보정값을 넣어주면") — 제출 폼에 연락처가 없던 예전 방식 제출을 한 번 손으로 대조한 결과.
+  //   줄 = [그 상품을 처음 산 날, 이은 사람, 그중 재구매, 재재구매, 재구매 매출]. asOf 날짜 기준으로 굳은 값이다(그 뒤의 재구매는 자동으로 늘지 않는다).
+  submit?: { id: string; label: string; scaleMax?: number; scaleNames?: [match: string, name: string][]; textNames?: [match: string, name: string][];
+    legacy?: { asOf: string; rows: [day: string, done: number, rep1: number, rep2: number, rev: number][] } };
   people?: { name: string; day: string };   // 그 상품을 처음 산 고객을 부르는 말과 그날을 부르는 말(없으면 '처음 산 고객'·'처음 산') — 이유식 체험단은 '참여자'·'참여한'
   productLike: string[];              // 주문 상품명에 든 구절(그중 하나라도) — 그 상품만 잡히게 충분히 길게. 폼 신청형은 빈 배열
   landing: { label: string; paths: string[]; scroll: [label: string, event: string][] } | null;   // 랜딩 페이지 주소(정확히)와 스크롤 깊이 이벤트
@@ -115,7 +118,15 @@ export const TOPICS: TopicDef[] = [
     people: { name: "참여자", day: "참여한" },   // 2026-11-18 대표: "처음 산 고객보다는 참여자라고 하자"
     submit: { id: "J9Lpyz", label: "제출 폼", scaleMax: 8,
       scaleNames: [["배송 상태", "배송 상태"], ["지퍼백 포장", "지퍼백 포장"], ["조리 과정", "조리 과정"], ["조리 후 식감", "조리 후 식감"], ["조리 후 향", "조리 후 향"], ["가격 대비", "가격 대비 만족도"], ["아이의 반응", "아이의 반응"], ["다시 활용", "다시 쓸 의향"]],
-      textNames: [["참여 소감", "참여 소감"], ["아쉬운 점", "아쉬운 점"], ["다음 이유식용 제품", "다음 제품 희망"]] },
+      textNames: [["참여 소감", "참여 소감"], ["아쉬운 점", "아쉬운 점"], ["다음 이유식용 제품", "다음 제품 희망"]],
+      // 예전 방식(2026-03~05, 일부 07): 신청 폼 xXZ9gG(이름·연락처)로 신청 → 선정 문자 → 구매 → 제출 폼에는 이름만. 연락처 없는 제출 54건을
+      //  신청 폼의 이름과 대조해 22명을 주문 기록과 이었다(2026-11-18, 기준일 11-17). 이름을 찾지 못한 32건은 재구매 추적에서 빠져 있다.
+      legacy: { asOf: "2026-11-17", rows: [
+        ["2026-03-30", 1, 0, 0, 0], ["2026-04-07", 3, 2, 0, 34170], ["2026-04-08", 2, 2, 0, 33170], ["2026-04-09", 2, 2, 0, 31400], ["2026-04-14", 2, 2, 0, 39050],
+        ["2026-04-18", 1, 1, 1, 61900], ["2026-04-23", 1, 0, 0, 0], ["2026-04-30", 2, 2, 0, 55690], ["2026-05-06", 1, 1, 0, 15900], ["2026-05-07", 1, 1, 1, 42690],
+        ["2026-05-08", 1, 1, 0, 22140], ["2026-05-11", 1, 1, 0, 15400], ["2026-05-12", 1, 1, 0, 15400], ["2026-05-13", 1, 1, 0, 36600], ["2026-05-16", 1, 1, 0, 70250],
+        ["2026-07-07", 1, 1, 1, 103620],
+      ] } },
     productLike: ["이유식 생선 체험단 패키지", "첫 생선일기 전용 패키지"],   // 172 의 지금 이름과 예전 이름
     landing: { label: "/baby", paths: ["/baby", "/baby/", "/baby/index.html"], scroll: [["25% 스크롤", "manualScrollDepth_25%"], ["50% 스크롤", "manualScrollDepth_50%"], ["75% 스크롤", "manualScrollDepth_75%"], ["95% 스크롤", "manualScrollDepth_95%"]] },
     gaItemNames: ["씨몬스터 이유식 생선 체험단 패키지", "우리 아이 첫 생선일기 전용 패키지"],

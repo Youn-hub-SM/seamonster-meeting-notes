@@ -1172,7 +1172,7 @@ export default function BoardPage() {
   const basis: string[] = isSubx ? [`카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""}`, "매일 23:59 수집", "정기배송 분석 화면과 같은 계산", "회원 수는 사람 기준"]
     : !snap ? []
     : isFormTopic ? [baseDay, ...(curTopic ? [curTopic.basis] : []), "신청·결과는 탈리 제출 시각", "사람은 전화번호로 세고 처음 신청한 날 기준", "방문·스크롤은 GA4 세션", "구매는 신청한 날부터의 주문", "재구매는 결과를 낸 다음 날부터의 주문"]
-    : topicId ? [baseDay, ...(curTopic ? [curTopic.basis] : []), curTopic?.people ? `${curTopic.people.name}는 그 상품을 처음 산 고객, 처음 산 날 기준` : "고객은 처음 산 날 기준", ...(curTopic?.submit ? ["미션 완료 = 제출 폼 건수(제출한 날 기준)", "재구매·재재구매는 제출한 번호로 주문을 찾은 사람에서 센다"] : []), "방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장", "재구매는 처음 산 다음 날부터 다른 상품 주문"]
+    : topicId ? [baseDay, ...(curTopic ? [curTopic.basis] : []), curTopic?.people ? `${curTopic.people.name}는 그 상품을 처음 산 고객, 처음 산 날 기준` : "고객은 처음 산 날 기준", ...(curTopic?.submit ? ["미션 완료 = 제출 폼 건수(제출한 날 기준)", "재구매·재재구매는 제출한 번호로 주문을 찾은 사람에서 센다", ...(curTopic.submit.legacy ? [`연락처가 없던 예전 제출은 이름으로 한 번 대조한 값(${curTopic.submit.legacy.asOf} 기준)을 더했다`] : [])] : []), "방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장", "재구매는 처음 산 다음 날부터 다른 상품 주문"]
     : [baseDay, span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음", "매출은 주문일 기준 도매 포함", "광고비는 VAT 제외"];
   return (
     <div className="bd-root">

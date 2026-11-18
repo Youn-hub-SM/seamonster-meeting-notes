@@ -388,48 +388,49 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
     }
   }
   for (const [k, cnt] of byKey) if (!matched.has(k)) out.unmatched += cnt;   // 그 상품을 산 기록을 찾지 못한 제출
-  // ── TEMP-LEGACY(2026-11-18) 시작 — 예전 방식(신청 폼 xXZ9gG 에 이름·연락처, 제출 폼에는 이름만)의 제출을 이름으로 한 번 대조한다. 숫자만 로그로 남기고, 보정값을 정한 뒤 지운다.
+  // 보정값 — 연락처가 없던 예전 방식 제출을 한 번 대조해 굳힌 숫자(TopicDef.submit.legacy). 이은 사람·재구매·재재구매에 더한다.
+  for (const [d, done, r1, r2, rev] of def.submit!.legacy?.rows ?? []) {
+    const i = idx.get(d);
+    out.total.done += done; out.total.rep1 += r1; out.total.rep2 += r2;
+    if (i != null) { out.done[i] += done; out.rep1[i] += r1; out.rep2[i] += r2; out.repRev[i] += rev; }
+  }
+  // ── TEMP-LEGACY(2026-11-18) 시작 — 예전 신청 폼에도 이름이 없던 제출을 '그 상품을 산 주문자 이름'과 한 번 대조한다. 숫자만 로그로 남기고, 보정값에 더한 뒤 지운다.
   if (def.id === "trial") {
     try {
       const old = await timeout(tallySubs("xXZ9gG", apiKey), 40_000, "탈리(예전 신청 폼)");
-      const byName = new Map<string, Set<string>>();   // 이름 → 연락처들
-      let oldWithPhone = 0;
-      for (const o of old.subs) { if (!o.name || !o.phone) continue; oldWithPhone++; if (!byName.has(o.name)) byName.set(o.name, new Set()); byName.get(o.name)!.add(o.phone); }
-      const pend = rs.subs.filter((x) => !x.phone && x.day <= base);
-      let noName = 0, notFound = 0, ambiguous = 0;
-      const cands: string[][] = [];   // 제출마다 후보 고객 키
-      for (const p of pend) {
-        const set = p.name ? byName.get(p.name) : undefined;
-        if (!p.name) { noName++; continue; }
-        if (!set) { notFound++; continue; }
-        if (set.size > 1) ambiguous++;
-        cands.push([...set].map((ph) => customerKey(ph)).filter(Boolean));
+      const oldNames = new Set(old.subs.filter((o) => o.name && o.phone).map((o) => o.name));
+      const rest = rs.subs.filter((x) => !x.phone && x.day <= base && x.name && !oldNames.has(x.name)).map((x) => x.name);   // 1차(신청 폼 이름)에서 못 찾은 제출의 이름
+      const buyers = await runQ<{ k: string; d: string; n: number; rev: number }>(sb,
+        `with t as (select o.customer_key, min(o.order_date) as first_t from sales_orders o where o.customer_key <> '' and o.order_date <= '${base}' and (${prodSql(def)}) group by 1) `
+        + `select t.customer_key as k, t.first_t::text as d, (count(distinct o.order_unit) filter (where ${other}))::int as n, coalesce(sum(o.subtotal_amount) filter (where ${other}), 0)::bigint as rev `
+        + `from t join sales_orders o on o.customer_key = t.customer_key where o.order_date <= '${base}' group by 1, 2`, ITEM_LIMIT);
+      const binfo = new Map(buyers.map((r) => [String(r.k), { d: String(r.d), n: num(r.n), rev: num(r.rev) }]));
+      const bkeys = [...binfo.keys()], nameKeys = new Map<string, string[]>();
+      for (let c = 0; c < bkeys.length; c += 100) {
+        const { data, error } = await sb.from("sales_customers").select("customer_key, customer_name").in("customer_key", bkeys.slice(c, c + 100));
+        if (error) throw error;
+        for (const r of (data ?? []) as { customer_key: string; customer_name: string | null }[]) {
+          const nm = String(r.customer_name ?? "").replace(/\s+/g, "").toLowerCase();
+          if (!nm) continue;
+          if (!nameKeys.has(nm)) nameKeys.set(nm, []);
+          nameKeys.get(nm)!.push(String(r.customer_key));
+        }
       }
-      const lkeys = [...new Set(cands.flat())];
-      const info = new Map<string, { d: string; n: number; rev: number }>();
-      for (let c = 0; c < lkeys.length; c += KEY_CHUNK) {
-        const rows = await runQ<{ k: string; d: string; n: number; rev: number }>(sb,
-          `with t as (select o.customer_key, min(o.order_date) as first_t from sales_orders o `
-          + `where o.customer_key in (${lkeys.slice(c, c + KEY_CHUNK).map(lit).join(", ")}) and o.order_date <= '${base}' and (${prodSql(def)}) group by 1) `
-          + `select t.customer_key as k, t.first_t::text as d, (count(distinct o.order_unit) filter (where ${other}))::int as n, coalesce(sum(o.subtotal_amount) filter (where ${other}), 0)::bigint as rev `
-          + `from t join sales_orders o on o.customer_key = t.customer_key where o.order_date <= '${base}' group by 1, 2`);
-        for (const r of rows) info.set(String(r.k), { d: String(r.d), n: num(r.n), rev: num(r.rev) });
-      }
-      const used = new Set<string>(), byDate = new Map<string, [number, number, number, number]>();   // 첫 구매일 → [이은 사람, 재구매, 재재구매, 매출]
-      let linked = 0, already = 0, noBuy = 0;
-      for (const ks of cands) {
-        const k = ks.find((x) => info.has(x) && !used.has(x));
-        if (!k) { noBuy++; continue; }
-        used.add(k);
-        if (matched.has(k)) { already++; continue; }   // 연락처가 든 다른 제출로 이미 센 사람
+      const used = new Set<string>(), byDate = new Map<string, [number, number, number, number]>();
+      let linked = 0, ambiguous = 0, none = 0, already = 0;
+      for (const nm of rest) {
+        const ks = (nameKeys.get(nm) || []).filter((k) => !used.has(k));
+        if (!ks.length) { none++; continue; }
+        if (ks.length > 1) { ambiguous++; continue; }   // 같은 이름의 구매자가 여럿이면 잇지 않는다
+        const k = ks[0]; used.add(k);
+        if (matched.has(k)) { already++; continue; }    // 연락처가 든 다른 제출로 이미 센 사람
         linked++;
-        const v = info.get(k)!, row = byDate.get(v.d) || [0, 0, 0, 0];
+        const v = binfo.get(k)!, row = byDate.get(v.d) || [0, 0, 0, 0];
         row[0]++; if (v.n >= 1) { row[1]++; row[3] += v.rev; } if (v.n >= 2) row[2]++;
         byDate.set(v.d, row);
       }
-      console.info("[board-topic] legacy", JSON.stringify({ base, oldSubs: old.subs.length, oldWithPhone, oldNames: byName.size, pend: pend.length, noName, notFound, ambiguous, candKeys: lkeys.length, linked, already, noBuy,
-        byDate: [...byDate.entries()].sort().map(([d, v]) => [d, ...v]), oldQuestions: old.questions.map((q) => `${(q.type || "").slice(0, 18)}:${(q.title || "").replace(/\s+/g, " ").slice(0, 12)}`) }));
-    } catch (e) { console.error("[board-topic] legacy 대조 실패", errMsg(e)); }
+      console.info("[board-topic] legacy2", JSON.stringify({ base, rest: rest.length, buyers: bkeys.length, buyerNames: nameKeys.size, linked, ambiguous, none, already, byDate: [...byDate.entries()].sort().map(([d, v]) => [d, ...v]) }));
+    } catch (e) { console.error("[board-topic] legacy2 대조 실패", errMsg(e)); }
   }
   // ── TEMP-LEGACY 끝
   out.survey = [...scaleQ.values()].filter((q) => sum(q.n) > 0);
