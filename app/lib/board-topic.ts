@@ -185,7 +185,7 @@ async function metaSection(def: TopicDef, days: string[]): Promise<TopicMeta> {
 // ── 탈리 폼(신청·결과) ── 전체 기간의 제출을 받는다(전체 기간 합계 total 을 내려고). 날짜 칸에는 180일 안의 것만 넣는다.
 //  사람의 날짜 = 처음 신청한 날(한 사람은 하루에만 들어가 기간으로 더해도 겹치지 않는다). 구매 = 그날부터 기준일까지의 주문(모든 채널).
 //  재구매·재재구매 = 미션을 마친(결과를 낸) 사람이 결과를 낸 다음 날부터 한 주문이 1번 이상·2번 이상.
-type FormSub = { day: string; phone: string | null; shape: string; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // shape = 번호를 못 읽었을 때 그 답의 모양(숫자를 9 로 가린 것 — 점검용)   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
+type FormSub = { day: string; phone: string | null; name: string; shape: string; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // shape = 번호를 못 읽었을 때 그 답의 모양(숫자를 9 로 가린 것 — 점검용)   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
 const OPINION_CHARS = 600;   // 의견 한 편의 최대 길이
 const EMPTY_OPINION = /^(딱히\s*)?(없음|없습니다|없어요|없네요|없다|없어용)?[\s.!~\-xX]*$/;   // '없음' 같은 빈 답은 의견으로 치지 않는다
 // 구매와 잇는 데 쓸 번호(2026-11-18 대표: "뒷 8자리를 토대로 추적") — 휴대폰 번호로 읽히면 그대로, 아니면 연락처 답의 뒷 8자리에 010 을 붙인다.
@@ -235,7 +235,10 @@ async function tallySubs(formId: string, apiKey: string): Promise<{ subs: FormSu
         const mask = (v: unknown) => String(v ?? "").replace(/\d/g, "9").replace(/[A-Za-z가-힣]/g, "x").slice(0, 18);
         shape = a ? (String(a.value ?? "").replace(/\d/g, "9").slice(0, 24) || "(빈 값)") : `(연락처 문항 없음 ${answers.length}) ${answers.slice(0, 4).map((x) => `${String(x?.label ?? "").slice(4, 9) || "제목없음"}:${mask(x?.value)}`).join(" | ")}`;
       }
-      subs.push({ day, phone, shape, scales, texts });
+      // TEMP-LEGACY(2026-11-18): 이름 대조용 — 성함 답(공백 제거). 저장하지 않는다
+      const nameA = answers.find((x) => /성함|이름/.test(String(x?.label ?? "")));
+      const name = String(nameA?.value ?? "").replace(/\s+/g, "").toLowerCase();
+      subs.push({ day, phone, name, shape, scales, texts });
     }
     if (!json.hasMore || list.length === 0) return { subs, truncated: false, questions: [...qmap.values()] };
   }
@@ -385,6 +388,50 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
     }
   }
   for (const [k, cnt] of byKey) if (!matched.has(k)) out.unmatched += cnt;   // 그 상품을 산 기록을 찾지 못한 제출
+  // ── TEMP-LEGACY(2026-11-18) 시작 — 예전 방식(신청 폼 xXZ9gG 에 이름·연락처, 제출 폼에는 이름만)의 제출을 이름으로 한 번 대조한다. 숫자만 로그로 남기고, 보정값을 정한 뒤 지운다.
+  if (def.id === "trial") {
+    try {
+      const old = await timeout(tallySubs("xXZ9gG", apiKey), 40_000, "탈리(예전 신청 폼)");
+      const byName = new Map<string, Set<string>>();   // 이름 → 연락처들
+      let oldWithPhone = 0;
+      for (const o of old.subs) { if (!o.name || !o.phone) continue; oldWithPhone++; if (!byName.has(o.name)) byName.set(o.name, new Set()); byName.get(o.name)!.add(o.phone); }
+      const pend = rs.subs.filter((x) => !x.phone && x.day <= base);
+      let noName = 0, notFound = 0, ambiguous = 0;
+      const cands: string[][] = [];   // 제출마다 후보 고객 키
+      for (const p of pend) {
+        const set = p.name ? byName.get(p.name) : undefined;
+        if (!p.name) { noName++; continue; }
+        if (!set) { notFound++; continue; }
+        if (set.size > 1) ambiguous++;
+        cands.push([...set].map((ph) => customerKey(ph)).filter(Boolean));
+      }
+      const lkeys = [...new Set(cands.flat())];
+      const info = new Map<string, { d: string; n: number; rev: number }>();
+      for (let c = 0; c < lkeys.length; c += KEY_CHUNK) {
+        const rows = await runQ<{ k: string; d: string; n: number; rev: number }>(sb,
+          `with t as (select o.customer_key, min(o.order_date) as first_t from sales_orders o `
+          + `where o.customer_key in (${lkeys.slice(c, c + KEY_CHUNK).map(lit).join(", ")}) and o.order_date <= '${base}' and (${prodSql(def)}) group by 1) `
+          + `select t.customer_key as k, t.first_t::text as d, (count(distinct o.order_unit) filter (where ${other}))::int as n, coalesce(sum(o.subtotal_amount) filter (where ${other}), 0)::bigint as rev `
+          + `from t join sales_orders o on o.customer_key = t.customer_key where o.order_date <= '${base}' group by 1, 2`);
+        for (const r of rows) info.set(String(r.k), { d: String(r.d), n: num(r.n), rev: num(r.rev) });
+      }
+      const used = new Set<string>(), byDate = new Map<string, [number, number, number, number]>();   // 첫 구매일 → [이은 사람, 재구매, 재재구매, 매출]
+      let linked = 0, already = 0, noBuy = 0;
+      for (const ks of cands) {
+        const k = ks.find((x) => info.has(x) && !used.has(x));
+        if (!k) { noBuy++; continue; }
+        used.add(k);
+        if (matched.has(k)) { already++; continue; }   // 연락처가 든 다른 제출로 이미 센 사람
+        linked++;
+        const v = info.get(k)!, row = byDate.get(v.d) || [0, 0, 0, 0];
+        row[0]++; if (v.n >= 1) { row[1]++; row[3] += v.rev; } if (v.n >= 2) row[2]++;
+        byDate.set(v.d, row);
+      }
+      console.info("[board-topic] legacy", JSON.stringify({ base, oldSubs: old.subs.length, oldWithPhone, oldNames: byName.size, pend: pend.length, noName, notFound, ambiguous, candKeys: lkeys.length, linked, already, noBuy,
+        byDate: [...byDate.entries()].sort().map(([d, v]) => [d, ...v]), oldQuestions: old.questions.map((q) => `${(q.type || "").slice(0, 18)}:${(q.title || "").replace(/\s+/g, " ").slice(0, 12)}`) }));
+    } catch (e) { console.error("[board-topic] legacy 대조 실패", errMsg(e)); }
+  }
+  // ── TEMP-LEGACY 끝
   out.survey = [...scaleQ.values()].filter((q) => sum(q.n) > 0);
   out.opinions = newestFirst(out.opinions);
   // 잇기 점검용(숫자만) — 제출 수·전화번호를 못 읽은 수·사람 수·구매를 찾은 사람 수. 제출률이 이상하면 이 줄부터 본다(Vercel 로그).
