@@ -185,7 +185,7 @@ async function metaSection(def: TopicDef, days: string[]): Promise<TopicMeta> {
 // ── 탈리 폼(신청·결과) ── 전체 기간의 제출을 받는다(전체 기간 합계 total 을 내려고). 날짜 칸에는 180일 안의 것만 넣는다.
 //  사람의 날짜 = 처음 신청한 날(한 사람은 하루에만 들어가 기간으로 더해도 겹치지 않는다). 구매 = 그날부터 기준일까지의 주문(모든 채널).
 //  재구매·재재구매 = 미션을 마친(결과를 낸) 사람이 결과를 낸 다음 날부터 한 주문이 1번 이상·2번 이상.
-type FormSub = { day: string; phone: string | null; name: string; shape: string; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // shape = 번호를 못 읽었을 때 그 답의 모양(숫자를 9 로 가린 것 — 점검용)   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
+type FormSub = { day: string; phone: string | null; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
 const OPINION_CHARS = 600;   // 의견 한 편의 최대 길이
 const EMPTY_OPINION = /^(딱히\s*)?(없음|없습니다|없어요|없네요|없다|없어용)?[\s.!~\-xX]*$/;   // '없음' 같은 빈 답은 의견으로 치지 않는다
 // 구매와 잇는 데 쓸 번호(2026-11-18 대표: "뒷 8자리를 토대로 추적") — 휴대폰 번호로 읽히면 그대로, 아니면 연락처 답의 뒷 8자리에 010 을 붙인다.
@@ -228,17 +228,7 @@ async function tallySubs(formId: string, apiKey: string): Promise<{ subs: FormSu
       }
       const answers = (mapTallySubmission(s, qmap, formId).answers || []) as { label?: string; value?: unknown }[];
       const phone = matchPhone(answers);
-      let shape = "";
-      if (!phone) {   // 점검용 — 못 읽은 답의 모양(숫자는 9 로 가림). 연락처 문항이 안 보이면 그 제출에 든 문항 제목을 남긴다(제목은 개인정보가 아니다)
-        const a = answers.find((x) => PHONE_LABEL.test(String(x?.label ?? "")));
-        // 연락처 문항이 안 보이면 답마다 '제목 앞머리:값의 모양'(숫자 9·글자 x 로 가림) — 번호가 다른 답 안에 들어 있는지 본다
-        const mask = (v: unknown) => String(v ?? "").replace(/\d/g, "9").replace(/[A-Za-z가-힣]/g, "x").slice(0, 18);
-        shape = a ? (String(a.value ?? "").replace(/\d/g, "9").slice(0, 24) || "(빈 값)") : `(연락처 문항 없음 ${answers.length}) ${answers.slice(0, 4).map((x) => `${String(x?.label ?? "").slice(4, 9) || "제목없음"}:${mask(x?.value)}`).join(" | ")}`;
-      }
-      // TEMP-LEGACY(2026-11-18): 이름 대조용 — 성함 답(공백 제거). 저장하지 않는다
-      const nameA = answers.find((x) => /성함|이름/.test(String(x?.label ?? "")));
-      const name = String(nameA?.value ?? "").replace(/\s+/g, "").toLowerCase();
-      subs.push({ day, phone, name, shape, scales, texts });
+      subs.push({ day, phone, scales, texts });
     }
     if (!json.hasMore || list.length === 0) return { subs, truncated: false, questions: [...qmap.values()] };
   }
@@ -357,12 +347,9 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   }
   const textQ = textQuestions(rs.questions, def.submit!.textNames);
   const byKey = new Map<string, number>();   // 고객 키 → 180일 안의 제출 건수(0 = 그보다 먼저 냈다)
-  const shapes = new Map<string, number>(), byMonth = new Map<string, number>();   // 점검용 — 번호를 못 읽은 답의 모양, 달마다 제출 건수
   for (const s of rs.subs) {
     if (s.day > base) continue;   // 기준일 뒤(오늘) 제출은 다음 계산에
     out.total.subs++;
-    byMonth.set(s.day.slice(0, 7), (byMonth.get(s.day.slice(0, 7)) || 0) + 1);
-    if (!s.phone) shapes.set(s.shape, (shapes.get(s.shape) || 0) + 1);
     const i = idx.get(s.day);
     const k = s.phone ? customerKey(s.phone) : "";
     if (k) byKey.set(k, (byKey.get(k) || 0) + (i != null ? 1 : 0));
@@ -398,50 +385,8 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
     out.total.done += done; out.total.rep1 += r1; out.total.rep2 += r2;
     if (i != null) { out.done[i] += done; out.rep1[i] += r1; out.rep2[i] += r2; out.repRev[i] += rev; }
   }
-  // ── TEMP-LEGACY(2026-11-18) 시작 — 예전 신청 폼에도 이름이 없던 제출을 '그 상품을 산 주문자 이름'과 한 번 대조한다. 숫자만 로그로 남기고, 보정값에 더한 뒤 지운다.
-  if (def.id === "trial") {
-    try {
-      const old = await timeout(tallySubs("xXZ9gG", apiKey), 40_000, "탈리(예전 신청 폼)");
-      const oldNames = new Set(old.subs.filter((o) => o.name && o.phone).map((o) => o.name));
-      const rest = rs.subs.filter((x) => !x.phone && x.day <= base && x.name && !oldNames.has(x.name)).map((x) => x.name);   // 1차(신청 폼 이름)에서 못 찾은 제출의 이름
-      const buyers = await runQ<{ k: string; d: string; n: number; rev: number }>(sb,
-        `with t as (select o.customer_key, min(o.order_date) as first_t from sales_orders o where o.customer_key <> '' and o.order_date <= '${base}' and (${prodSql(def)}) group by 1) `
-        + `select t.customer_key as k, t.first_t::text as d, (count(distinct o.order_unit) filter (where ${other}))::int as n, coalesce(sum(o.subtotal_amount) filter (where ${other}), 0)::bigint as rev `
-        + `from t join sales_orders o on o.customer_key = t.customer_key where o.order_date <= '${base}' group by 1, 2`, ITEM_LIMIT);
-      const binfo = new Map(buyers.map((r) => [String(r.k), { d: String(r.d), n: num(r.n), rev: num(r.rev) }]));
-      const bkeys = [...binfo.keys()], nameKeys = new Map<string, string[]>();
-      for (let c = 0; c < bkeys.length; c += 100) {
-        const { data, error } = await sb.from("sales_customers").select("customer_key, customer_name").in("customer_key", bkeys.slice(c, c + 100));
-        if (error) throw error;
-        for (const r of (data ?? []) as { customer_key: string; customer_name: string | null }[]) {
-          const nm = String(r.customer_name ?? "").replace(/\s+/g, "").toLowerCase();
-          if (!nm) continue;
-          if (!nameKeys.has(nm)) nameKeys.set(nm, []);
-          nameKeys.get(nm)!.push(String(r.customer_key));
-        }
-      }
-      const used = new Set<string>(), byDate = new Map<string, [number, number, number, number]>();
-      let linked = 0, ambiguous = 0, none = 0, already = 0;
-      for (const nm of rest) {
-        const ks = (nameKeys.get(nm) || []).filter((k) => !used.has(k));
-        if (!ks.length) { none++; continue; }
-        if (ks.length > 1) { ambiguous++; continue; }   // 같은 이름의 구매자가 여럿이면 잇지 않는다
-        const k = ks[0]; used.add(k);
-        if (matched.has(k)) { already++; continue; }    // 연락처가 든 다른 제출로 이미 센 사람
-        linked++;
-        const v = binfo.get(k)!, row = byDate.get(v.d) || [0, 0, 0, 0];
-        row[0]++; if (v.n >= 1) { row[1]++; row[3] += v.rev; } if (v.n >= 2) row[2]++;
-        byDate.set(v.d, row);
-      }
-      console.info("[board-topic] legacy2", JSON.stringify({ base, rest: rest.length, buyers: bkeys.length, buyerNames: nameKeys.size, linked, ambiguous, none, already, byDate: [...byDate.entries()].sort().map(([d, v]) => [d, ...v]) }));
-    } catch (e) { console.error("[board-topic] legacy2 대조 실패", errMsg(e)); }
-  }
-  // ── TEMP-LEGACY 끝
   out.survey = [...scaleQ.values()].filter((q) => sum(q.n) > 0);
   out.opinions = newestFirst(out.opinions);
-  // 잇기 점검용(숫자만) — 제출 수·전화번호를 못 읽은 수·사람 수·구매를 찾은 사람 수. 제출률이 이상하면 이 줄부터 본다(Vercel 로그).
-  console.info("[board-topic] submit", def.id, JSON.stringify({ subsAll: out.total.subs, subs180: sum(out.count), noPhone180: out.noPhone, people: keys.length, matched: matched.size, unmatched180: out.unmatched, done180: sum(out.done), doneAll: out.total.done, truncated: rs.truncated,
-    byMonth: [...byMonth.entries()].sort(), noPhoneShapes: [...shapes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14), questions: rs.questions.map((q) => `${(q.type || "").slice(0, 18)}:${(q.title || "").replace(/\s+/g, " ").slice(0, 14)}`).slice(0, 30) }));
   return out;
 }
 
