@@ -198,6 +198,20 @@ async function metaSection(def: TopicDef, days: string[]): Promise<TopicMeta> {
 type FormSub = { day: string; phone: string | null; shape: string; scales: [qid: string, score: number][]; texts: [qid: string, text: string][] };   // shape = 번호를 못 읽었을 때 그 답의 모양(숫자를 9 로 가린 것 — 점검용)   // scales = 척도 문항의 점수, texts = 글로 답한 문항(의견 목록용 — 쓰는 쪽이 문항을 골라 담는다)
 const OPINION_CHARS = 600;   // 의견 한 편의 최대 길이
 const EMPTY_OPINION = /^(딱히\s*)?(없음|없습니다|없어요|없네요|없다|없어용)?[\s.!~\-xX]*$/;   // '없음' 같은 빈 답은 의견으로 치지 않는다
+// 구매와 잇는 데 쓸 번호(2026-11-18 대표: "뒷 8자리를 토대로 추적") — 휴대폰 번호로 읽히면 그대로, 아니면 연락처 답의 뒷 8자리에 010 을 붙인다.
+//  폼에 82… 로 들어오든 010-… 으로 들어오든, 앞에 다른 숫자가 붙었든 같은 번호가 된다. 주문 쪽 고객 키는 주문자 번호(010…) 전체로 만든 것이라 그대로 맞는다.
+//  문자를 보내는 데는 쓰지 않는다(추정이 섞인다) — 잇기 전용.
+function matchPhone(answers: { label?: string; value?: unknown }[]): string | null {
+  const strict = findPhone(answers);
+  if (strict) return strict;
+  const tail = (v: unknown) => {
+    const raw = String(v ?? "").trim(), d = raw.replace(/\D/g, "");
+    return /^[+\d][\d\s\-().]{7,22}$/.test(raw) && d.length >= 10 && d.length <= 14 ? `010${d.slice(-8)}` : null;
+  };
+  for (const a of answers) if (PHONE_LABEL.test(String(a?.label ?? ""))) { const t = tail(a?.value); if (t) return t; }
+  for (const a of answers) { const t = tail(a?.value); if (t) return t; }
+  return null;
+}
 const kstDay = (iso: string | undefined) => { const t = Date.parse(String(iso || "")); return Number.isFinite(t) ? new Date(t + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
 async function tallySubs(formId: string, apiKey: string): Promise<{ subs: FormSub[]; truncated: boolean; questions: TallyQ[] }> {
   const qmap = new Map<string, TallyQ>();
@@ -223,9 +237,12 @@ async function tallySubs(formId: string, apiKey: string): Promise<{ subs: FormSu
         }
       }
       const answers = (mapTallySubmission(s, qmap, formId).answers || []) as { label?: string; value?: unknown }[];
-      const phone = findPhone(answers);
+      const phone = matchPhone(answers);
       let shape = "";
-      if (!phone) { const a = answers.find((x) => PHONE_LABEL.test(String(x?.label ?? ""))); shape = a ? (String(a.value ?? "").replace(/\d/g, "9").slice(0, 24) || "(빈 값)") : "(연락처 문항 없음)"; }
+      if (!phone) {   // 점검용 — 못 읽은 답의 모양(숫자는 9 로 가림). 연락처 문항이 안 보이면 그 제출에 든 문항 제목을 남긴다(제목은 개인정보가 아니다)
+        const a = answers.find((x) => PHONE_LABEL.test(String(x?.label ?? "")));
+        shape = a ? (String(a.value ?? "").replace(/\d/g, "9").slice(0, 24) || "(빈 값)") : `(연락처 문항 없음: 답 ${answers.length}개 — ${answers.map((x) => String(x?.label ?? "").slice(0, 10) || "제목없음").slice(0, 6).join("|")})`;
+      }
       subs.push({ day, phone, shape, scales, texts });
     }
     if (!json.hasMore || list.length === 0) return { subs, truncated: false, questions: [...qmap.values()] };
