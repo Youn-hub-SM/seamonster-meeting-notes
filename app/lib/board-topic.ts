@@ -108,16 +108,6 @@ async function custSection(sb: SupabaseClient, def: TopicDef, days: string[], ba
   ]);
   const n = days.length, idx = new Map(days.map((x, i) => [x, i]));
   const out: TopicCust = { ok: true, first: zeros(n), fresh: zeros(n), rep1: zeros(n), rep2: zeros(n), repRev: zeros(n), total: { first: 0, rep1: 0, rep2: 0 }, after: [] };
-  // 점검용(2026-11-18) — 참여자가 어느 채널·어느 상품 이름·어느 달에서 잡히는지. 원인을 가린 뒤 지운다.
-  try {
-    const [byProd, byMon] = await Promise.all([
-      runQ<{ ch: string; p: string; n: number; orders: number; a: string; b: string }>(sb,
-        `select o.channel as ch, o.product_name as p, count(distinct o.customer_key)::int as n, count(distinct o.order_unit)::int as orders, min(o.order_date)::text as a, max(o.order_date)::text as b `
-        + `from sales_orders o where o.order_date <= '${base}' and (${prod}) group by 1, 2 order by 3 desc limit 20`),
-      runQ<{ m: string; n: number }>(sb, `with t as (${first}) select to_char(first_t, 'YYYY-MM') as m, count(*)::int as n from t group by 1 order by 1`),
-    ]);
-    console.info("[board-topic] cust", def.id, JSON.stringify({ firstAll: rows.reduce((a, r) => a + num(r.n), 0), byMonth: byMon.map((r) => [r.m, num(r.n)]), byProduct: byProd.map((r) => [r.ch, String(r.p).slice(0, 40), num(r.n), num(r.orders), r.a, r.b]) }));
-  } catch (e) { console.error("[board-topic] cust 점검 실패", errMsg(e)); }
   for (const r of rows) {
     out.total.first += num(r.n); out.total.rep1 += num(r.rep1); out.total.rep2 += num(r.rep2);
     const i = idx.get(String(r.d)); if (i == null) continue;   // 180일보다 먼저 처음 산 고객 — 전체 기간 합계에만
@@ -241,7 +231,9 @@ async function tallySubs(formId: string, apiKey: string): Promise<{ subs: FormSu
       let shape = "";
       if (!phone) {   // 점검용 — 못 읽은 답의 모양(숫자는 9 로 가림). 연락처 문항이 안 보이면 그 제출에 든 문항 제목을 남긴다(제목은 개인정보가 아니다)
         const a = answers.find((x) => PHONE_LABEL.test(String(x?.label ?? "")));
-        shape = a ? (String(a.value ?? "").replace(/\d/g, "9").slice(0, 24) || "(빈 값)") : `(연락처 문항 없음: 답 ${answers.length}개 — ${answers.map((x) => String(x?.label ?? "").slice(0, 10) || "제목없음").slice(0, 6).join("|")})`;
+        // 연락처 문항이 안 보이면 답마다 '제목 앞머리:값의 모양'(숫자 9·글자 x 로 가림) — 번호가 다른 답 안에 들어 있는지 본다
+        const mask = (v: unknown) => String(v ?? "").replace(/\d/g, "9").replace(/[A-Za-z가-힣]/g, "x").slice(0, 18);
+        shape = a ? (String(a.value ?? "").replace(/\d/g, "9").slice(0, 24) || "(빈 값)") : `(연락처 문항 없음 ${answers.length}) ${answers.slice(0, 4).map((x) => `${String(x?.label ?? "").slice(4, 9) || "제목없음"}:${mask(x?.value)}`).join(" | ")}`;
       }
       subs.push({ day, phone, shape, scales, texts });
     }
@@ -397,7 +389,7 @@ async function submitSection(sb: SupabaseClient, def: TopicDef, days: string[], 
   out.opinions = newestFirst(out.opinions);
   // 잇기 점검용(숫자만) — 제출 수·전화번호를 못 읽은 수·사람 수·구매를 찾은 사람 수. 제출률이 이상하면 이 줄부터 본다(Vercel 로그).
   console.info("[board-topic] submit", def.id, JSON.stringify({ subsAll: out.total.subs, subs180: sum(out.count), noPhone180: out.noPhone, people: keys.length, matched: matched.size, unmatched180: out.unmatched, done180: sum(out.done), doneAll: out.total.done, truncated: rs.truncated,
-    byMonth: [...byMonth.entries()].sort(), noPhoneShapes: [...shapes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10) }));
+    byMonth: [...byMonth.entries()].sort(), noPhoneShapes: [...shapes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14), questions: rs.questions.map((q) => `${(q.type || "").slice(0, 18)}:${(q.title || "").replace(/\s+/g, " ").slice(0, 14)}`).slice(0, 30) }));
   return out;
 }
 

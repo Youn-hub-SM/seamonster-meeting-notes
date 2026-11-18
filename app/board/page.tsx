@@ -561,7 +561,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null, un
   // 고객 — 처음 산 날 기준(채널 필터 없음)
   const cust = t.cust?.ok ? t.cust : null;
   const firstS = cust ? spanSum(cust.first, sp) : null, freshS = cust ? spanSum(cust.fresh, sp) : null;
-  // 결과 제출(탈리) = 미션 성공(2026-11-18 대표) — 제출 건수 그대로, 제출한 날 기준. 성공률 = 그 기간의 제출 건수 ÷ 그 기간의 참여자
+  // 결과 제출(탈리) = 미션 완료(2026-11-18 대표: "미션완료는 그냥 제출폼 수량으로") — 제출 건수 그대로, 제출한 날 기준. 완료율 = 그 기간의 제출 건수 ÷ 그 기간의 참여자
   const submit = t.submit?.ok ? t.submit : null;
   const subCntS = submit ? spanSum(submit.count, sp) : null;
   const subRate = subCntS && firstS ? { cur: ratio(subCntS.cur * 100, firstS.cur), prev: ratio(subCntS.prev == null ? null : subCntS.prev * 100, firstS.prev) } : null;
@@ -667,24 +667,22 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   const subCell = (v: string) => (tv.submit ? v : "-"), trk = (v: string) => (tv.track ? v : "-");
   const who = def.people?.name ?? "처음 산 고객", when = def.people?.day ?? "처음 산";   // 그 상품을 처음 산 고객을 부르는 말(이유식 체험단 = 참여자·참여한)
   const noWho = `이 기간에 ${who}${def.people ? "가" : "이"} 없습니다.`;
-  const baseWord = hasSubmit ? "구매 확인된 미션 성공" : who;   // 재구매율의 분모 — 제출한 사람 가운데 전화번호로 주문 기록과 이어진 사람
   const keyCols: Col<CRow>[] = [
     { key: "key", label: `${when} ${UNIT_WORD[tv.unit]}`, sort: (r) => r.key, cell: (r) => r.name },
     { key: "first", label: who, num: true, bar: true, sort: (r) => r.first, cell: (r) => r.first.toLocaleString() },
   ];
-  const dCols: Col<CRow>[] = [   // 평가 — 날(주·달)마다 참여자와 미션 성공(그때 낸 제출 건수)
+  const dCols: Col<CRow>[] = [   // 평가 — 날(주·달)마다 참여자와 미션 완료(그때 낸 제출 건수)
     { key: "key", label: UNIT_WORD[tv.unit] === "날" ? "날짜" : UNIT_WORD[tv.unit], sort: (r) => r.key, cell: (r) => r.name },
     { key: "first", label: who, num: true, bar: true, sort: (r) => r.first, cell: (r) => r.first.toLocaleString() },
-    { key: "subs", label: "미션 성공", num: true, sort: (r) => r.subs, cell: (r) => subCell(r.subs.toLocaleString()) },
-    { key: "subRate", label: "성공률", num: true, sort: (r) => ratio(r.subs, r.first) ?? -1, cell: (r) => subCell(pct1(ratio(r.subs * 100, r.first)) ?? "-") },
+    { key: "subs", label: "미션 완료", num: true, sort: (r) => r.subs, cell: (r) => subCell(r.subs.toLocaleString()) },
+    { key: "subRate", label: "완료율", num: true, sort: (r) => ratio(r.subs, r.first) ?? -1, cell: (r) => subCell(pct1(ratio(r.subs * 100, r.first)) ?? "-") },
   ];
   const cCols: Col<CRow>[] = [   // 재구매 추적 — 처음 산 날(주·달)별 재구매·재재구매
     ...keyCols,
-    ...(hasSubmit ? [{ key: "base", label: "미션 성공(구매 확인)", num: true, sort: (r) => r.base, cell: (r) => trk(r.base.toLocaleString()) }] as Col<CRow>[] : []),
     { key: "rep1", label: "재구매", num: true, sort: (r) => r.rep1, cell: (r) => trk(r.rep1.toLocaleString()) },
-    { key: "rate1", label: "재구매율", num: true, sort: (r) => ratio(r.rep1, r.base) ?? -1, cell: (r) => trk(pct1(ratio(r.rep1 * 100, r.base)) ?? "-") },
+    ...(hasSubmit ? [] : [{ key: "rate1", label: "재구매율", num: true, sort: (r) => ratio(r.rep1, r.base) ?? -1, cell: (r) => trk(pct1(ratio(r.rep1 * 100, r.base)) ?? "-") }] as Col<CRow>[]),
     { key: "rep2", label: "재재구매", num: true, sort: (r) => r.rep2, cell: (r) => trk(r.rep2.toLocaleString()) },
-    { key: "rate2", label: "재재구매율", num: true, sort: (r) => ratio(r.rep2, r.base) ?? -1, cell: (r) => trk(pct1(ratio(r.rep2 * 100, r.base)) ?? "-") },
+    ...(hasSubmit ? [] : [{ key: "rate2", label: "재재구매율", num: true, sort: (r) => ratio(r.rep2, r.base) ?? -1, cell: (r) => trk(pct1(ratio(r.rep2 * 100, r.base)) ?? "-") }] as Col<CRow>[]),
     { key: "rev", label: "재구매 매출(원)", num: true, sort: (r) => r.rev, cell: (r) => trk(won(r.rev)) },
   ];
   type NRow = TopicView["afterRows"][number];
@@ -705,21 +703,18 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
   const colSum = (k: "base" | "rep1" | "rep2" | "rev") => cohortRows.reduce((a, r) => a + r[k], 0);
   const subCnt = tv.subCntS?.cur ?? 0;
   const evalRows = tv.cohort.filter((r) => r.first > 0 || r.subs > 0);
-  const subNote = tv.submit ? [`제출 = 미션 성공`, tv.submit.unmatched > 0 ? `구매를 찾지 못한 제출 ${tv.submit.unmatched.toLocaleString()}건` : "", (tv.submit.noPhone ?? 0) > 0 ? `전화번호를 못 읽은 제출 ${tv.submit.noPhone.toLocaleString()}건` : ""].filter(Boolean).join(" · ") : "";
+  const subNote = tv.submit ? [`미션 완료 = 제출 폼 건수`, tv.submit.unmatched > 0 ? `구매를 찾지 못한 제출 ${tv.submit.unmatched.toLocaleString()}건` : "", (tv.submit.noPhone ?? 0) > 0 ? `전화번호를 못 읽은 제출 ${tv.submit.noPhone.toLocaleString()}건` : ""].filter(Boolean).join(" · ") : "";
   const noSubmit = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 결과 제출이 없습니다.";
   const noSurvey = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 설문 응답이 없습니다.";
   const noOpinion = t.submit && !t.submit.ok ? "탈리 숫자를 받지 못했습니다." : "이 기간에 남긴 의견이 없습니다.";
   const surveyNote = tv.surveyRows.length ? `설문 응답 ${tv.surveyAnswered.toLocaleString()}건 · 전체 평균 ${score1(tv.surveyAvg)}점` : "";
-  // 전체 기간 추적 — 참여자 → 미션 성공(제출 건수) → 그중 구매 확인된 사람 → 재구매 → 재재구매
+  // 전체 기간 추적 — 참여자 → 미션 완료(제출 폼 건수) → 재구매 → 재재구매. 재구매·재재구매는 제출한 번호로 주문을 찾은 사람에서 세고, 비율은 미션 완료 건수로 나눈다
   const tot = tv.track?.total ?? null, totFirst = tv.cust?.total.first ?? null;
-  const ofBase = (n: number) => `${hasSubmit ? "구매 확인의" : `${who}의`} ${pctOf(ratio(n * 100, tot?.base ?? null))}`;
   const totSubs = tv.submit?.total.subs ?? null;
+  const ofBase = (n: number) => (hasSubmit ? `미션 완료의 ${pctOf(ratio(n * 100, totSubs))}` : `${who}의 ${pctOf(ratio(n * 100, tot?.base ?? null))}`);
   const steps: Step[] = !tv.cust && !tot ? [] : [
     { label: who, n: totFirst, note: tv.cust ? "처음부터 기준일까지" : "조회 실패" },
-    ...(hasSubmit ? [
-      { label: "미션 성공", n: totSubs, unit: "건", note: tv.submit ? `${who}의 ${pctOf(ratio((totSubs ?? 0) * 100, totFirst))} · 제출 건수` : "조회 실패" },
-      { label: "구매 확인", n: tot?.base ?? null, note: tot ? "제출한 번호로 주문을 찾은 사람" : "조회 실패" },
-    ] : []),
+    ...(hasSubmit ? [{ label: "미션 완료", n: totSubs, unit: "건", note: tv.submit ? `${who}의 ${pctOf(ratio((totSubs ?? 0) * 100, totFirst))}` : "조회 실패" }] : []),
     { label: "재구매", n: tot?.rep1 ?? null, note: tot ? ofBase(tot.rep1) : "조회 실패" },
     { label: "재재구매", n: tot?.rep2 ?? null, note: tot ? ofBase(tot.rep2) : "조회 실패" },
   ];
@@ -736,7 +731,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
         <Score label="주문 1건당 광고비" value={wonS(tv.cpa?.cur == null ? null : Math.round(tv.cpa.cur))} delta={pctDelta(tv.cpa?.cur ?? null, tv.cpa?.prev ?? null, "down")} note={tv.meta ? `메타 집계 구매 ${(tv.purS?.cur ?? 0).toLocaleString()}건 · ROAS ${fix2(roas) ?? "-"}` : whyX(t.meta)} />
         <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `매출 ${moneyCompact(tv.revS?.cur ?? 0)}원` : "조회 실패"} spark={tv.sales ? tv.win(tv.orders) : undefined} />
         {hasSubmit
-          ? <Score label="미션 성공" value={tv.submit ? cnt(subCnt, "건") : null} delta={pctDelta(tv.subCntS?.cur ?? null, tv.subCntS?.prev ?? null, "up")} note={tv.submit ? `성공률 ${pctOf(tv.subRate?.cur ?? null)} · ${who} ${first.toLocaleString()}명` : "조회 실패"} spark={tv.submit ? tv.win(tv.submit.count) : undefined} />
+          ? <Score label="미션 완료" value={tv.submit ? cnt(subCnt, "건") : null} delta={pctDelta(tv.subCntS?.cur ?? null, tv.subCntS?.prev ?? null, "up")} note={tv.submit ? `완료율 ${pctOf(tv.subRate?.cur ?? null)} · ${who} ${first.toLocaleString()}명` : "조회 실패"} spark={tv.submit ? tv.win(tv.submit.count) : undefined} />
           : <Score label={who} value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />}
         <Score label="재재구매(전체 기간)" value={cnt(tot?.rep2, "명")} note={tot ? `${ofBase(tot.rep2)} · 재구매 ${tot.rep1.toLocaleString()}명` : "조회 실패"} />
       </Scores>
@@ -783,7 +778,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
               {hasOpinion && <OpinionCard w={6} rows={tv.opinionRows} empty={noOpinion} />}
             </>
           )}
-          <Card w={scaleMax > 0 ? 12 : 6} title={`${UNIT_BY[tv.unit]} ${who}와 미션 성공`} right={subNote ? <span className="bd-card-note">{subNote}</span> : undefined}>
+          <Card w={scaleMax > 0 ? 12 : 6} title={`${UNIT_BY[tv.unit]} ${who}와 미션 완료`} right={subNote ? <span className="bd-card-note">{subNote}</span> : undefined}>
             <DataTable rows={evalRows} cols={dCols} rowKey={(r) => r.key} sortKey="key" empty={noWho}
               foot={["합계", first.toLocaleString(), subCell(subCnt.toLocaleString()), subCell(pct1(tv.subRate?.cur ?? null) ?? "-")]} />
           </Card>
@@ -794,8 +789,8 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
       <TrackCard steps={steps} empty="재구매 숫자를 받지 못했습니다." />
       <Card w={12} title={`${when} ${UNIT_WORD[tv.unit]}별 재구매 추적`}>
         <DataTable rows={cohortRows} cols={cCols} rowKey={(r) => r.key} sortKey="key" empty={noWho}
-          foot={["합계", first.toLocaleString(), ...(hasSubmit ? [trk(colSum("base").toLocaleString())] : []), trk(colSum("rep1").toLocaleString()), trk(pct1(ratio(colSum("rep1") * 100, colSum("base"))) ?? "-"),
-            trk(colSum("rep2").toLocaleString()), trk(pct1(ratio(colSum("rep2") * 100, colSum("base"))) ?? "-"), trk(won(colSum("rev")))]} />
+          foot={["합계", first.toLocaleString(), trk(colSum("rep1").toLocaleString()), ...(hasSubmit ? [] : [trk(pct1(ratio(colSum("rep1") * 100, colSum("base"))) ?? "-")]),
+            trk(colSum("rep2").toLocaleString()), ...(hasSubmit ? [] : [trk(pct1(ratio(colSum("rep2") * 100, colSum("base"))) ?? "-")]), trk(won(colSum("rev")))]} />
       </Card>
       <Card w={12} title="재구매한 상품 상위 15"><DataTable rows={tv.afterRows} cols={nCols} rowKey={(r) => r.name} sortKey="customers" empty={`이 기간 ${who}의 재구매가 없습니다.`} /></Card>
     </>
@@ -1177,7 +1172,7 @@ export default function BoardPage() {
   const basis: string[] = isSubx ? [`카페24 정기배송 신청${sub.filters?.total ? ` ${sub.filters.total.toLocaleString()}건 중 ${sub.filters.shown.toLocaleString()}건` : ""}`, "매일 23:59 수집", "정기배송 분석 화면과 같은 계산", "회원 수는 사람 기준"]
     : !snap ? []
     : isFormTopic ? [baseDay, ...(curTopic ? [curTopic.basis] : []), "신청·결과는 탈리 제출 시각", "사람은 전화번호로 세고 처음 신청한 날 기준", "방문·스크롤은 GA4 세션", "구매는 신청한 날부터의 주문", "재구매는 결과를 낸 다음 날부터의 주문"]
-    : topicId ? [baseDay, ...(curTopic ? [curTopic.basis] : []), curTopic?.people ? `${curTopic.people.name}는 그 상품을 처음 산 고객, 처음 산 날 기준` : "고객은 처음 산 날 기준", ...(curTopic?.submit ? ["미션 성공 = 제출 폼 제출 건수(제출한 날 기준)", "재구매 추적은 제출한 번호로 주문을 찾은 사람만"] : []), "방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장", "재구매는 처음 산 다음 날부터 다른 상품 주문"]
+    : topicId ? [baseDay, ...(curTopic ? [curTopic.basis] : []), curTopic?.people ? `${curTopic.people.name}는 그 상품을 처음 산 고객, 처음 산 날 기준` : "고객은 처음 산 날 기준", ...(curTopic?.submit ? ["미션 완료 = 제출 폼 건수(제출한 날 기준)", "재구매·재재구매는 제출한 번호로 주문을 찾은 사람에서 센다"] : []), "방문·스크롤은 GA4 세션, 주문서 진입은 GA4 상품 수량, 구매는 주문 원장", "재구매는 처음 산 다음 날부터 다른 상품 주문"]
     : [baseDay, span?.prev ? `직전 ${n}일과 비교` : "직전 기간이 조회 범위 밖이라 비교 없음", "매출은 주문일 기준 도매 포함", "광고비는 VAT 제외"];
   return (
     <div className="bd-root">
