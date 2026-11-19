@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
-import { UNREQUESTED_ITEM_MEMO } from "@/app/lib/wholesale-production";
+import { UNREQUESTED_ITEM_MEMO, byPriority } from "@/app/lib/wholesale-production";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -10,6 +10,8 @@ export const maxDuration = 30;
 // GET /api/production/requests/[id]/sheet — 생산 요청 한 건을 제조사 전달용 엑셀(편집·인쇄)로.
 //  텍스트 복사([요청서])와 같은 원칙: 내부 정보(요청자·담당·제목·용도)는 뺀다(대표 확정).
 //  표(상품명·수량·단위·비고·작업완료) + 하단 품목·중량별 총중량 + 확인 서명란. A4 세로 인쇄 맞춤.
+//  제조사 요청서에 우선순위(172)가 하나라도 있으면 표 맨 앞에 [우선순위] 열이 붙고 품목이 그 순서로 나온다(2026-11-19 대표).
+//  순번이 없는 요청서·다른 용도는 종전 5열 그대로다.
 type Ctx = { params: Promise<{ id: string }> };
 
 // 소포장 단위 판정 — 총중량 표를 '단위중량 × 팩 수'로 집계하기 위한 분해(대표 확정, 2026-08-25).
@@ -98,25 +100,34 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const ws = wb.addWorksheet("생산요청서", {
       pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
     });
-    ws.columns = [{ width: 32 }, { width: 10 }, { width: 8 }, { width: 30 }, { width: 10 }];
+    // '[요청서에 없음]' 자동 줄(요청수량 0 — 요청서에 없던 품목의 입고 기록 자리)은 제조사에 보내는 요청서에 넣지 않는다
+    const requested = r.items.filter((it) => (Number(it.requested_qty) || 0) > 0);
+    // 우선순위 열 — 제조사 요청서에 순번이 하나라도 있을 때만. P = 앞에 붙는 열 수(0 또는 1), N = 전체 열 수.
+    const hasPriority = r.purpose === "재고 보충" && requested.some((it) => it.priority != null);
+    const sheetItems = hasPriority ? byPriority(requested) : requested;
+    const P = hasPriority ? 1 : 0;
+    const N = 5 + P;
+    // 첫 칸이 [우선순위]+[상품명] 두 열에 걸치는 줄(머리 정보·합계·총중량 표·서명) — 빈 칸 하나를 끼우고 아래에서 합친다
+    const wide = (first: string, ...rest: (string | number)[]): (string | number)[] => (P ? [first, "", ...rest] : [first, ...rest]);
+    ws.columns = [...(P ? [{ width: 10 }] : []), { width: 32 }, { width: 10 }, { width: 8 }, { width: 30 }, { width: 10 }];
 
     const title = ws.addRow(["생산 요청서"]);
     title.font = { bold: true, size: 18 };
     title.height = 28;
-    ws.mergeCells(title.number, 1, title.number, 5);
+    ws.mergeCells(title.number, 1, title.number, N);
     title.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
 
-    const meta1 = ws.addRow([`요청번호  ${r.req_no || "-"}`, "", "", `요청일  ${r.request_date}`, ""]);
-    ws.mergeCells(meta1.number, 1, meta1.number, 3);
-    ws.mergeCells(meta1.number, 4, meta1.number, 5);
-    const meta2 = ws.addRow([`생산마감일  ${r.due_date || "-"}`, "", "", `발행일  ${today}`, ""]);
-    ws.mergeCells(meta2.number, 1, meta2.number, 3);
-    ws.mergeCells(meta2.number, 4, meta2.number, 5);
+    const meta1 = ws.addRow(wide(`요청번호  ${r.req_no || "-"}`, "", "", `요청일  ${r.request_date}`, ""));
+    ws.mergeCells(meta1.number, 1, meta1.number, 3 + P);
+    ws.mergeCells(meta1.number, 4 + P, meta1.number, N);
+    const meta2 = ws.addRow(wide(`생산마감일  ${r.due_date || "-"}`, "", "", `발행일  ${today}`, ""));
+    ws.mergeCells(meta2.number, 1, meta2.number, 3 + P);
+    ws.mergeCells(meta2.number, 4 + P, meta2.number, N);
     meta2.getCell(1).font = { bold: true };
     ws.addRow([]);
 
     // ── 품목 표 — 비고는 제조사 참고 멘트 칸(요청 메모를 미리 채워두고 엑셀에서 수정), 작업완료는 수기 체크 칸 ──
-    const header = ws.addRow(["상품명", "수량", "단위", "비고(제조사 참고)", "작업완료"]);
+    const header = ws.addRow([...(P ? ["우선순위"] : []), "상품명", "수량", "단위", "비고(제조사 참고)", "작업완료"]);
     header.font = { bold: true };
     header.height = 20;
     header.eachCell((c) => {
@@ -124,25 +135,25 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       c.border = BOX;
       c.alignment = { horizontal: "center", vertical: "middle" };
     });
-    // '[요청서에 없음]' 자동 줄(요청수량 0 — 요청서에 없던 품목의 입고 기록 자리)은 제조사에 보내는 요청서에 넣지 않는다
-    const sheetItems = r.items.filter((it) => (Number(it.requested_qty) || 0) > 0);
     for (const it of sheetItems) {
       const nameCell = it.spec && !it.name.includes(it.spec) ? `${it.name} ${it.spec}` : it.name;
-      const row = ws.addRow([nameCell, it.requested_qty, it.unit || "개", (it.memo || "").replace(UNREQUESTED_ITEM_MEMO, "").trim(), ""]); // 자동 줄 표식은 제조사 비고에 찍지 않는다
+      const row = ws.addRow([...(P ? [it.priority ?? ""] : []), nameCell, it.requested_qty, it.unit || "개", (it.memo || "").replace(UNREQUESTED_ITEM_MEMO, "").trim(), ""]); // 자동 줄 표식은 제조사 비고에 찍지 않는다
       row.height = 22; // 수기 메모·체크 여유
-      row.getCell(2).numFmt = "#,##0";
+      row.getCell(2 + P).numFmt = "#,##0";
       row.eachCell({ includeEmpty: true }, (c, col) => {
         c.border = BOX;
-        c.alignment = { vertical: "middle", horizontal: col === 1 || col === 4 ? "left" : "center" };
+        c.alignment = { vertical: "middle", horizontal: col === 1 + P || col === 4 + P ? "left" : "center" };
       });
       // includeEmpty 로도 마지막 열이 비면 스킵될 수 있어 명시적으로 테두리를 채운다
-      for (let col = 1; col <= 5; col++) row.getCell(col).border = BOX;
+      for (let col = 1; col <= N; col++) row.getCell(col).border = BOX;
+      if (P) row.getCell(1).font = { bold: true };
     }
     const totalQty = sheetItems.reduce((s, it) => s + (Number(it.requested_qty) || 0), 0);
-    const tRow = ws.addRow(["합계", totalQty, "", "", ""]);
+    const tRow = ws.addRow(wide("합계", totalQty, "", "", ""));
+    if (P) ws.mergeCells(tRow.number, 1, tRow.number, 2);
     tRow.font = { bold: true };
-    tRow.getCell(2).numFmt = "#,##0";
-    for (let col = 1; col <= 5; col++) tRow.getCell(col).border = BOX;
+    tRow.getCell(2 + P).numFmt = "#,##0";
+    for (let col = 1; col <= N; col++) tRow.getCell(col).border = BOX;
 
     // ── 상품명·옵션별 총중량 — 제조사가 원료 준비량을 바로 가늠하도록(대표 확정, 2026-08-28).
     //  묶음 기준: 상품명 + 옵션중량(조각당) 두 축. 벌크(속성)는 줄을 나누지 않고 같은 줄에서
@@ -150,7 +161,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     ws.addRow([]);
     const wTitle = ws.addRow(["상품명·옵션별 총중량 (kg)"]);
     wTitle.font = { bold: true, size: 12 };
-    ws.mergeCells(wTitle.number, 1, wTitle.number, 5);
+    ws.mergeCells(wTitle.number, 1, wTitle.number, N);
 
     // 품목 속성·중량 3단 조회 — '벌크' 판정 + 마스터 중량 우선 계산. 조회 실패는 문자열 파싱 폴백.
     const ids = [...new Set(sheetItems.map((it) => it.product_id).filter(Boolean))];
@@ -196,11 +207,12 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       if (!parts.length) return "-";
       return parts.length === 2 ? `${parts.join(" + ")} = ${fmtKg(normal + bulk)}` : parts[0];
     };
-    const wHeader = ws.addRow(["상품명", "옵션중량", "총중량(kg)", "", ""]);
-    ws.mergeCells(wHeader.number, 3, wHeader.number, 5);
+    const wHeader = ws.addRow(wide("상품명", "옵션중량", "총중량(kg)", "", ""));
+    if (P) ws.mergeCells(wHeader.number, 1, wHeader.number, 2);
+    ws.mergeCells(wHeader.number, 3 + P, wHeader.number, N);
     wHeader.font = { bold: true };
     wHeader.eachCell({ includeEmpty: true }, (c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }; c.alignment = { horizontal: "center" } });
-    for (let col = 1; col <= 5; col++) wHeader.getCell(col).border = BOX;
+    for (let col = 1; col <= N; col++) wHeader.getCell(col).border = BOX;
 
     let sumNormal = 0, sumBulk = 0;
     // 상품명 가나다순, 같은 상품명 안에서는 조각 중량 오름차순
@@ -208,26 +220,28 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       a.base.localeCompare(b.base, "ko") || a.sortG - b.sortG);
     for (const g of sorted) {
       sumNormal += g.normalKg; sumBulk += g.bulkKg;
-      const row = ws.addRow([g.base, g.wLabel, cellText(g.normalKg, g.bulkKg), "", ""]);
-      ws.mergeCells(row.number, 3, row.number, 5);
-      for (let col = 1; col <= 5; col++) { row.getCell(col).border = BOX; if (col > 1) row.getCell(col).alignment = { horizontal: "center" }; }
+      const row = ws.addRow(wide(g.base, g.wLabel, cellText(g.normalKg, g.bulkKg), "", ""));
+      if (P) ws.mergeCells(row.number, 1, row.number, 2);
+      ws.mergeCells(row.number, 3 + P, row.number, N);
+      for (let col = 1; col <= N; col++) { row.getCell(col).border = BOX; if (col > 1 + P) row.getCell(col).alignment = { horizontal: "center" }; }
     }
-    const wTotal = ws.addRow(["합계", "", cellText(sumNormal, sumBulk), "", ""]);
-    ws.mergeCells(wTotal.number, 3, wTotal.number, 5);
+    const wTotal = ws.addRow(wide("합계", "", cellText(sumNormal, sumBulk), "", ""));
+    if (P) ws.mergeCells(wTotal.number, 1, wTotal.number, 2);
+    ws.mergeCells(wTotal.number, 3 + P, wTotal.number, N);
     wTotal.font = { bold: true };
-    for (let col = 1; col <= 5; col++) { wTotal.getCell(col).border = BOX; if (col > 1) wTotal.getCell(col).alignment = { horizontal: "center" }; }
+    for (let col = 1; col <= N; col++) { wTotal.getCell(col).border = BOX; if (col > 1 + P) wTotal.getCell(col).alignment = { horizontal: "center" }; }
     if (unknown) {
       const note = ws.addRow([`* 중량을 인식하지 못한 품목 ${unknown}건은 총중량 합계에서 빠져 있습니다.`]);
       note.font = { size: 9, color: { argb: "FF888888" } };
-      ws.mergeCells(note.number, 1, note.number, 5);
+      ws.mergeCells(note.number, 1, note.number, N);
     }
 
     // ── 확인 서명란 ──
     ws.addRow([]);
     ws.addRow([]);
-    const sign = ws.addRow(["발주자 확인:  ____________________", "", "", "제조사 확인:  ____________________", ""]);
-    ws.mergeCells(sign.number, 1, sign.number, 3);
-    ws.mergeCells(sign.number, 4, sign.number, 5);
+    const sign = ws.addRow(wide("발주자 확인:  ____________________", "", "", "제조사 확인:  ____________________", ""));
+    ws.mergeCells(sign.number, 1, sign.number, 3 + P);
+    ws.mergeCells(sign.number, 4 + P, sign.number, N);
     sign.height = 24;
 
     const buf = await wb.xlsx.writeBuffer();
