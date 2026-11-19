@@ -109,7 +109,7 @@ TABLE activity_log — 업무도우미 변경 이력: event_type(text 예 order.
 
 TABLE production_requests — 생산 요청서 헤더: id, req_no(text PR-000001), title, requested_by, request_date(date),
   due_date(date 마감), status(text 요청|진행중|완료|취소), purpose(text 재고 보충|도매 납품|프로모션|도매 대량), assignee(text), memo
-TABLE production_request_items — 요청 품목: request_id, product_id, requested_qty(int), memo, sort. 입고수량은 production_receipts 합.
+TABLE production_request_items — 요청 품목: request_id, product_id, requested_qty(int), memo, sort, priority(int 생산 우선순위 — 1 이 가장 먼저, null=순번 없음, 제조사 요청서만). 입고수량은 production_receipts 합.
 TABLE production_receipts — 생산 입고 기록: request_id, item_id, qty(numeric +입고/−수정), receipt_date(date), memo, received_by
 TABLE product_bundles — 세트 구성(PK=parent_id,component_id): parent_id(세트 product), component_id(구성품), qty(int 세트당 수량)
 TABLE product_cost_schedules — 원가 변경 예약: product_id, effective_date(date), cost_material·pkg_inner·pkg_label·pkg_outer·cost_price(numeric), applied_at(null=대기)

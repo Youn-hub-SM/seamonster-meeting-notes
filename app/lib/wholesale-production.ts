@@ -28,7 +28,24 @@ export interface PrItem {
   received_qty: number;     // Σ receipts.qty — 프로모션은 소매 합류(음수 연결)를 뺀 순확보
   released_qty?: number;    // 프로모션: 마감·취소로 소매에 넘어간 자기 몫(음수 연결 합의 절댓값) — 표시용
   memo: string | null;
+  priority?: number | null; // 172 — 생산 우선순위(숫자 순번, 1 이 가장 먼저). 제조사 요청서에서 사람이 넣는다. 미적용·미입력이면 없음
   receipts: PrReceipt[];
+}
+
+/** 우선순위 입력값 → 1~9999 정수. 비었거나 숫자가 아니면 null(순번 없음). 화면·서버 공용. */
+export function toPriority(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 1 && n <= 9999 ? n : null;
+}
+
+/** 우선순위 순으로 정렬한 사본 — 순번 없는 줄은 뒤, '[요청서에 없음]' 자동 줄은 맨 뒤. 같은 순번은 원래 순서 유지. */
+export function byPriority<T extends { priority?: number | string | null; requested_qty?: number | string; memo?: string | null; auto?: boolean }>(items: T[]): T[] {
+  const rank = (it: T): number => {
+    if ((Number(it.requested_qty) || 0) <= 0 && (it.auto || it.memo === UNREQUESTED_ITEM_MEMO)) return Number.MAX_SAFE_INTEGER;
+    return toPriority(it.priority) ?? Number.MAX_SAFE_INTEGER - 1;
+  };
+  return items.map((it, i) => ({ it, i, r: rank(it) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.it);
 }
 
 // 요청서(헤더) + 라인

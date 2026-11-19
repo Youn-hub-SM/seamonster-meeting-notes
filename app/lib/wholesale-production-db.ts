@@ -1,7 +1,7 @@
 // 도매 재고 생산 요청 — 서버 전용 로더(요청서 + 품목 + 입고집계 조립).
 //  list 라우트와 [id] 라우트가 공용으로 사용.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { UNREQUESTED_ITEM_MEMO, toPrPurpose, type ProductionRequest, type PrItem, type PrReceipt, type PrPurpose, PURPOSE_NOTE } from "./wholesale-production";
+import { UNREQUESTED_ITEM_MEMO, toPrPurpose, toPriority, type ProductionRequest, type PrItem, type PrReceipt, type PrPurpose, PURPOSE_NOTE } from "./wholesale-production";
 
 type AnyRow = Record<string, unknown>;
 function one<T = AnyRow>(v: unknown): T | null {
@@ -78,12 +78,18 @@ export async function loadRequests(
   if (!heads.length) return [];
 
   const ids = heads.map((r) => r.id as string);
+  // 우선순위(172)는 선택 컬럼 — 미적용 환경이면 그 컬럼만 빼고 다시 읽는다(다른 조회 오류는 그대로 던진다)
+  const ITEM_COLS = "id, request_id, product_id, requested_qty, memo, sort, products(sku, name, spec, unit)";
+  const readItems = (cols: string) => inChunks(ids, (part) => pageAll((a, b) => sb.from("production_request_items")
+    .select(cols)
+    .in("request_id", part)
+    .order("sort", { ascending: true }).order("id", { ascending: true })
+    .range(a, b)));
   const [items, receipts] = await Promise.all([
-    inChunks(ids, (part) => pageAll((a, b) => sb.from("production_request_items")
-      .select("id, request_id, product_id, requested_qty, memo, sort, products(sku, name, spec, unit)")
-      .in("request_id", part)
-      .order("sort", { ascending: true }).order("id", { ascending: true })
-      .range(a, b))),
+    readItems(`${ITEM_COLS}, priority`).catch((e: unknown) => {
+      if (/priority/i.test(String((e as { message?: string } | null)?.message || ""))) return readItems(ITEM_COLS);
+      throw e;
+    }),
     // 입고도 request_id 로 청크(인덱스 prod_receipt_req_idx) — item_id 로 나누면 품목 수만큼 왕복이 늘어난다
     inChunks(ids, (part) => pageAll((a, b) => sb.from("production_receipts")
       .select("id, item_id, qty, receipt_date, memo, received_by, created_at, inv_txn_id")
@@ -119,6 +125,7 @@ export async function loadRequests(
       requested_qty: Number(it.requested_qty) || 0, received_qty: received,
       ...(released > 0 ? { released_qty: released } : {}),
       memo: (it.memo as string) ?? null, receipts: rcs,
+      ...(toPriority(it.priority) != null ? { priority: toPriority(it.priority) } : {}),
     };
     const k = it.request_id as string;
     const arr = itemsByReq.get(k) ?? [];

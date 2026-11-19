@@ -7,7 +7,7 @@ import { RequestList } from "../RequestList";
 export default function RequestPage() {
   return (
     <>
-      <header className="b2b-page-head">
+      <header className="b2b-page-head no-print">
         <div>
           <h1 className="b2b-page-title">생산 요청</h1>
         </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
-import { PR_STATUSES, UNREQUESTED_ITEM_MEMO, toPrPurpose, isFactoryPurpose, CONFIRMED_PURPOSES, type PrStatus, type PrPurpose } from "@/app/lib/wholesale-production";
+import { PR_STATUSES, UNREQUESTED_ITEM_MEMO, toPrPurpose, toPriority, isFactoryPurpose, CONFIRMED_PURPOSES, type PrStatus, type PrPurpose } from "@/app/lib/wholesale-production";
 import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProductionRequestDeleted } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getRequestFullness } from "@/app/lib/production-allocate";
@@ -200,8 +200,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
 
     // 품목 교체 준비 — 헤더 갱신 전에 검증까지 끝낸다(절반만 반영되는 것 방지).
-    type ItemIn = { id?: string; product_id: string; requested_qty: number; memo?: string };
+    type ItemIn = { id?: string; product_id: string; requested_qty: number; memo?: string; priority?: number | null };
     let itemsIn: ItemIn[] | null = null;
+    // 우선순위(172) — 화면이 그 칸을 보냈을 때만 쓴다(배포 전에 열어 둔 수정 창의 저장이 순번을 지우지 않게)
+    let prioritySent = false;
     let toDelete: string[] = [];
     let curItemIds = new Set<string>();
     let autoIds = new Set<string>(); // '[요청서에 없음]' 자동 줄 id
@@ -225,8 +227,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         if (rcErr0) throw rcErr0;
         for (const r of rc ?? []) withReceipts.add(r.item_id as string);
       }
+      prioritySent = (b.items as unknown[]).some((it) => !!it && typeof it === "object" && "priority" in (it as object));
       const rawIn = (b.items as ItemIn[])
-        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined })); // 소수 둘째 자리 허용(104)
+        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined, priority: toPriority(it.priority) })); // 소수 둘째 자리 허용(104)
       if (rawIn.some((it) => it.id && curItemIds.has(it.id) && !autoIds.has(it.id) && withReceipts.has(it.id) && it.requested_qty <= 0)) {
         return NextResponse.json({ ok: false, error: "입고 기록이 있는 품목은 수량을 0으로 할 수 없습니다. 품목을 빼려면 그 입고를 먼저 취소하세요." }, { status: 400 });
       }
@@ -287,6 +290,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // 품목 교체 실행 — 수정 → 추가 → 삭제 순(검증은 위에서 완료)
     if (itemsIn) {
       let sort = 0;
+      // 우선순위는 제조사 요청서만 갖는다(다른 용도로 바꾸면 비운다). 172 미적용 환경이면 그 컬럼만 빼고 다시 쓴다.
+      let usePriority = prioritySent;
+      const pri = (it: ItemIn): Record<string, unknown> => (usePriority ? { priority: effPurposeNow === "재고 보충" ? (it.priority ?? null) : null } : {});
+      const writeItem = async (it: ItemIn, run: (extra: Record<string, unknown>) => PromiseLike<{ error: { message: string } | null }>) => {
+        let { error: we } = await run(pri(it));
+        if (we && usePriority && /priority/i.test(we.message)) { usePriority = false; ({ error: we } = await run({})); }
+        if (we) throw we;
+      };
       for (const it of itemsIn) {
         if (it.id && curItemIds.has(it.id)) {
           if (autoIds.has(it.id) && it.requested_qty <= 0) {
@@ -297,11 +308,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           }
           // 자동 줄에 양수 수량을 넣으면 정식 요청 줄로 승격(③) — 표식은 제조사 엑셀 비고·알림에 찍히지 않게 걷어낸다
           const memo = it.memo ? (it.memo.replace(UNREQUESTED_ITEM_MEMO, "").trim() || null) : null;
-          const { error: ue } = await sb.from("production_request_items").update({ requested_qty: it.requested_qty, memo, sort }).eq("id", it.id).eq("request_id", id);
-          if (ue) throw ue;
+          const itemId = it.id, sortNow = sort;
+          await writeItem(it, (extra) => sb.from("production_request_items").update({ requested_qty: it.requested_qty, memo, sort: sortNow, ...extra }).eq("id", itemId).eq("request_id", id));
         } else {
-          const { error: ie } = await sb.from("production_request_items").insert({ request_id: id, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo ?? null, sort });
-          if (ie) throw ie;
+          const sortNow = sort;
+          await writeItem(it, (extra) => sb.from("production_request_items").insert({ request_id: id, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo ?? null, sort: sortNow, ...extra }));
         }
         sort++;
       }

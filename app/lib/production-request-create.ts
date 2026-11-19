@@ -3,7 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadRequests, formatRequestDetail } from "./wholesale-production-db";
 import { logProductionRequestCreated } from "./b2b-activity";
-import { CONFIRMED_PURPOSES, type PrPurpose, type ProductionRequest } from "./wholesale-production";
+import { CONFIRMED_PURPOSES, toPriority, type PrPurpose, type ProductionRequest } from "./wholesale-production";
 import { defaultDueDate, defaultProdStart, kstTodayIso } from "./production-schedule";
 
 // 일정 기본값(D+3·D+7)은 화면도 쓰므로 클라이언트 안전한 production-schedule 에 있다 — 이 파일은 서버 전용(알림·DB).
@@ -12,7 +12,7 @@ export { defaultDueDate, defaultProdStart, kstTodayIso, PROD_START_BDAYS, PROD_D
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type CreateItem = { product_id: string; requested_qty: number; memo: string | null };
+export type CreateItem = { product_id: string; requested_qty: number; memo: string | null; priority?: number | null }; // priority = 생산 우선순위(172, 제조사 요청서만)
 export type CreateInput = {
   title?: string | null;
   requested_by?: string | null;
@@ -44,7 +44,7 @@ export async function companyTitle(sb: SupabaseClient, companyId: unknown): Prom
 export function normalizeItems(raw: unknown): CreateItem[] {
   const arr = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
   return arr
-    .map((it) => ({ product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || null })) // 소수 둘째 자리 허용(104)
+    .map((it) => ({ product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || null, priority: toPriority(it.priority) })) // 소수 둘째 자리 허용(104)
     .filter((it) => it.product_id && it.requested_qty > 0);
 }
 
@@ -140,8 +140,11 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
   if (he) throw he;
   const requestId = (reqRow as { id: string }).id;
 
-  const itemRows = items.map((it, i) => ({ request_id: requestId, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo, sort: i }));
-  const { error: ie } = await sb.from("production_request_items").insert(itemRows);
+  // 우선순위(172)는 제조사 요청서만, 넣은 줄이 있을 때만 보낸다 — 미적용 환경이면 그 컬럼만 빼고 다시 넣는다.
+  const baseRows = items.map((it, i) => ({ request_id: requestId, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo, sort: i }));
+  const withPriority = purpose === "재고 보충" && items.some((it) => it.priority != null);
+  let { error: ie } = await sb.from("production_request_items").insert(withPriority ? baseRows.map((r, i) => ({ ...r, priority: items[i].priority ?? null })) : baseRows);
+  if (ie && withPriority && /priority/i.test(ie.message)) ({ error: ie } = await sb.from("production_request_items").insert(baseRows));
   if (ie) { await sb.from("production_requests").delete().eq("id", requestId); throw ie; }
 
   // 작성 알림 — 게시물 본문에 품목·수량·마감·담당 전체(팀즈 게시물 전환으로 긴 내용 허용 — 2026-09-16)

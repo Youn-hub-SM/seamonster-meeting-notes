@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, UNREQUESTED_ITEM_MEMO, lineState, allLinesFilled, toPrPurpose, isFactoryPurpose, CONFIRMED_PURPOSES,
+  PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, UNREQUESTED_ITEM_MEMO, lineState, allLinesFilled, toPrPurpose, isFactoryPurpose, CONFIRMED_PURPOSES, byPriority, toPriority,
   type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, DUE_LABEL,
 } from "@/app/lib/wholesale-production";
 import { defaultDueDate, defaultProdStart } from "@/app/lib/production-schedule";
@@ -38,6 +38,7 @@ type NewLine = {
   product_id: string; sku: string | null; name: string; spec: string | null; unit: string;
   stock: number | null;      // 도매재고(모를 때 null 표시)
   requested_qty: string; memo: string;
+  priority?: string;         // 생산 우선순위(172) — 숫자 순번, 1 이 가장 먼저. 제조사 요청서만
   auto?: boolean;            // 수정 모드: '[요청서에 없음]' 자동 줄(요청 0·입고 있음) — 수량을 넣으면 정식 요청 줄로 승격
 };
 
@@ -351,6 +352,8 @@ export function RequestList() {
   }
 
   const doneCount = useMemo(() => byTab.filter((r) => r.status === "완료" || r.status === "취소").length, [byTab]);
+  // 우선순위표 — 열린(요청·진행중) 제조사 요청서의 아직 덜 들어온 품목만. 다 들어온 품목·마감한 요청서는 표에서 빠진다.
+  const prioritySheet = useMemo(() => prioritySections(requests), [requests]);
   // 종료일 지난 열린 제조사·도매 요청서(현재 탭) — 잔여가 입고 예정에 남아 권장을 누르므로 마감(또는 종료일 수정) 대상.
   //  도매 요청 잔여는 도매 탭 권장에서 빠진다(2026-09-29) — 자동 마감이 없어 잊힌 요청이 도매 권장을 누른다.
   const overdueOpen = useMemo(() => {
@@ -377,6 +380,9 @@ export function RequestList() {
 
   return (
     <div>
+      {/* 이 화면의 인쇄는 우선순위표뿐이다 — 목록·창은 인쇄에서 빼고, 표는 인쇄할 때만 보인다 */}
+      <PrioritySheet sections={prioritySheet} />
+      <div className="no-print">
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
       {notice && <div className={notice.warn ? "sm-warn" : "sm-success"} style={{ marginBottom: 12 }}>{notice.text}</div>}
 
@@ -399,6 +405,7 @@ export function RequestList() {
         </div>
         <div className="sm-row" style={{ gap: 8 }}>
           <button className="b2b-btn-secondary" onClick={() => { load(); void loadRec(); }} disabled={loading}>{loading ? "불러오는 중..." : "다시 불러오기"}</button>
+          {tab === "재고 보충" && <button className="b2b-btn-secondary" onClick={() => window.print()} disabled={loading || prioritySheet.length === 0} title={prioritySheet.length === 0 ? "열린 제조사 요청서에 덜 들어온 품목이 없습니다" : undefined}>우선순위표 출력</button>}
           <button className="b2b-btn-primary" onClick={() => { setError(""); setCreateOpen(true); }} disabled={busy}>+ 새 생산 요청</button>
         </div>
       </div>
@@ -482,6 +489,62 @@ export function RequestList() {
         />
       )}
       {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recWholeReq={recWholeReq} wholeReqOk={wholeReqOk} recReady={recReady} inbOk={inbOk} settingsOk={settingsOk} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────── 우선순위표(출력용) ─────────────────────────────
+// 열린(요청·진행중) 제조사 요청서마다 한 묶음 — 품목은 우선순위 순, 순번 없는 품목은 뒤.
+//  요청 수량만큼 다 들어온 품목은 뺀다(생산이 끝난 것). 남은 품목이 없는 요청서·마감한 요청서도 빠진다.
+//  묶음 순서 = 생산종료일이 이른 요청서 먼저.
+type PrioritySection = { req: ProductionRequest; rows: PrItem[] };
+function prioritySections(requests: ProductionRequest[]): PrioritySection[] {
+  return requests
+    .filter((r) => toPrPurpose(r.purpose) === "재고 보충" && (r.status === "요청" || r.status === "진행중"))
+    .map((r) => ({ req: r, rows: byPriority(r.items).filter((it) => it.requested_qty > 0 && it.received_qty < it.requested_qty) }))
+    .filter((s) => s.rows.length > 0)
+    .sort((a, b) => (a.req.due_date || "9999").localeCompare(b.req.due_date || "9999") || a.req.request_date.localeCompare(b.req.request_date) || (a.req.req_no || "").localeCompare(b.req.req_no || ""));
+}
+
+function PrioritySheet({ sections }: { sections: PrioritySection[] }) {
+  // 인쇄물은 회색 토큰이 옅게 나온다 — 글자는 전부 검정
+  const cell = { color: "var(--sm-black)" } as const;
+  return (
+    <div className="print-only">
+      <h1 style={{ fontSize: 24, fontWeight: 600, margin: "0 0 4px", color: "var(--sm-black)" }}>생산 우선순위표</h1>
+      <p style={{ fontSize: 13, margin: "0 0 16px", color: "var(--sm-black)" }}>출력일 {todayIso()}</p>
+      {sections.map(({ req, rows }) => (
+        <section key={req.id} style={{ marginBottom: 20, pageBreakInside: "avoid" }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: "var(--sm-black)" }}>
+            {req.req_no || "요청서"}{req.title ? ` · ${req.title}` : ""} · 생산기간 {dateRange(req.prod_start || req.request_date, req.due_date)}{req.status === "요청" ? " · 확정 필요" : ""}
+          </div>
+          <table className="b2b-table" style={{ tableLayout: "fixed", width: "100%" }}>
+            <thead>
+              <tr>
+                <th style={{ ...cell, width: "9%" }}>우선순위</th>
+                <th style={cell}>품목</th>
+                <th className="num" style={{ ...cell, width: "11%" }}>요청</th>
+                <th className="num" style={{ ...cell, width: "11%" }}>입고</th>
+                <th className="num" style={{ ...cell, width: "11%" }}>잔여</th>
+                <th style={{ ...cell, width: "24%" }}>메모</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((it) => (
+                <tr key={it.id}>
+                  <td style={{ ...cell, fontWeight: 600 }}>{it.priority ?? "-"}</td>
+                  <td style={cell}>{it.name}{it.spec ? ` · ${it.spec}` : ""}{it.sku ? <span style={{ marginLeft: 6, fontSize: 12 }}>{it.sku}</span> : null}</td>
+                  <td className="num" style={cell}>{qty(it.requested_qty)}</td>
+                  <td className="num" style={cell}>{qty(it.received_qty)}</td>
+                  <td className="num" style={{ ...cell, fontWeight: 600 }}>{qty(r2(it.requested_qty - it.received_qty))}</td>
+                  <td style={cell}>{it.memo || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ))}
     </div>
   );
 }
@@ -631,10 +694,10 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 700 }}>
                 <thead>
-                  <tr><th>품목</th><th className="num" style={{ width: "12%" }}>요청</th><th className="num" style={{ width: "12%" }}>{req.purpose === "재고 보충" ? "입고" : "이전"}</th><th className="num" style={{ width: "12%" }}>잔여</th><th style={{ width: "10%" }}>상태</th><th style={{ width: "18%" }}>입고 이력</th></tr>
+                  <tr>{req.purpose === "재고 보충" && <th className="num" style={{ width: "9%" }}>우선순위</th>}<th>품목</th><th className="num" style={{ width: "12%" }}>요청</th><th className="num" style={{ width: "12%" }}>{req.purpose === "재고 보충" ? "입고" : "이전"}</th><th className="num" style={{ width: "12%" }}>잔여</th><th style={{ width: "10%" }}>상태</th><th style={{ width: "18%" }}>입고 이력</th></tr>
                 </thead>
                 <tbody>
-                  {req.items.map((it) => (
+                  {(req.purpose === "재고 보충" ? byPriority(req.items) : req.items).map((it) => (
                     <ItemRow key={it.id} item={it} factory={req.purpose === "재고 보충"} canEdit={req.status !== "완료" && req.status !== "취소"} busy={busy} onCancelReceipt={onCancelReceipt} onUnlink={onUnlink} />
                   ))}
                 </tbody>
@@ -665,6 +728,7 @@ function ItemRow({ item, factory, canEdit, busy, onCancelReceipt, onUnlink }: {
   return (
     <>
       <tr>
+        {factory && <td className="num" style={{ fontWeight: 600, color: item.priority ? undefined : "var(--sm-text-light)" }}>{item.priority ?? "-"}</td>}
         <td>
           <div style={{ fontWeight: 500 }}>{item.name}</div>
           <div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{item.sku || ""}{item.spec ? ` · ${item.spec}` : ""}</div>
@@ -682,7 +746,7 @@ function ItemRow({ item, factory, canEdit, busy, onCancelReceipt, onUnlink }: {
 
       {open && (
         <tr>
-          <td colSpan={6} style={{ background: "var(--sm-bg-subtle)" }}>
+          <td colSpan={factory ? 7 : 6} style={{ background: "var(--sm-bg-subtle)" }}>
 
             {item.receipts.length > 0 ? (
               <div style={{ marginTop: canEdit ? 10 : 2 }}>
@@ -757,12 +821,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   const [memo, setMemo] = useState(initial?.memo || "");
   const [lines, setLines] = useState<NewLine[]>(() =>
     initial
-      ? initial.items.map((it) => ({
+      ? (initial.purpose === "재고 보충" ? byPriority(initial.items) : initial.items).map((it) => ({
           item_id: it.id, received: it.received_qty,
           product_id: it.product_id, sku: it.sku, name: it.name, spec: it.spec, unit: it.unit,
           stock: stockOf(it.product_id), requested_qty: String(it.requested_qty),
           // 자동 줄은 표식 memo 를 입력칸에 싣지 않는다(승격 시 엑셀 비고·알림에 찍히지 않게) — 서버가 유지 시 표식을 다시 붙인다
           memo: it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO ? "" : (it.memo || ""),
+          priority: it.priority != null ? String(it.priority) : "",
           auto: it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO,
         }))
       : (prefill ?? [])   // 재고 목록에서 넘어온 품목·권장수량 (없으면 빈 목록)
@@ -821,12 +886,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
     else if (startAfterEnd) errs.due = `${prodStart ? "생산시작일" : "요청일"}이 생산종료일보다 뒤입니다`;
     setFormErr(errs);
     if (!valid) return;
-    const items = lines
+    // 제조사 요청서는 우선순위 순으로 보낸다(저장되는 줄 순서 = 우선순위 순). 다른 용도는 순번을 비운다.
+    const items = (purpose === "재고 보충" ? byPriority(lines) : lines)
       // 자동 줄·입고 있는 줄은 수량 0 이어도 보낸다 — 자동 줄은 서버가 표식 그대로 유지하고, 실제 줄의 0 은 서버가 명확한 오류로 막는다
       .filter((l) => Number(l.requested_qty) > 0 || l.auto || l.received > 0)
       .map((l) => {
         const requested_qty = Math.round(Number(l.requested_qty) * 100) / 100; // 소수 둘째 자리 허용(104)
-        return { id: l.item_id, product_id: l.product_id, requested_qty, memo: l.memo.trim() || undefined };
+        return { id: l.item_id, product_id: l.product_id, requested_qty, memo: l.memo.trim() || undefined, priority: purpose === "재고 보충" ? toPriority(l.priority) : null };
       });
     onSubmit({
       title: title.trim() || (isEdit ? "" : undefined),
@@ -956,7 +1022,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                 ) : purpose === "도매 납품" ? (
                   <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>도매 재고</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
                 ) : (
-                  <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>소매 재고</th><th className="num" style={{ width: 84 }} title={isEdit ? "다른 열린 제조사 요청서에서 아직 안 온 양(이 요청서 자신의 잔여는 뺀 값) — 권장은 이 양을 이미 뺀 값" : "시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여) — 권장은 이 양을 이미 뺀 값"}>입고 예정</th><th className="num" style={{ width: 100 }}>도매 필요량</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
+                  <thead><tr><th className="num" style={{ width: 84 }} title="숫자 순번 — 1 이 가장 먼저 생산할 품목">우선순위</th><th>품목</th><th className="num" style={{ width: 100 }}>소매 재고</th><th className="num" style={{ width: 84 }} title={isEdit ? "다른 열린 제조사 요청서에서 아직 안 온 양(이 요청서 자신의 잔여는 뺀 값) — 권장은 이 양을 이미 뺀 값" : "시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여) — 권장은 이 양을 이미 뺀 값"}>입고 예정</th><th className="num" style={{ width: 100 }}>도매 필요량</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
                 )}
                 <tbody>
                   {lines.map((l, i) => {
@@ -973,6 +1039,17 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                       : pl.recommend;
                     return (
                       <tr key={l.item_id || l.product_id}>
+                        {purpose === "재고 보충" && (
+                          <td className="num">
+                            {/* 칸을 떠나면(또는 Enter) 줄이 우선순위 순으로 다시 놓인다 — 치는 도중에는 줄이 움직이지 않는다 */}
+                            {l.auto && Number(l.requested_qty) <= 0 ? null : (
+                              <input type="number" min={1} step={1} inputMode="numeric" className="b2b-input" style={{ width: 64, textAlign: "right" }} value={l.priority ?? ""} aria-label={`${l.name} 우선순위`}
+                                onChange={(e) => updateLine(i, { priority: e.target.value })}
+                                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                onBlur={() => setLines((prev) => byPriority(prev))} />
+                            )}
+                          </td>
+                        )}
                         <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 500 }}>{l.name}</div><div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
                         {CONFIRMED_PURPOSES.includes(purpose) ? null : purpose === "도매 납품" ? (
                           <>
