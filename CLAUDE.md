@@ -141,5 +141,4 @@ grep -oE "^\.[a-zA-Z0-9_-]+ *\{" app/b2b/b2b.css | sed 's/ *{//' | sort | uniq -
 - **번들(세트)은 자체 재고가 없다.** 현재고는 구성품에서 파생된다. 모든 입출고는 `app/lib/product-bundles.ts` 의 `expandBundleQty()` 로 구성품 전개해 기록할 것 — 경로마다 따로 구현하면 같은 판매가 경로에 따라 다르게 차감된다(실제 발생한 버그).
 - **테스트가 없다.** 동작 변경을 잡아줄 장치가 `npx tsc --noEmit` + `npm run build` 뿐이므로, 의미가 바뀌는 수정은 직접 확인할 것.
 - **사용 가이드(/guide) 동시 갱신 — 필수.** 화면·기능·메뉴를 추가/변경/삭제하는 커밋은 `app/lib/guide-data.ts` 를 **같은 커밋에서** 갱신한다(항목 추가/삭제, 단계·버튼명·메뉴명 일치, `GUIDE_UPDATED` 날짜). 가이드 문체: 부연설명 금지, 한 단계 = 한 동작, 화면의 실제 버튼명 그대로.
-- **업데이트 노트는 `app/lib/changelog.ts` 에만 쓴다.** Supabase `update_notes` 표(migration 171)는 운영 서버가 한 시간에 한 번 그 파일과 맞추는 사본이다(`app/lib/update-notes.ts` — AI 비서·지피티가 읽는다). 표에 직접 쓰거나 SQL 로 넣지 않는다 — 다음 맞추기 때 지워진다. 그 글은 지피티(외부 서비스)로도 나가니 **키·토큰·고객 이름·전화번호를 적지 않는다.**
 - **AI 데이터 비서 조회 범위 — 차단 목록 방식(2026-10-20).** public 의 표·뷰는 `app/lib/report-schema.ts` `BLOCKED_RELATIONS` 에 없으면 비서가 전부 조회한다. 새 표에 **개인정보·비밀·계정**이 들면 같은 커밋에서 ① BLOCKED_RELATIONS 에 추가 ② 마이그레이션의 `run_report` 차단 정규식(141 참조)에도 추가. 새 표·컬럼의 뜻은 마이그레이션에 `comment on table/column` 한 줄로 적는다(비서가 그 주석을 읽는다 — 주석 없는 jsonb 컬럼은 비서에게 없는 데이터다). 관리자 점검: `/api/report/schema-audit`.

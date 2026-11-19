@@ -16,7 +16,7 @@ export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 import { isHeldHref } from "./hold";
 
-export const GUIDE_UPDATED = "2026-11-19";
+export const GUIDE_UPDATED = "2026-11-18";
 
 const GUIDE_ALL: GuideCategory[] = [
   {
@@ -2582,9 +2582,7 @@ const GUIDE_ALL: GuideCategory[] = [
               "날짜별 묶음에서 항목을 읽는다",
               "'바로 써보기' 링크가 있으면 눌러 해당 화면으로 이동한다"
             ],
-            "tips": [
-              "AI 비서에게 '지난주에 바뀐 기능 알려 줘'처럼 물어도 된다 — 업데이트 노트는 운영에 나간 뒤 한 시간 안에 비서가 읽는 표로 옮겨진다"
-            ],
+            "tips": [],
             "keywords": [
               "업데이트",
               "새 기능",

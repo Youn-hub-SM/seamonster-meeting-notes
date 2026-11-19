@@ -2,13 +2,11 @@
 //  app/api/mcp/ga/[key]/route.ts(주소 키, ChatGPT 용)가 이 파일을 쓴다. 두 경로는 같은 도구·같은 응답을 낸다.
 //  규격: MCP Streamable HTTP, 세션 없는 단일 요청(JSON-RPC 2.0 over POST). GET 은 405(서버 발신 스트림 없음).
 //  GA 자격은 ga.ts(서비스 계정) 그대로 — 읽기 전용. 미들웨어 보호 제외 경로(/api/mcp/*)라 여기서 직접 검사한다.
-//  2026-11-19: GA 와 별개로 update_notes(업무도우미 업데이트 노트 읽기) 도구를 같은 서버에 얹었다 — 지피티가 이미 붙어 있는 연결이라 새 주소·새 키가 필요 없다.
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { isGaConfigured, runGaReport, runGaFunnel, GA_DIMENSIONS, GA_METRICS, GA_MAX_DAYS, type GaDimensionKey, type GaMetricKey, type GaMatch, type GaFunnelStep } from "@/app/lib/ga";
 import { gaCatalogPromptBlock } from "@/app/lib/ga-catalog";
 import { validDate, kstDay, shift } from "@/app/lib/analyst";
-import { readUpdateNotes } from "@/app/lib/update-notes";
 
 
 export const SERVER = { name: "seamonster-helper-ga", version: "1.0.0" };
@@ -96,20 +94,6 @@ const TOOLS = [
     description: "우리 GA4 속성에 실제로 있는 것 — 최근 30일에 발생한 이벤트, 주요 이벤트(전환), 상위 페이지, 사용자 정의 측정기준. 이벤트·페이지 이름을 짐작하지 말고 먼저 이걸 본다.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
-  {
-    name: "update_notes",
-    description: "씨몬스터 업무도우미(사내 웹 도구)의 업데이트 노트 — 기능이 새로 생기거나(신규) 나아지거나(개선) 고쳐진(수정) 기록을 최신순으로 돌려준다. GA 와 무관하다. '최근에 뭐가 바뀌었나', '그 기능이 언제 어떻게 바뀌었나'를 물을 때 쓴다. 조건을 모두 비우면 최근 30건. since·until 로 기간, menu 로 도구 묶음(예: B2B, 매출, 생산 및 재고, 주요 지표, AI 비서, VOC 관리, 광고), q 로 제목·설명에 든 낱말을 거른다.",
-    inputSchema: {
-      type: "object", additionalProperties: false,
-      properties: {
-        since: { type: "string", description: "시작일 YYYY-MM-DD(그날부터)" },
-        until: { type: "string", description: "끝일 YYYY-MM-DD(그날까지)" },
-        menu: { type: "string", description: "도구 묶음 또는 도구 이름의 일부(예: 'B2B', '주요 지표')" },
-        q: { type: "string", description: "제목·설명에 든 낱말(예: '환불', '정기배송')" },
-        limit: { type: "integer", description: "건수 상한(기본 30, 최대 200)" },
-      },
-    },
-  },
 ];
 
 function period(input: Record<string, unknown>): { since: string; until: string } {
@@ -128,31 +112,6 @@ async function callTool(name: string, input: Record<string, unknown>): Promise<s
   if (name === "ga_catalog") {
     const block = await gaCatalogPromptBlock();
     return block || "GA4 자동 조사 결과가 아직 없습니다(연결 직후이거나 조회 실패).";
-  }
-  if (name === "update_notes") {
-    const day = (v: unknown, what: string): string | null => {
-      const t = typeof v === "string" ? v.trim() : "";
-      if (!t) return null;
-      if (!validDate(t)) throw new Error(`${what} 은 YYYY-MM-DD 여야 합니다.`);
-      return t;
-    };
-    const since = day(input.since, "since"), until = day(input.until, "until");
-    if (since && until && since > until) throw new Error("since ≤ until 이어야 합니다.");
-    const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 60) : null);
-    const r = await readUpdateNotes({ since, until, menu: text(input.menu), q: text(input.q), limit: typeof input.limit === "number" ? input.limit : 30 });
-    if (!r.rows.length) return "조건에 맞는 업데이트 노트가 없습니다.";
-    // 글자 수 상한(MAX_TEXT)에 걸리면 항목 중간에서 자르지 않고, 온전한 항목까지만 보낸 뒤 어디서 이어 볼지 적는다
-    const parts: string[] = [];
-    let size = 0;
-    for (const x of r.rows) {
-      const one = `${x.note_date} [${x.tag}] ${x.tool} — ${x.title}\n${x.body}${x.href ? `\n화면: ${x.href}` : ""}`;
-      if (parts.length && size + one.length > MAX_TEXT - 500) break;
-      parts.push(one); size += one.length + 2;
-    }
-    const last = r.rows[parts.length - 1].note_date;
-    const more = parts.length < r.matched ? ` — 조건에 맞는 ${r.matched}건 중 최신 ${parts.length}건. 더 옛 기록은 until 을 ${last} 로 두고 다시 조회(그날 항목은 겹칠 수 있음)` : "";
-    const head = `업무도우미 업데이트 노트 ${parts.length}건(최신순)${more}${r.source === "code" ? " · 표가 아직 없어 코드 파일에서 읽음" : ""}`;
-    return clip(`${head}\n\n${parts.join("\n\n")}`);
   }
   if (!isGaConfigured()) throw new Error("GA4 가 연결되어 있지 않습니다(관리자가 Vercel 환경 변수 GA4_PROPERTY_ID·GA_SA_EMAIL·GA_SA_PRIVATE_KEY 를 넣어야 합니다).");
   if (name === "ga_report") {
@@ -197,7 +156,7 @@ export async function handle(msg: Rpc): Promise<unknown | null> {
       protocolVersion: ["2024-11-05", "2025-03-26", "2025-06-18"].includes(asked) ? asked : PROTOCOL,
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER,
-      instructions: "씨몬스터 공식몰(카페24) GA4 읽기 전용 도구. 날짜는 한국 시간, 어제까지 확정. 금액은 원(KRW). 이벤트·페이지 이름은 ga_catalog 로 먼저 확인한다. GA 구매는 매출 원장과 집계 기준이 달라 금액을 맞추지 않는다(답할 때 'GA 기준'이라고 적는다). update_notes 는 GA 와 별개다 — 사내 업무도우미의 기능이 언제 어떻게 바뀌었는지 읽는다.",
+      instructions: "씨몬스터 공식몰(카페24) GA4 읽기 전용 도구. 날짜는 한국 시간, 어제까지 확정. 금액은 원(KRW). 이벤트·페이지 이름은 ga_catalog 로 먼저 확인한다. GA 구매는 매출 원장과 집계 기준이 달라 금액을 맞추지 않는다(답할 때 'GA 기준'이라고 적는다).",
     });
   }
   if (method === "ping") return ok(id, {});

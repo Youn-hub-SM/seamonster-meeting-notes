@@ -5,7 +5,6 @@ import { getAppBaseUrl, setKv } from "@/app/lib/b2b-settings";
 import { sendTeamsTextSafe } from "@/app/lib/b2b-teams";
 import { supabaseAdmin } from "@/app/lib/supabase";
 import { reindexNow } from "@/app/lib/ms365-docs";
-import { syncUpdateNotes } from "@/app/lib/update-notes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,8 +78,6 @@ export async function GET(req: NextRequest) {
   //  2026-11-18 까지는 5분 틱마다 돌아 문서함 목록을 하루 288번 훑었다(이 경로의 평균 실행 시간 13초의 원인).
   if (isCron && kstNow.getUTCMinutes() < 5) {
     after(async () => { try { await reindexNow({ budgetMs: 35_000 }); } catch (e) { console.error("[schedule-digest] 문서 색인 실패", errMsg(e)); } });
-    // 업데이트 노트(코드 파일)를 update_notes 표에 맞춘다(2026-11-19, migration 171) — 다른 줄만 쓴다. 표가 없으면 조용히 건너뛴다. 운영에서만 쓴다.
-    after(async () => { try { await syncUpdateNotes(); } catch (e) { console.error("[schedule-digest] 업데이트 노트 맞추기 실패", errMsg(e)); } });
   }
 
   const cfg = await getDigestConfig();
