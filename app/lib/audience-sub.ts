@@ -21,8 +21,7 @@
 //
 //  한 고객이 신청을 여러 개 가질 수 있어 결과는 고객 단위로 묶는다(상품은 이어 적고, 회차는 큰 값, 결제 예정일은 빠른 날).
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { runSql } from "./analyst";
-import { loadContacts, MAX_AUDIENCE, type Contact } from "./audience";
+import { loadContacts, runLong, MAX_AUDIENCE, type Contact } from "./audience";
 import { normalizeExcludeForms, excludeText, type ExcludeForm } from "./audience-tally";
 
 export const SUB_STATES = ["U", "P", "C"] as const;
@@ -167,7 +166,7 @@ function pickCustomer(c: SubCond, subs: Raw[]): { hit: Raw[]; target: SubState[]
 }
 
 export async function findSubAudience(sb: SupabaseClient, c: SubCond): Promise<SubFound> {
-  const raw = await runSql<Raw>(sb, subSql(c), MAX_AUDIENCE + 1);
+  const raw = await runLong<Raw>(sb, subSql(c), MAX_AUDIENCE + 1);
   const capped = raw.length > MAX_AUDIENCE;
   const list = capped ? raw.slice(0, MAX_AUDIENCE) : raw;
   const by = new Map<string, Raw[]>();
@@ -221,7 +220,7 @@ export async function withContacts(sb: SupabaseClient, rows: SubRow[]): Promise<
 // 정기배송 상품 선택지 — 신청 품목에 나온 상품명(신청 많은 순)
 export type SubProductOption = { name: string; subs: number };
 export async function listSubProducts(sb: SupabaseClient): Promise<SubProductOption[]> {
-  const rows = await runSql<{ name: string; subs: number }>(sb, `
+  const rows = await runLong<{ name: string; subs: number }>(sb, `
     select product_name as name, count(distinct subscription_id)::int as subs
     from cafe24_subscription_items where coalesce(product_name, '') <> '' group by product_name order by subs desc`, 1000);
   return rows.map((r) => ({ name: r.name, subs: Number(r.subs) || 0 }));

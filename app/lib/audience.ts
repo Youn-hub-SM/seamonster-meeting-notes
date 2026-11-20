@@ -31,9 +31,21 @@ const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;                       /
 const likeLit = (s: string) => lit(`%${s.replace(/[\\%_]/g, "\\$&")}%`);       // 포함 검색(와일드카드 무력화)
 const posInt = (v: unknown): number | undefined => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n > 0 ? n : undefined; };
 export const MAX_AUDIENCE = 50_000; // 한 번에 다루는 고객 수 상한
-// run_report 는 요청 행 수가 5,000 이하면 제한 시간 15초, 넘으면 60초(migration 156 본문). 주문 전체를 묶어 세는 선택지 조회가
-//  15초에 걸리지 않게 5,000 을 넘겨 요청하고 결과는 잘라 쓴다.
-const LIST_LIMIT = 6000;
+const LIST_LIMIT = 6000; // 선택지 조회가 받는 줄 수 — 결과는 잘라 쓴다
+
+// 오래 걸리는 조회 — run_report_long(migration 174, 제한 60초)으로 부른다.
+//  run_report 본문의 set_config('statement_timeout')는 이미 실행 중인 그 호출에 듣지 않아, 실제 제한은 API 역할 기본값(약 8초)이었다
+//  (2026-11-20 베타에서 [고객 찾기]가 8초쯤에 끊김). 174 가 아직 없으면 run_report 로 부른다(그때는 약 8초 제한 그대로).
+const TIMEOUT_MSG = "조회가 제한 시간을 넘겨 멈췄습니다. 구매 기간·채널·상품 조건을 넣어 범위를 좁힌 뒤 다시 찾으세요.";
+const isTimeout = (m: string) => /statement timeout|canceling statement/i.test(m);
+export async function runLong<T>(sb: SupabaseClient, q: string, limit: number): Promise<T[]> {
+  const { data, error } = await sb.rpc("run_report_long", { q, p_limit: limit });
+  if (!error) return (Array.isArray(data) ? data : []) as T[];
+  if (isTimeout(error.message || "")) throw new Error(TIMEOUT_MSG);
+  if (error.code !== "PGRST202" && !/could not find the function/i.test(error.message || "")) throw new Error(`집계 실패: ${error.message}`);
+  try { return await runSql<T>(sb, q, limit); }
+  catch (e) { if (e instanceof Error && isTimeout(e.message)) throw new Error(TIMEOUT_MSG); throw e; }
+}
 
 // 화면에서 온 값을 다듬는다 — 형식이 틀린 값은 조건에서 뺀다(조건이 조용히 넓어지지 않게 호출부가 빈 조건을 막는다).
 export function normalizeCond(raw: unknown): AudienceCond {
@@ -142,7 +154,7 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
     ${h.length ? `where ${h.join(" and ")}` : ""}
     order by a.last_date desc, a.customer_key`;
   type R = AudienceRow & { reachable: boolean };
-  const all = await runSql<R>(sb, q, MAX_AUDIENCE + 1);
+  const all = await runLong<R>(sb, q, MAX_AUDIENCE + 1);
   const capped = all.length > MAX_AUDIENCE;
   const list = capped ? all.slice(0, MAX_AUDIENCE) : all;
   const rows = list.filter((r) => r.reachable).map((r) => ({ customer_key: r.customer_key, orders: Number(r.orders) || 0, amount: Number(r.amount) || 0, first_date: r.first_date, last_date: r.last_date, items: r.items || "", codes: r.codes || "", order_names: r.order_names || "", channels: r.channels || "" }));
@@ -174,7 +186,7 @@ export const maskPhone = (p: string): string => { const d = p.replace(/\D/g, "")
 //  화면이 이름·코드·주문 상품명으로 찾아 고른다. 코드 없는 주문은 여기 없다 — 그런 상품은 포함어로 찾는다.
 export type ProductOption = { sku: string; name: string; listing: string; orders: number };
 export async function listProducts(sb: SupabaseClient): Promise<ProductOption[]> {
-  const rows = await runSql<{ sku: string; name: string | null; spec: string | null; listing: string | null; orders: number }>(sb, `
+  const rows = await runLong<{ sku: string; name: string | null; spec: string | null; listing: string | null; orders: number }>(sb, `
     select upper(o.sku_code) as sku, max(p.name) as name, max(p.spec) as spec, max(o.product_name) as listing, count(distinct o.order_unit)::int as orders
     from sales_orders o left join products p on upper(p.sku) = upper(o.sku_code)
     where o.sku_code <> '' group by upper(o.sku_code) order by orders desc`, LIST_LIMIT);
@@ -184,7 +196,7 @@ export async function listProducts(sb: SupabaseClient): Promise<ProductOption[]>
 // 주문 상품명 선택지 — 주문서에 적힌 상품명 그대로(채널마다 이름이 다르다). 주문 많은 순.
 export type OrderNameOption = { name: string; orders: number };
 export async function listOrderNames(sb: SupabaseClient): Promise<OrderNameOption[]> {
-  const rows = await runSql<{ name: string; orders: number }>(sb, `
+  const rows = await runLong<{ name: string; orders: number }>(sb, `
     select o.product_name as name, count(distinct o.order_unit)::int as orders
     from sales_orders o where o.product_name <> '' group by o.product_name order by orders desc`, LIST_LIMIT);
   return rows.slice(0, 5000).map((r) => ({ name: r.name, orders: Number(r.orders) || 0 }));
