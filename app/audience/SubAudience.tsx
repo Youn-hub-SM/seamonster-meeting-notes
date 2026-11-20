@@ -10,6 +10,7 @@ import { useConfirm } from "@/app/components/Feedback";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { qty } from "@/app/lib/format";
 import TallyExclude, { tallyText, type ExForm, type TallyStat } from "./TallyExclude";
+import AlimtalkSend, { type SendRow } from "./AlimtalkSend";
 
 const BASES = [{ key: "person", label: "사람 기준" }, { key: "item", label: "품목 기준" }] as const;
 type Basis = (typeof BASES)[number]["key"];
@@ -23,7 +24,7 @@ type Result = { count: number; excluded: number; unlinked: number; subs: number;
 type ProductOption = { name: string; subs: number };
 const digits = (s: string) => s.replace(/[^0-9]/g, "");
 
-export default function SubAudience({ download, onLogged, exporting }: { download: (payload: unknown) => Promise<void>; onLogged: () => void; exporting: boolean }) {
+export default function SubAudience({ download, onLogged, exporting, canSend, sends }: { download: (payload: unknown) => Promise<void>; onLogged: () => void; exporting: boolean; canSend: boolean; sends: SendRow[] | null }) {
   const confirm = useConfirm();
   const [cond, setCond] = useState<Cond>(EMPTY);
   const [result, setResult] = useState<Result | null>(null);
@@ -147,7 +148,10 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
           <div className="aud-result-head">
             <span className="aud-count">{qty(result.count)}명</span>
             <span className="aud-count-sub">조건에 맞는 신청 {qty(result.subs)}건 · 번호를 못 찾은 신청 {qty(result.unlinked)}건 · 안심번호(050)·번호 없는 고객 {qty(result.excluded)}명 제외{tallyText(result.tally)}</span>
-            <button type="button" className="b2b-btn-secondary aud-export" onClick={exportXlsx} disabled={busy || result.count === 0}>{exporting ? "만드는 중" : "엑셀 내려받기"}</button>
+            <div className="aud-result-actions">
+              {canSend && <AlimtalkSend payload={toPayload(result.cond)} count={result.count} summary={result.summary} sends={sends} disabled={busy} onSent={onLogged} />}
+              <button type="button" className="b2b-btn-secondary" onClick={exportXlsx} disabled={busy || result.count === 0}>{exporting ? "만드는 중" : "엑셀 내려받기"}</button>
+            </div>
           </div>
           <div className="aud-cond">{result.summary}</div>
           {!!result.tally?.noPhone && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>전화번호를 찾지 못한 탈리 응답 {qty(result.tally.noPhone)}건은 빼지 못했습니다.</div>}

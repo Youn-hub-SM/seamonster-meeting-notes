@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
+import { verifySessionFull, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
 import { logAudience } from "@/app/lib/b2b-activity";
 import { normalizeCond, isEmptyCond, condSummary, condLines, findAudience, loadContacts, listChannels, listProducts, listOrderNames, maskName, maskPhone, MAX_AUDIENCE } from "@/app/lib/audience";
 import { loadTallyExclusion, dropResponders, type TallyStat } from "@/app/lib/audience-tally";
 import { getTallyApiKey, listTallyForms } from "@/app/lib/voc-tally";
-import { isSubCond, normalizeSubCond, isEmptySubCond, subSummary, subLines, findSubAudience, withContacts, listSubProducts } from "@/app/lib/audience-sub";
+import { isSubCond, normalizeSubCond, isEmptySubCond, subSummary, subLines, findSubAudience, withContacts, listSubProducts, type SubCond } from "@/app/lib/audience-sub";
+import { runSend, listSends, checkSendResult, normalizeVars, sendWindowOpen, isRequestId, SendError, NIGHT_MSG, MAX_SEND, type Recipient } from "@/app/lib/audience-send";
+import { fetchAlimtalkTemplates, isSolapiConfigured, SolapiRejected, type AlimtalkTemplate } from "@/app/lib/solapi";
+import { getRule, normalizePhone } from "@/app/lib/form-sms";
+import type { AudienceCond } from "@/app/lib/audience";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +30,13 @@ export const maxDuration = 300; // 조회 제한 60초 + 연락처 읽기(고객
 //  cond.excludeForms = 탈리 폼 응답자 빼기(app/lib/audience-tally.ts) — 검색·추출할 때마다 그 폼의 응답을 다시 읽어, 답한 고객을 뺀다(구매·정기배송 공통).
 //                                    탈리를 읽지 못하면 오류로 끝낸다(빼지 못한 채 뽑지 않는다).
 //  로그인한 내부 직원 누구나 쓸 수 있다(공장 계정 제외) — 대신 누가 언제 어떤 조건으로 몇 명을 봤는지 전부 화면에 보인다.
+//
+//  ■ 알림톡 보내기(2026-11-20, app/lib/audience-send.ts) — 관리자만. 정보성 알림톡·대체 발송 없음·즉시만·야간에는 보내지 않는다.
+//  GET                         → 위에 더해 canSend(관리자인가)·sends(알림톡 발송 기록 최근 50건, 표가 없으면 null)
+//  GET ?templates=1            → 승인된 알림톡 템플릿(이름·본문·변수) + 지금 보낼 수 있는 시각인가
+//  POST { action: "send", cond, requestId, templateId, vars, expected } → 조건으로 '지금' 다시 찾아(탈리 응답자 제외 포함) 그 고객에게 보낸다
+//  POST { action: "test", requestId, templateId, vars, phone }         → 적은 번호 한 곳에 시험 발송(고객 이름 자리는 보내는 사람 이름)
+//  POST { action: "send_result", id }                                  → 솔라피에 실제 결과(수신 완료·실패)를 물어 기록에 적는다
 
 async function loginName(req: NextRequest): Promise<string | null> {
   const t = req.cookies.get("b2b_auth")?.value;
@@ -33,6 +44,23 @@ async function loginName(req: NextRequest): Promise<string | null> {
   if (sess) return sess.role === "factory" ? null : sess.name;
   return resolveUserName(t) || null;
 }
+// 보낼 수 있는 템플릿 = 카카오 검수를 통과한 것(상태 값이 없는 응답이면 막지 않는다 — 솔라피가 발송 때 다시 거른다)
+const usable = (t: AlimtalkTemplate) => !t.status || t.status.toUpperCase() === "APPROVED";
+const subCondError = (c: SubCond): string | null => {
+  if (isEmptySubCond(c)) return "조건을 하나 이상 입력하세요.";
+  if (c.lastPaidFrom && c.lastPaidTo && c.lastPaidFrom > c.lastPaidTo) return "마지막 결제일의 시작일이 종료일보다 뒤입니다.";
+  if (c.termFrom && c.termTo && c.termFrom > c.termTo) return "해지일의 시작일이 종료일보다 뒤입니다.";
+  if (c.payFrom && c.payTo && c.payFrom > c.payTo) return "다음 결제 예정일의 시작일이 종료일보다 뒤입니다.";
+  if (c.minRound && c.maxRound && c.minRound > c.maxRound) return "회차의 최소가 최대보다 큽니다.";
+  return null;
+};
+const buyCondError = (c: AudienceCond): string | null => {
+  if (isEmptyCond(c)) return "조건을 하나 이상 입력하세요.";
+  if (c.from && c.to && c.from > c.to) return "구매 기간의 시작일이 종료일보다 뒤입니다.";
+  if (c.lastFrom && c.lastTo && c.lastFrom > c.lastTo) return "마지막 구매일의 시작일이 종료일보다 뒤입니다.";
+  if (c.minOrders && c.maxOrders && c.minOrders > c.maxOrders) return "주문 횟수의 최소가 최대보다 큽니다.";
+  return null;
+};
 const HISTORY_TYPES = ["sales.audience_search", "sales.audience_export"];
 // 엑셀 '추출 정보'의 [제외] 줄에 붙이는 말
 const tallyNote = (t: TallyStat | null): string => (t ? ` · 탈리 응답자 ${t.removed.toLocaleString("ko-KR")}명(응답 ${t.responses.toLocaleString("ko-KR")}건${t.noPhone ? `, 그중 전화번호 없는 응답 ${t.noPhone.toLocaleString("ko-KR")}건은 빼지 못함` : ""})` : "");
@@ -40,8 +68,15 @@ const kstStamp = (d = new Date()) => new Date(d.getTime() + 9 * 3600_000).toISOS
 
 export async function GET(req: NextRequest) {
   try {
-    if (!(await loginName(req))) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
+    const me = await loginName(req);
+    if (!me) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
     const sb = supabaseAdmin();
+    if (req.nextUrl.searchParams.get("templates") === "1") {
+      if (!isAdminName(me)) return NextResponse.json({ ok: false, error: "알림톡은 관리자만 보냅니다." }, { status: 403 });
+      if (!isSolapiConfigured()) return NextResponse.json({ ok: false, error: "솔라피 키가 설정되지 않았습니다." }, { status: 400 });
+      const templates = (await fetchAlimtalkTemplates()).filter(usable).map((t) => ({ templateId: t.templateId, name: t.name, content: t.content, variables: t.variables }));
+      return NextResponse.json({ ok: true, templates, open: sendWindowOpen(), nightMessage: NIGHT_MSG, max: MAX_SEND });
+    }
     if (req.nextUrl.searchParams.get("forms") === "1") {
       const apiKey = await getTallyApiKey();
       if (!apiKey) return NextResponse.json({ ok: false, error: "탈리 API 키가 없습니다 — 관리자 › 설정 › 연결에서 Tally 키를 넣으세요." }, { status: 400 });
@@ -52,8 +87,9 @@ export async function GET(req: NextRequest) {
       const [products, names] = await Promise.all([listProducts(sb), listOrderNames(sb)]);
       return NextResponse.json({ ok: true, products, names });
     }
-    const [channels, hist] = await Promise.all([
+    const [channels, sends, hist] = await Promise.all([
       listChannels(sb).catch(() => [] as string[]),
+      listSends(sb).catch((e) => { console.error("[audience] sends", e); return null; }),
       sb.from("activity_log").select("id, event_type, summary, meta, actor, created_at").in("event_type", HISTORY_TYPES).order("created_at", { ascending: false }).limit(100),
     ]);
     if (hist.error) throw hist.error;
@@ -61,7 +97,7 @@ export async function GET(req: NextRequest) {
       .map((r) => ({ id: r.id, action: r.event_type === "sales.audience_export" ? "추출" : "검색", cond: r.meta?.summary || r.summary, count: r.meta?.count ?? null, actor: r.actor, created_at: r.created_at,
         again: !!r.meta?.from_log,            // 예전 기록의 조건으로 다시 추출한 줄
         saved: r.meta?.cond ?? null }));     // 그때의 조건(전화번호·이름 없음) — [다시 추출]이 이 조건을 그대로 보낸다
-    return NextResponse.json({ ok: true, channels, history });
+    return NextResponse.json({ ok: true, channels, history, sends, canSend: isAdminName(me) });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "오디언스 기록을 불러오지 못했습니다") }, { status: 500 });
   }
@@ -70,11 +106,8 @@ export async function GET(req: NextRequest) {
 // ── 정기배송 고객 ──
 async function handleSub(action: "search" | "export", raw: unknown, name: string, fromLog: string | null): Promise<NextResponse> {
   const cond = normalizeSubCond(raw);
-  if (isEmptySubCond(cond)) return NextResponse.json({ ok: false, error: "조건을 하나 이상 입력하세요." }, { status: 400 });
-  if (cond.lastPaidFrom && cond.lastPaidTo && cond.lastPaidFrom > cond.lastPaidTo) return NextResponse.json({ ok: false, error: "마지막 결제일의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
-  if (cond.termFrom && cond.termTo && cond.termFrom > cond.termTo) return NextResponse.json({ ok: false, error: "해지일의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
-  if (cond.payFrom && cond.payTo && cond.payFrom > cond.payTo) return NextResponse.json({ ok: false, error: "다음 결제 예정일의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
-  if (cond.minRound && cond.maxRound && cond.minRound > cond.maxRound) return NextResponse.json({ ok: false, error: "회차의 최소가 최대보다 큽니다." }, { status: 400 });
+  const bad = subCondError(cond);
+  if (bad) return NextResponse.json({ ok: false, error: bad }, { status: 400 });
 
   const sb = supabaseAdmin();
   const summary = subSummary(cond);
@@ -136,18 +169,86 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
   return NextResponse.json({ ok: true, count: list.length, excluded, unlinked: found.unlinked, subs: found.subs, capped: found.capped, max: MAX_AUDIENCE, summary, preview, tally });
 }
 
+// ── 알림톡 보내기 ──
+// 받을 사람 — 조건으로 '지금' 다시 찾는다(탈리 응답자 제외도 지금 응답으로). 휴대폰 번호가 아닌 번호는 알림톡이 가지 않아 뺀다.
+async function findRecipients(raw: unknown): Promise<{ mode: "buy" | "sub"; cond: Record<string, unknown>; summary: string; recipients: Recipient[]; notMobile: number }> {
+  const sb = supabaseAdmin();
+  const seen = new Set<string>();
+  const recipients: Recipient[] = [];
+  let notMobile = 0;
+  const add = (name: string | undefined, phone: string | undefined) => {
+    const p = normalizePhone(phone);
+    if (!p) { notMobile++; return; }
+    if (seen.has(p)) return;
+    seen.add(p); recipients.push({ phone: p, name: (name || "").trim() });
+  };
+  if (isSubCond(raw)) {
+    const cond = normalizeSubCond(raw);
+    const bad = subCondError(cond);
+    if (bad) throw new SendError(bad);
+    const found = await findSubAudience(sb, cond);
+    if (cond.excludeForms?.length) found.rows = dropResponders(found.rows, await loadTallyExclusion(cond.excludeForms)).rows;
+    const { list } = await withContacts(sb, found.rows);
+    for (const { contact } of list) add(contact.name, contact.phone);
+    return { mode: "sub", cond: cond as unknown as Record<string, unknown>, summary: subSummary(cond), recipients, notMobile };
+  }
+  const cond = normalizeCond(raw);
+  const bad = buyCondError(cond);
+  if (bad) throw new SendError(bad);
+  const found = await findAudience(sb, cond);
+  if (cond.excludeForms?.length) found.rows = dropResponders(found.rows, await loadTallyExclusion(cond.excludeForms)).rows;
+  const contacts = await loadContacts(sb, found.rows.map((r) => r.customer_key));
+  for (const r of found.rows) { const c = contacts.get(r.customer_key); if (c?.phone) add(c.name, c.phone); }
+  return { mode: "buy", cond: cond as Record<string, unknown>, summary: condSummary(cond), recipients, notMobile };
+}
+
+type SendBody = { action?: string; cond?: unknown; requestId?: unknown; templateId?: unknown; vars?: unknown; expected?: unknown; phone?: unknown; id?: unknown };
+async function handleSend(b: SendBody, name: string): Promise<NextResponse> {
+  if (!isAdminName(name)) return NextResponse.json({ ok: false, error: "알림톡은 관리자만 보냅니다." }, { status: 403 });
+  if (!isSolapiConfigured()) return NextResponse.json({ ok: false, error: "솔라피 키가 설정되지 않았습니다." }, { status: 400 });
+  const sb = supabaseAdmin();
+  if (b.action === "send_result") {
+    const id = Math.floor(Number(b.id));
+    if (!Number.isFinite(id) || id <= 0) return NextResponse.json({ ok: false, error: "발송 기록을 찾지 못했습니다." }, { status: 400 });
+    return NextResponse.json({ ok: true, row: await checkSendResult(sb, id) });
+  }
+  if (!sendWindowOpen()) return NextResponse.json({ ok: false, error: NIGHT_MSG }, { status: 400 });
+  if (!isRequestId(b.requestId)) return NextResponse.json({ ok: false, error: "발송 요청 번호가 없습니다. 창을 닫고 다시 여세요." }, { status: 400 });
+  const template = (await fetchAlimtalkTemplates()).find((t) => t.templateId === String(b.templateId || ""));
+  if (!template) return NextResponse.json({ ok: false, error: "템플릿을 찾지 못했습니다." }, { status: 400 });
+  if (!usable(template)) return NextResponse.json({ ok: false, error: "카카오 검수를 통과하지 않은 템플릿입니다." }, { status: 400 });
+  const vars = normalizeVars(b.vars, template.variables);
+  // 신청자 문자에 등록한 발신번호(있으면 붙인다). 대체 발송은 꺼져 있어 문자는 나가지 않는다
+  const from = await getRule().then((r) => r.from.replace(/\D/g, "") || undefined).catch(() => undefined);
+
+  if (b.action === "test") {
+    const phone = normalizePhone(b.phone);
+    if (!phone) return NextResponse.json({ ok: false, error: "시험 발송할 휴대폰 번호를 확인하세요." }, { status: 400 });
+    const out = await runSend(sb, { requestId: b.requestId, kind: "test", mode: "test", cond: null, summary: "시험 발송", template, vars, recipients: [{ phone, name }], by: name, from });
+    return NextResponse.json({ ok: true, ...out });
+  }
+
+  const found = await findRecipients(b.cond);
+  const expected = Math.floor(Number(b.expected));
+  if (!found.recipients.length) return NextResponse.json({ ok: false, error: "조건에 맞는 고객이 없습니다." }, { status: 400 });
+  // 화면에서 확인한 인원보다 눈에 띄게 늘었으면 보내지 않는다 — 확인하지 않은 사람에게 나가는 일을 막는다
+  if (Number.isFinite(expected) && expected > 0 && found.recipients.length > expected * 1.1 + 5)
+    return NextResponse.json({ ok: false, error: `찾은 뒤 인원이 ${found.recipients.length.toLocaleString("ko-KR")}명으로 늘었습니다. [고객 찾기]를 다시 누르고 확인한 뒤 보내세요.` }, { status: 409 });
+  const out = await runSend(sb, { requestId: b.requestId, kind: "send", mode: found.mode, cond: found.cond, summary: found.summary, template, vars, recipients: found.recipients, by: name, from });
+  return NextResponse.json({ ok: true, ...out, notMobile: found.notMobile });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const name = await loginName(req);
     if (!name) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
-    const b = (await req.json().catch(() => ({}))) as { action?: string; cond?: unknown; fromLog?: string | number };
+    const b = (await req.json().catch(() => ({}))) as SendBody & { fromLog?: string | number };
+    if (b.action === "send" || b.action === "test" || b.action === "send_result") return await handleSend(b, name);
     const fromLog = b.fromLog != null && /^[A-Za-z0-9-]{1,64}$/.test(String(b.fromLog)) ? String(b.fromLog) : null;
     if (isSubCond(b.cond)) return await handleSub(b.action === "export" ? "export" : "search", b.cond, name, fromLog);
     const cond = normalizeCond(b.cond);
-    if (isEmptyCond(cond)) return NextResponse.json({ ok: false, error: "조건을 하나 이상 입력하세요." }, { status: 400 });
-    if (cond.from && cond.to && cond.from > cond.to) return NextResponse.json({ ok: false, error: "구매 기간의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
-    if (cond.lastFrom && cond.lastTo && cond.lastFrom > cond.lastTo) return NextResponse.json({ ok: false, error: "마지막 구매일의 시작일이 종료일보다 뒤입니다." }, { status: 400 });
-    if (cond.minOrders && cond.maxOrders && cond.minOrders > cond.maxOrders) return NextResponse.json({ ok: false, error: "주문 횟수의 최소가 최대보다 큽니다." }, { status: 400 });
+    const bad = buyCondError(cond);
+    if (bad) return NextResponse.json({ ok: false, error: bad }, { status: 400 });
 
     const sb = supabaseAdmin();
     const summary = condSummary(cond);
@@ -212,6 +313,8 @@ export async function POST(req: NextRequest) {
     await logAudience("search", summary, found.rows.length, name, cond as Record<string, unknown>);
     return NextResponse.json({ ok: true, count: found.rows.length, excluded: found.excluded, capped: found.capped, max: MAX_AUDIENCE, summary, preview, tally });
   } catch (err) {
+    if (err instanceof SendError) return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
+    if (err instanceof SolapiRejected) return NextResponse.json({ ok: false, error: err.message }, { status: 502 });
     console.error("[audience]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "고객을 찾지 못했습니다") }, { status: 500 });
   }

@@ -1,6 +1,7 @@
 "use client";
 
-// 오디언스 추출 — 조건으로 고객을 찾아 이름·전화번호를 엑셀로 내려받는다. 메시지 발송은 사람이 따로 한다.
+// 오디언스 추출 — 조건으로 고객을 찾아 이름·전화번호를 엑셀로 내려받는다.
+//  관리자는 찾은 고객에게 정해 둔 알림톡을 바로 보낼 수 있다([알림톡 보내기] — AlimtalkSend.tsx, 2026-11-20). 발송도 아래 기록에 남는다.
 //  고객 전화번호가 밖으로 나가는 유일한 화면이라, 검색과 추출이 모두 아래 기록에 남고 누구에게나 보인다.
 //  [고객 찾기] = 인원과 미리보기 10명(이름·번호 가림) → [엑셀 내려받기] = 방금 찾은 조건 그대로.
 //  위 탭으로 대상을 고른다: 구매 고객(이 파일의 조건) / 정기배송 고객(SubAudience.tsx — 상태·회차·결제 예정일 등). 기록과 [다시 추출]은 둘이 함께 쓴다.
@@ -9,6 +10,7 @@ import { useConfirm, useToast } from "@/app/components/Feedback";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import SubAudience from "./SubAudience";
 import TallyExclude, { tallyText, type ExForm, type TallyStat } from "./TallyExclude";
+import AlimtalkSend, { SendHistory, type SendRow } from "./AlimtalkSend";
 import { matchKoQuery } from "@/app/lib/hangul";
 import { qty, won, dateTime } from "@/app/lib/format";
 
@@ -36,6 +38,8 @@ export default function AudiencePage() {
   const [cond, setCond] = useState<Cond>(EMPTY);
   const [channels, setChannels] = useState<string[]>([]);
   const [history, setHistory] = useState<History[]>([]);
+  const [sends, setSends] = useState<SendRow[] | null>(null); // 알림톡 발송 기록(표가 아직 없으면 null)
+  const [canSend, setCanSend] = useState(false);              // 관리자만 알림톡을 보낸다
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState<"" | "search" | "export">("");
   const [mode, setMode] = useState<"buy" | "sub">("buy"); // 누구를 뽑을지 — 구매 고객(매출 주문 조건) / 정기배송 고객(정기배송 상태 조건)
@@ -53,7 +57,7 @@ export default function AudiencePage() {
     try {
       const j = await (await fetch("/api/audience", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error);
-      setChannels(j.channels || []); setHistory(j.history || []); setLoadError("");
+      setChannels(j.channels || []); setHistory(j.history || []); setSends(j.sends ?? null); setCanSend(!!j.canSend); setLoadError("");
     } catch (e) { setLoadError(e instanceof Error ? e.message : "오디언스 기록을 불러오지 못했습니다."); }
     finally { setLoading(false); }
   }, []);
@@ -148,7 +152,7 @@ export default function AudiencePage() {
         <button type="button" role="tab" aria-selected={mode === "sub"} className={`sm-tab ${mode === "sub" ? "is-active" : ""}`} onClick={() => setMode("sub")} disabled={!!busy}>정기배송 고객</button>
       </div>
 
-      {mode === "sub" && <SubAudience download={(payload) => download(payload)} onLogged={load} exporting={busy === "export"} />}
+      {mode === "sub" && <SubAudience download={(payload) => download(payload)} onLogged={load} exporting={busy === "export"} canSend={canSend} sends={sends} />}
 
       {mode === "buy" && (<>
       <section className="b2b-form-section">
@@ -245,7 +249,10 @@ export default function AudiencePage() {
           <div className="aud-result-head">
             <span className="aud-count">{qty(result.count)}명</span>
             <span className="aud-count-sub">안심번호(050)·번호 없는 고객 {qty(result.excluded)}명 제외{tallyText(result.tally)}</span>
-            <button type="button" className="b2b-btn-secondary aud-export" onClick={exportXlsx} disabled={!!busy || result.count === 0}>{busy === "export" ? "만드는 중" : "엑셀 내려받기"}</button>
+            <div className="aud-result-actions">
+              {canSend && <AlimtalkSend payload={toPayload(result.cond)} count={result.count} summary={result.summary} sends={sends} disabled={!!busy} onSent={load} />}
+              <button type="button" className="b2b-btn-secondary" onClick={exportXlsx} disabled={!!busy || result.count === 0}>{busy === "export" ? "만드는 중" : "엑셀 내려받기"}</button>
+            </div>
           </div>
           <div className="aud-cond">{result.summary}</div>
           {!!result.tally?.noPhone && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>전화번호를 찾지 못한 탈리 응답 {qty(result.tally.noPhone)}건은 빼지 못했습니다.</div>}
@@ -265,6 +272,8 @@ export default function AudiencePage() {
         </section>
       )}
       </>)}
+
+      {!!sends?.length && <SendHistory sends={sends} canSend={canSend} onChanged={load} />}
 
       <div className="b2b-card" style={{ marginTop: "var(--sm-space-5)" }}>
         <div className="b2b-card-head"><span className="b2b-card-title">검색·추출 기록</span></div>

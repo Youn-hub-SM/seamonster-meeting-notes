@@ -112,3 +112,76 @@ export async function sendSolapiSms(p: { from: string; text: string; to: string[
     failed: (j.failedMessageList || []).map((f) => ({ to: String(f.to || "").replace(/\D/g, ""), code: String(f.statusCode || ""), message: String(f.statusMessage || "접수 실패") })),
   };
 }
+
+// ── 알림톡 보내기(2026-11-20, 오디언스 추출 app/lib/audience-send.ts) ──
+//  템플릿 목록: GET /kakao/v2/templates — 승인(APPROVED)된 것만 보낼 수 있다. 본문(content)과 변수(#{이름})를 함께 돌려준다.
+//    변수는 응답의 variables 가 있으면 그것 + 본문·버튼 등에 적힌 #{…} 를 모두 모은다(응답 모양이 달라져도 빠지지 않게). 검수 의견(comments)은 보지 않는다.
+//  발송: POST /messages/v4/send-many/detail  messages[{ to, kakaoOptions: { pfId, templateId, variables, disableSms } }]
+//    variables 의 키는 '#{변수명}', 값은 글자. 변수가 없는 템플릿은 빈 객체. text 는 넣지 않는다(넣으면 템플릿 본문과 달라 실패).
+//    disableSms: true = 알림톡이 실패해도 문자로 대신 보내지 않는다(대표 결정 11-20).
+//  결과: GET /messages/v4/groups/{groupId} — count.sentSuccess / sentFailed / sentPending
+export type AlimtalkTemplate = { templateId: string; name: string; channelId: string; status: string; content: string; variables: string[] };
+const VAR_RE = /#\{([^{}]{1,60})\}/g;
+const varName = (s: unknown) => String(s ?? "").replace(/^#\{/, "").replace(/\}$/, "").trim();
+export function templateVariables(t: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const add = (n: string) => { if (n && !out.includes(n)) out.push(n); };
+  if (Array.isArray(t.variables)) for (const v of t.variables) add(varName(typeof v === "string" ? v : (v as { name?: unknown })?.name));
+  const rest: Record<string, unknown> = { ...t };
+  for (const k of ["comments", "name", "variables", "templateId", "channelId", "pfId"]) delete rest[k];
+  for (const m of JSON.stringify(rest).matchAll(VAR_RE)) add(m[1].trim());
+  return out;
+}
+export async function fetchAlimtalkTemplates(): Promise<AlimtalkTemplate[]> {
+  const out: AlimtalkTemplate[] = [];
+  let startKey: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const q = new URLSearchParams({ limit: "500" });
+    if (startKey) q.set("startKey", startKey);
+    const res = await fetch(`${BASE}/kakao/v2/templates?${q}`, { headers: { Authorization: authHeader() }, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+    const j = (await res.json().catch(() => ({}))) as { templateList?: Record<string, unknown>[]; nextKey?: string; errorMessage?: string; errorCode?: string };
+    if (!res.ok) throw new Error(`솔라피 템플릿 ${res.status}: ${j.errorMessage || j.errorCode || "조회 실패"}`);
+    for (const t of j.templateList || []) {
+      const templateId = String(t.templateId || "");
+      if (!templateId) continue;
+      out.push({ templateId, name: String(t.name || ""), channelId: String(t.channelId || t.pfId || ""), status: String(t.status || ""), content: String(t.content || ""), variables: templateVariables(t) });
+    }
+    if (!j.nextKey) break;
+    startKey = j.nextKey;
+  }
+  return out;
+}
+
+const SEND_TIMEOUT_MS = 40_000;
+export type AlimtalkMessage = { to: string; variables: Record<string, string> };
+// from = 등록된 발신번호(있으면 붙인다). 대체 발송을 껐으므로 문자는 나가지 않는다 — 솔라피가 발신번호를 요구하는 경우에 대비한 값이다.
+export async function sendSolapiAlimtalk(p: { pfId: string; templateId: string; from?: string; messages: AlimtalkMessage[] }): Promise<SolapiSendResult> {
+  const body = {
+    messages: p.messages.map((m) => ({ to: m.to, ...(p.from ? { from: p.from } : {}), kakaoOptions: { pfId: p.pfId, templateId: p.templateId, variables: m.variables, disableSms: true } })),
+    allowDuplicates: false,
+  };
+  const res = await fetch(`${BASE}/messages/v4/send-many/detail`, {
+    method: "POST", headers: { Authorization: authHeader(), "Content-Type": "application/json" }, body: JSON.stringify(body),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS), cache: "no-store",
+  });
+  const j = (await res.json().catch(() => ({}))) as {
+    groupInfo?: { groupId?: string; _id?: string }; failedMessageList?: { to?: string; statusCode?: string; statusMessage?: string }[];
+    errorCode?: string; errorMessage?: string;
+  };
+  if (!res.ok) throw new SolapiRejected(`솔라피 ${res.status}: ${j.errorMessage || j.errorCode || "발송 요청이 거절됐습니다"}`);
+  return {
+    groupId: j.groupInfo?.groupId || j.groupInfo?._id || null,
+    failed: (j.failedMessageList || []).map((f) => ({ to: String(f.to || "").replace(/\D/g, ""), code: String(f.statusCode || ""), message: String(f.statusMessage || "접수 실패") })),
+  };
+}
+
+// 발송 묶음의 실제 결과 — 수신 완료·실패·아직 결과 없음
+export type SolapiGroupCount = { status: string; success: number; failed: number; pending: number };
+export async function fetchSolapiGroup(groupId: string): Promise<SolapiGroupCount> {
+  const res = await fetch(`${BASE}/messages/v4/groups/${encodeURIComponent(groupId)}`, { headers: { Authorization: authHeader() }, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+  type G = { status?: string; count?: { sentSuccess?: number; sentFailed?: number; sentPending?: number } };
+  const j = (await res.json().catch(() => ({}))) as G & { groupInfo?: G; errorMessage?: string; errorCode?: string };
+  if (!res.ok) throw new Error(`솔라피 ${res.status}: ${j.errorMessage || j.errorCode || "결과 조회 실패"}`);
+  const g = j.count ? j : j.groupInfo || j;
+  return { status: String(g.status || ""), success: Number(g.count?.sentSuccess) || 0, failed: Number(g.count?.sentFailed) || 0, pending: Number(g.count?.sentPending) || 0 };
+}

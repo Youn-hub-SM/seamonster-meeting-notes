@@ -22,16 +22,28 @@
 .aud-result-head { display: flex; align-items: baseline; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
 .aud-count { font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-kpi); font-variant-numeric: tabular-nums; }
 .aud-count-sub { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
-.aud-export { margin-left: auto; }
+.aud-result-actions { margin-left: auto; display: flex; gap: var(--sm-space-2); flex-wrap: wrap; }
 .aud-cond { font-size: var(--sm-fs-base); color: var(--sm-text-mid); margin-bottom: var(--sm-space-3); }
 
 .b2b-table.aud-table { min-width: 1040px; }
 .aud-codes { white-space: normal; min-width: 120px; max-width: 220px; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-body); }
 .aud-items { white-space: normal; min-width: 220px; max-width: 360px; line-height: var(--sm-lh-body); }
 .b2b-table.aud-history { min-width: 820px; }
+
+/* 알림톡 보내기 창 — 대상 인원·템플릿 본문·변수 칸 */
+.aud-send-target { display: flex; align-items: baseline; gap: var(--sm-space-3); flex-wrap: wrap; }
+.aud-send-count { font-size: var(--sm-fs-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.aud-send-cond { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); line-height: var(--sm-lh-body); }
+.aud-send-preview { padding: var(--sm-space-3); border: 1px solid var(--sm-border); border-radius: 8px; background: var(--sm-bg-subtle); font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; flex-shrink: 0; }
+.aud-send-var { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; }
+.aud-send-var .sm-tabs { flex: 0 0 auto; }
+.aud-send-var .b2b-input { flex: 1 1 180px; width: auto; min-width: 0; }
+/* 알림톡 발송 기록 */
+.b2b-table.aud-sends { min-width: 1080px; }
+.aud-send-reason { margin-top: 2px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .aud-cond-cell { white-space: normal; min-width: 280px; line-height: var(--sm-lh-body); }
 
 @media (max-width: 640px) {
   .aud-form { grid-template-columns: 1fr; }
-  .aud-export { margin-left: 0; }
+  .aud-result-actions { margin-left: 0; }
 }
