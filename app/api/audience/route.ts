@@ -4,6 +4,8 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { logAudience } from "@/app/lib/b2b-activity";
 import { normalizeCond, isEmptyCond, condSummary, condLines, findAudience, loadContacts, listChannels, listProducts, listOrderNames, maskName, maskPhone, MAX_AUDIENCE } from "@/app/lib/audience";
+import { loadTallyExclusion, dropResponders, type TallyStat } from "@/app/lib/audience-tally";
+import { getTallyApiKey, listTallyForms } from "@/app/lib/voc-tally";
 import { isSubCond, normalizeSubCond, isEmptySubCond, subSummary, subLines, findSubAudience, withContacts, listSubProducts } from "@/app/lib/audience-sub";
 
 export const runtime = "nodejs";
@@ -20,6 +22,9 @@ export const maxDuration = 300; // 조회 제한 60초 + 연락처 읽기(고객
 //                                    (추출한 명단은 어디에도 저장하지 않는다). 다시 뽑은 것도 새 기록으로 남는다.
 //  cond.mode = "sub" 이면 정기배송 고객(app/lib/audience-sub.ts) — 상태(품목 기준)·상품·회차·다음 결제 예정일·마지막 결제일·해지일. 흐름과 기록은 같다.
 //  GET ?subproducts=1          → 정기배송 상품 선택지
+//  GET ?forms=1                → 탈리 폼 선택지(응답자 빼기용) — 화면이 그 칸을 처음 누를 때 한 번
+//  cond.excludeForms = 탈리 폼 응답자 빼기(app/lib/audience-tally.ts) — 검색·추출할 때마다 그 폼의 응답을 다시 읽어, 답한 고객을 뺀다(구매·정기배송 공통).
+//                                    탈리를 읽지 못하면 오류로 끝낸다(빼지 못한 채 뽑지 않는다).
 //  로그인한 내부 직원 누구나 쓸 수 있다(공장 계정 제외) — 대신 누가 언제 어떤 조건으로 몇 명을 봤는지 전부 화면에 보인다.
 
 async function loginName(req: NextRequest): Promise<string | null> {
@@ -29,12 +34,19 @@ async function loginName(req: NextRequest): Promise<string | null> {
   return resolveUserName(t) || null;
 }
 const HISTORY_TYPES = ["sales.audience_search", "sales.audience_export"];
+// 엑셀 '추출 정보'의 [제외] 줄에 붙이는 말
+const tallyNote = (t: TallyStat | null): string => (t ? ` · 탈리 응답자 ${t.removed.toLocaleString("ko-KR")}명(응답 ${t.responses.toLocaleString("ko-KR")}건${t.noPhone ? `, 그중 전화번호 없는 응답 ${t.noPhone.toLocaleString("ko-KR")}건은 빼지 못함` : ""})` : "");
 const kstStamp = (d = new Date()) => new Date(d.getTime() + 9 * 3600_000).toISOString().replace("T", " ").slice(0, 16);
 
 export async function GET(req: NextRequest) {
   try {
     if (!(await loginName(req))) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
     const sb = supabaseAdmin();
+    if (req.nextUrl.searchParams.get("forms") === "1") {
+      const apiKey = await getTallyApiKey();
+      if (!apiKey) return NextResponse.json({ ok: false, error: "탈리 API 키가 없습니다 — 관리자 › 설정 › 연결에서 Tally 키를 넣으세요." }, { status: 400 });
+      return NextResponse.json({ ok: true, forms: await listTallyForms(apiKey) });
+    }
     if (req.nextUrl.searchParams.get("subproducts") === "1") return NextResponse.json({ ok: true, products: await listSubProducts(sb) });
     if (req.nextUrl.searchParams.get("products") === "1") {
       const [products, names] = await Promise.all([listProducts(sb), listOrderNames(sb)]);
@@ -67,6 +79,13 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
   const sb = supabaseAdmin();
   const summary = subSummary(cond);
   const found = await findSubAudience(sb, cond);
+  let tally: TallyStat | null = null;
+  if (cond.excludeForms?.length) {
+    const ex = await loadTallyExclusion(cond.excludeForms);
+    const d = dropResponders(found.rows, ex);
+    found.rows = d.rows;
+    tally = { forms: cond.excludeForms.map((f) => f.name), responses: ex.responses, noPhone: ex.noPhone, removed: d.removed };
+  }
   const { list, excluded } = await withContacts(sb, found.rows);
 
   if (action === "export") {
@@ -86,7 +105,7 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
     info.columns = [{ width: 20 }, { width: 90 }];
     info.addRows([
       ["인원", list.length], ["추출한 사람", name], ["추출 시각", kstStamp()],
-      ["제외", `번호를 못 찾은 신청 ${found.unlinked.toLocaleString("ko-KR")}건 · 안심번호(050)·번호 없는 고객 ${excluded.toLocaleString("ko-KR")}명`],
+      ["제외", `번호를 못 찾은 신청 ${found.unlinked.toLocaleString("ko-KR")}건 · 안심번호(050)·번호 없는 고객 ${excluded.toLocaleString("ko-KR")}명${tallyNote(tally)}`],
       [], ["적용한 조건", ""], ...subLines(cond),
       [], ["칸 설명", ""],
       ["사람 기준 상태", "그 고객의 모든 신청·품목을 통틀어 — 이용 중인 품목이 하나라도 있으면 이용중, 이용 중인 품목은 없고 일시정지한 품목이 있으면 일시정지, 전부 해지면 해지. 전날 밤 카페24에서 가져온 값"],
@@ -114,7 +133,7 @@ async function handleSub(action: "search" | "export", raw: unknown, name: string
 
   const preview = list.slice(0, 10).map(({ row: r, contact: c }) => ({ name: maskName(c.name), phone: maskPhone(c.phone), person: r.person, states: r.states, round: r.round, next_pay: r.next_pay, last_paid: r.last_paid, terminated: r.terminated, items: r.items }));
   await logAudience("search", summary, list.length, name, cond as unknown as Record<string, unknown>);
-  return NextResponse.json({ ok: true, count: list.length, excluded, unlinked: found.unlinked, subs: found.subs, capped: found.capped, max: MAX_AUDIENCE, summary, preview });
+  return NextResponse.json({ ok: true, count: list.length, excluded, unlinked: found.unlinked, subs: found.subs, capped: found.capped, max: MAX_AUDIENCE, summary, preview, tally });
 }
 
 export async function POST(req: NextRequest) {
@@ -133,6 +152,13 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
     const summary = condSummary(cond);
     const found = await findAudience(sb, cond);
+    let tally: TallyStat | null = null;
+    if (cond.excludeForms?.length) {
+      const ex = await loadTallyExclusion(cond.excludeForms);
+      const d = dropResponders(found.rows, ex);
+      found.rows = d.rows;
+      tally = { forms: cond.excludeForms.map((f) => f.name), responses: ex.responses, noPhone: ex.noPhone, removed: d.removed };
+    }
 
     if (b.action === "export") {
       if (!found.rows.length) return NextResponse.json({ ok: false, error: "조건에 맞는 고객이 없습니다." }, { status: 400 });
@@ -158,7 +184,7 @@ export async function POST(req: NextRequest) {
       const info = wb.addWorksheet("추출 정보");
       info.columns = [{ width: 20 }, { width: 90 }];
       info.addRows([
-        ["인원", n], ["추출한 사람", name], ["추출 시각", kstStamp()], ["제외", `안심번호(050)·번호 없는 고객 ${found.excluded.toLocaleString("ko-KR")}명`],
+        ["인원", n], ["추출한 사람", name], ["추출 시각", kstStamp()], ["제외", `안심번호(050)·번호 없는 고객 ${found.excluded.toLocaleString("ko-KR")}명${tallyNote(tally)}`],
         [], ["적용한 조건", ""], ...condLines(cond),
         [], ["칸 설명", ""],
         ["상품명·상품코드·주문 상품명·채널", "조건(구매 기간·채널·상품)에 맞은 주문에서 가져온 값. 상품 조건이 없으면 그 기간·채널에 산 상품 전부"],
@@ -184,7 +210,7 @@ export async function POST(req: NextRequest) {
     const contacts = await loadContacts(sb, head.map((r) => r.customer_key));
     const preview = head.map((r) => { const c = contacts.get(r.customer_key); return { name: maskName(c?.name || ""), phone: maskPhone(c?.phone || ""), orders: r.orders, amount: r.amount, first_date: r.first_date, last_date: r.last_date, items: r.items, codes: r.codes, channels: r.channels }; });
     await logAudience("search", summary, found.rows.length, name, cond as Record<string, unknown>);
-    return NextResponse.json({ ok: true, count: found.rows.length, excluded: found.excluded, capped: found.capped, max: MAX_AUDIENCE, summary, preview });
+    return NextResponse.json({ ok: true, count: found.rows.length, excluded: found.excluded, capped: found.capped, max: MAX_AUDIENCE, summary, preview, tally });
   } catch (err) {
     console.error("[audience]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "고객을 찾지 못했습니다") }, { status: 500 });

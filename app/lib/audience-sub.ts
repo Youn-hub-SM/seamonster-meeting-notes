@@ -23,6 +23,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { runSql } from "./analyst";
 import { loadContacts, MAX_AUDIENCE, type Contact } from "./audience";
+import { normalizeExcludeForms, excludeText, type ExcludeForm } from "./audience-tally";
 
 export const SUB_STATES = ["U", "P", "C"] as const;
 export type SubState = (typeof SUB_STATES)[number];
@@ -43,6 +44,7 @@ export type SubCond = {
   payFrom?: string; payTo?: string;         // 다음 결제 예정일(이용중 품목 중 가장 빠른 날)
   lastPaidFrom?: string; lastPaidTo?: string; // 마지막 결제일(결제 완료 기준)
   termFrom?: string; termTo?: string;       // 해지일(품목 해지일 중 가장 늦은 날)
+  excludeForms?: ExcludeForm[];             // 탈리 폼 응답자 빼기(audience-tally.ts) — 찾은 고객에서 뺀다
 };
 // 고객 한 명(신청 여러 개면 묶음)
 export type SubRow = { customer_key: string; person: string; states: string; pause_kind: string; round: number | null; next_pay: string | null; last_paid: string | null; terminated: string | null; items: string; codes: string; sub_ids: string; subs: number };
@@ -64,10 +66,11 @@ export function normalizeSubCond(raw: unknown): SubCond {
   if (Array.isArray(o.products)) { const p = [...new Set(o.products.map((x) => String(x ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 300)).filter(Boolean))].slice(0, 50); if (p.length) c.products = p; }
   c.minRound = posInt(o.minRound); c.maxRound = posInt(o.maxRound);
   for (const k of ["payFrom", "payTo", "lastPaidFrom", "lastPaidTo", "termFrom", "termTo"] as const) if (validDate(o[k])) c[k] = o[k] as string;
+  c.excludeForms = normalizeExcludeForms(o.excludeForms);
   for (const k of Object.keys(c) as (keyof SubCond)[]) if (c[k] === undefined) delete c[k];
   return c;
 }
-export const isEmptySubCond = (c: SubCond): boolean => Object.keys(c).length <= 1; // mode 뿐
+export const isEmptySubCond = (c: SubCond): boolean => Object.keys(c).filter((k) => k !== "mode" && k !== "excludeForms").length === 0; // 응답자 빼기만으로는 조건이 아니다
 
 const range = (a?: string, b?: string) => `${a || "처음"}~${b || "오늘"}`;
 const roundText = (c: SubCond) => (c.minRound && c.maxRound ? (c.minRound === c.maxRound ? `${c.minRound}회차` : `${c.minRound}~${c.maxRound}회차`) : c.minRound ? `${c.minRound}회차 이상` : `${c.maxRound}회차 이하`);
@@ -80,6 +83,7 @@ export function subSummary(c: SubCond): string {
   if (c.payFrom || c.payTo) parts.push(`다음 결제 예정일 ${range(c.payFrom, c.payTo)}`);
   if (c.lastPaidFrom || c.lastPaidTo) parts.push(`마지막 결제일 ${range(c.lastPaidFrom, c.lastPaidTo)}`);
   if (c.termFrom || c.termTo) parts.push(`해지일 ${range(c.termFrom, c.termTo)}`);
+  if (c.excludeForms?.length) parts.push(excludeText(c.excludeForms));
   return parts.join(" · ");
 }
 // 엑셀 '추출 정보' 시트용
@@ -91,6 +95,7 @@ export function subLines(c: SubCond): [string, string][] {
   if (c.payFrom || c.payTo) out.push(["다음 결제 예정일", `${c.payFrom || "처음"} ~ ${c.payTo || "오늘"}`]);
   if (c.lastPaidFrom || c.lastPaidTo) out.push(["마지막 결제일", `${c.lastPaidFrom || "처음"} ~ ${c.lastPaidTo || "오늘"}`]);
   if (c.termFrom || c.termTo) out.push(["해지일", `${c.termFrom || "처음"} ~ ${c.termTo || "오늘"}`]);
+  if (c.excludeForms?.length) out.push(["탈리 응답자 제외", c.excludeForms.map((f) => f.name).join(", ")]);
   return out;
 }
 

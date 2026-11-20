@@ -8,6 +8,7 @@
 //   ② 그 고객 키로 sales_customers 에서 이름·번호를 읽는다 — 미리보기는 10명만 가려서, 추출은 전원.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { runSql } from "./analyst";
+import { normalizeExcludeForms, excludeText, type ExcludeForm } from "./audience-tally";
 
 export type AudienceCond = {
   from?: string; to?: string;            // 구매 기간 — 이 기간에 산 고객
@@ -18,6 +19,7 @@ export type AudienceCond = {
   minOrders?: number; maxOrders?: number; // 전체 기간 주문 횟수
   minAmount?: number;                    // 전체 기간 누적 구매 금액(원)
   lastFrom?: string; lastTo?: string;    // 마지막 구매일
+  excludeForms?: ExcludeForm[];          // 탈리 폼 응답자 빼기(audience-tally.ts) — 찾는 조건이 아니라 찾은 고객에서 빼는 것
 };
 // items·codes·order_names·channels = 조건(구매 기간·채널·상품)에 맞은 주문의 것 — 그 고객이 왜 뽑혔는지가 엑셀에 보인다(2026-11-13 대표: "추출시 적용된 필터가 나오면 좋겠음")
 export type AudienceRow = { customer_key: string; orders: number; amount: number; first_date: string; last_date: string; items: string; codes: string; order_names: string; channels: string };
@@ -61,10 +63,12 @@ export function normalizeCond(raw: unknown): AudienceCond {
   c.minOrders = posInt(o.minOrders); c.maxOrders = posInt(o.maxOrders); c.minAmount = posInt(o.minAmount);
   if (validDate(o.lastFrom)) c.lastFrom = o.lastFrom;
   if (validDate(o.lastTo)) c.lastTo = o.lastTo;
+  c.excludeForms = normalizeExcludeForms(o.excludeForms);
   for (const k of Object.keys(c) as (keyof AudienceCond)[]) if (c[k] === undefined) delete c[k];
   return c;
 }
-export const isEmptyCond = (c: AudienceCond): boolean => Object.keys(c).length === 0;
+// 응답자 빼기만 있고 찾는 조건이 없으면 빈 조건이다(전 고객을 뽑게 두지 않는다)
+export const isEmptyCond = (c: AudienceCond): boolean => Object.keys(c).filter((k) => k !== "excludeForms").length === 0;
 
 // 기록·화면에 남기는 조건 한 줄
 export function condSummary(c: AudienceCond): string {
@@ -77,6 +81,7 @@ export function condSummary(c: AudienceCond): string {
   if (c.minOrders || c.maxOrders) parts.push(c.minOrders && c.maxOrders ? (c.minOrders === c.maxOrders ? `주문 ${c.minOrders}회` : `주문 ${c.minOrders}~${c.maxOrders}회`) : c.minOrders ? `주문 ${c.minOrders}회 이상` : `주문 ${c.maxOrders}회 이하`);
   if (c.minAmount) parts.push(`누적 ${c.minAmount.toLocaleString("ko-KR")}원 이상`);
   if (c.lastFrom || c.lastTo) parts.push(`마지막 구매 ${c.lastFrom || "처음"}~${c.lastTo || "오늘"}`);
+  if (c.excludeForms?.length) parts.push(excludeText(c.excludeForms));
   return parts.join(" · ") || "조건 없음";
 }
 
@@ -91,6 +96,7 @@ export function condLines(c: AudienceCond): [string, string][] {
   if (c.products) out.push(["이름·코드에 든 말", c.products]);
   if (c.minOrders || c.maxOrders) out.push(["주문 횟수", c.minOrders && c.maxOrders ? `${c.minOrders}~${c.maxOrders}회` : c.minOrders ? `${c.minOrders}회 이상` : `${c.maxOrders}회 이하`]);
   if (c.minAmount) out.push(["누적 구매 금액", `${c.minAmount.toLocaleString("ko-KR")}원 이상`]);
+  if (c.excludeForms?.length) out.push(["탈리 응답자 제외", c.excludeForms.map((f) => f.name).join(", ")]);
   return out;
 }
 

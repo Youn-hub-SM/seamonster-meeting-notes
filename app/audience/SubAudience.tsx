@@ -9,16 +9,17 @@ import { useMemo, useRef, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { qty } from "@/app/lib/format";
+import TallyExclude, { tallyText, type ExForm, type TallyStat } from "./TallyExclude";
 
 const BASES = [{ key: "person", label: "사람 기준" }, { key: "item", label: "품목 기준" }] as const;
 type Basis = (typeof BASES)[number]["key"];
 const STATES = [{ key: "U", label: "이용중" }, { key: "P", label: "일시정지" }, { key: "C", label: "해지" }] as const;
 type StateKey = (typeof STATES)[number]["key"];
-type Cond = { basis: Basis; states: StateKey[]; products: string[]; minRound: string; maxRound: string; payFrom: string; payTo: string; lastPaidFrom: string; lastPaidTo: string; termFrom: string; termTo: string };
-const EMPTY: Cond = { basis: "person", states: [], products: [], minRound: "", maxRound: "", payFrom: "", payTo: "", lastPaidFrom: "", lastPaidTo: "", termFrom: "", termTo: "" };
+type Cond = { basis: Basis; states: StateKey[]; products: string[]; minRound: string; maxRound: string; payFrom: string; payTo: string; lastPaidFrom: string; lastPaidTo: string; termFrom: string; termTo: string; excludeForms: ExForm[] };
+const EMPTY: Cond = { basis: "person", states: [], products: [], minRound: "", maxRound: "", payFrom: "", payTo: "", lastPaidFrom: "", lastPaidTo: "", termFrom: "", termTo: "", excludeForms: [] };
 const toPayload = (c: Cond) => ({ mode: "sub", ...c }); // 기준은 상태를 골랐을 때만 서버가 남긴다
 type Preview = { name: string; phone: string; person: string; states: string; round: number | null; next_pay: string | null; last_paid: string | null; terminated: string | null; items: string };
-type Result = { count: number; excluded: number; unlinked: number; subs: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond };
+type Result = { count: number; excluded: number; unlinked: number; subs: number; capped: boolean; max: number; summary: string; preview: Preview[]; cond: Cond; tally?: TallyStat | null };
 type ProductOption = { name: string; subs: number };
 const digits = (s: string) => s.replace(/[^0-9]/g, "");
 
@@ -35,6 +36,7 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
   const set = <K extends keyof Cond>(k: K, v: Cond[K]) => setCond((c) => ({ ...c, [k]: v }));
   const toggleState = (s: StateKey) => setCond((c) => ({ ...c, states: c.states.includes(s) ? c.states.filter((x) => x !== s) : [...c.states, s] }));
   const isEmpty = JSON.stringify(cond) === JSON.stringify({ ...EMPTY, basis: cond.basis }); // 기준만 바꾼 것은 조건이 아니다
+  const noFind = JSON.stringify({ ...cond, excludeForms: [] }) === JSON.stringify({ ...EMPTY, basis: cond.basis }); // 응답자 빼기만으로는 조건이 아니다
   const busy = searching || exporting;
 
   const loadProducts = () => {
@@ -50,7 +52,7 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
 
   const search = async () => {
     setError("");
-    if (isEmpty) { setError("조건을 하나 이상 입력하세요."); return; }
+    if (noFind) { setError("조건을 하나 이상 입력하세요."); return; }
     setSearching(true);
     try {
       const j = await (await fetch("/api/audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "search", cond: toPayload(cond) }) })).json();
@@ -132,6 +134,7 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
               </div>
             )}
           </div>
+          <TallyExclude value={cond.excludeForms} onChange={(v) => set("excludeForms", v)} />
           <div className="aud-actions aud-wide">
             <button type="button" className="b2b-btn-primary" onClick={search} disabled={busy}>{searching ? "찾는 중" : "고객 찾기"}</button>
             <button type="button" className="b2b-btn-secondary" onClick={() => { setCond({ ...EMPTY, basis: cond.basis }); setResult(null); setError(""); }} disabled={busy || (isEmpty && !result)}>조건 지우기</button>
@@ -143,10 +146,11 @@ export default function SubAudience({ download, onLogged, exporting }: { downloa
         <section className="b2b-form-section" style={{ marginTop: "var(--sm-space-4)" }}>
           <div className="aud-result-head">
             <span className="aud-count">{qty(result.count)}명</span>
-            <span className="aud-count-sub">조건에 맞는 신청 {qty(result.subs)}건 · 번호를 못 찾은 신청 {qty(result.unlinked)}건 · 안심번호(050)·번호 없는 고객 {qty(result.excluded)}명 제외</span>
+            <span className="aud-count-sub">조건에 맞는 신청 {qty(result.subs)}건 · 번호를 못 찾은 신청 {qty(result.unlinked)}건 · 안심번호(050)·번호 없는 고객 {qty(result.excluded)}명 제외{tallyText(result.tally)}</span>
             <button type="button" className="b2b-btn-secondary aud-export" onClick={exportXlsx} disabled={busy || result.count === 0}>{exporting ? "만드는 중" : "엑셀 내려받기"}</button>
           </div>
           <div className="aud-cond">{result.summary}</div>
+          {!!result.tally?.noPhone && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>전화번호를 찾지 못한 탈리 응답 {qty(result.tally.noPhone)}건은 빼지 못했습니다.</div>}
           {result.capped && <div className="sm-warn" style={{ marginBottom: "var(--sm-space-3)" }}>신청이 {qty(result.max)}건을 넘어 앞에서부터 {qty(result.max)}건만 다룹니다. 조건을 좁히세요.</div>}
           {result.count === 0 ? <div className="b2b-empty">조건에 맞는 고객이 없습니다.</div> : (
             <div className="b2b-table-wrap">
