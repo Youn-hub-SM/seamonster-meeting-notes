@@ -83,6 +83,39 @@
 .hr-pill-ok { background: var(--sm-success-bg); color: var(--sm-success); border: 1px solid var(--sm-success-border); }
 .hr-mono { font-family: var(--sm-mono); font-variant-numeric: tabular-nums; }
 
+/* ── 근무대장 ────────────────────────────────────────────────────── */
+.hr-filters .hr-month { width: 160px; }
+.hr-bad { color: var(--sm-danger); font-weight: 600; }
+.hr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: var(--sm-space-3); margin-bottom: var(--sm-space-3); }
+.hr-tiles .b2b-stat-card { padding: var(--sm-space-4); }
+.hr-tiles .b2b-stat-card-value { margin-top: var(--sm-space-2); white-space: nowrap; }
+@media (max-width: 768px) {
+  .hr-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sm-space-2); }
+  .hr-tiles .b2b-stat-card { padding: var(--sm-space-3); }
+  .hr-tiles .b2b-stat-card-value { font-size: var(--sm-fs-xl); }
+}
+/* 하루 한 줄 입력 표 — 칸마다 입력칸이 있어 줄 여백을 줄인다(밀집 표) */
+.hr-work-table th, .hr-work-table td { padding: 6px 8px; white-space: nowrap; vertical-align: middle; }
+.hr-work-table .b2b-input { padding: 6px 8px; min-height: 0; height: 34px; }
+.hr-work-table .hr-w-kind { width: 116px; }
+.hr-work-table .hr-w-time { width: 118px; }
+.hr-work-table .hr-w-num { width: 68px; }
+.hr-work-table .hr-w-leave { width: 92px; }
+.hr-work-table .hr-w-memo { width: 100%; min-width: 160px; }
+.hr-work-table .b2b-input:disabled { background: var(--sm-bg-subtle); color: var(--sm-text-light); }
+.hr-work-table .b2b-input[readonly] { background: var(--sm-bg-subtle); }
+/* 소정근로일이 아닌 날·재직 기간 밖 */
+.hr-work-off > td:first-child { color: var(--sm-text-light); }
+.hr-work-off > td { background: var(--sm-bg-subtle); }
+.hr-work-out > td { background: var(--sm-bg-subtle); }
+/* 주 소계 줄 */
+.hr-week-row > td {
+  padding: 8px; background: var(--sm-white); border-bottom: 2px solid var(--sm-border);
+  font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); white-space: pre; font-variant-numeric: tabular-nums;
+}
+.hr-week-row > td:last-child { color: var(--sm-black); font-weight: 600; text-align: right; }
+.hr-week-row > td.is-none { color: var(--sm-text-mid); font-weight: 400; }
+
 /* ── 입력 창(넓은 모달) ──────────────────────────────────────────── */
 .b2b-modal.hr-modal-wide { max-width: 880px; }
 .b2b-modal.hr-modal-mid { max-width: 680px; }
@@ -144,6 +177,8 @@
   .hr-print-table th, .hr-print-table td { border: 0.5pt solid #333; padding: 3px 4px; text-align: left; vertical-align: top; word-break: keep-all; overflow-wrap: anywhere; }
   .hr-print-table th { background: #eee; font-weight: 600; white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .hr-print-table tr { break-inside: avoid; }
+  .hr-print-table .hr-print-week td { background: #f4f4f4; font-weight: 600; white-space: pre-wrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hr-print-sum { margin-top: 8px; }
   .hr-card-sec { break-inside: avoid; border-color: #333; border-radius: 0; margin-bottom: 10px; }
   .hr-card-sec > h2 { border-color: #333; border-radius: 0; background: #eee; color: #000; font-size: 9pt; padding: 4px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .hr-dl { padding: 2px 0; }

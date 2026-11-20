@@ -14,6 +14,7 @@ const TITLE = "급여·연차";
 
 const NAV = [
   { href: "/hr", label: "인사대장", icon: "user" as const, match: (p: string) => p === "/hr" || p.startsWith("/hr/employees") },
+  { href: "/hr/work", label: "근무대장", icon: "note" as const, match: (p: string) => p.startsWith("/hr/work") },
   { href: "/hr/rates", label: "요율", icon: "bars" as const, match: (p: string) => p.startsWith("/hr/rates") },
   { href: "/hr/settings", label: "사업장", icon: "gear" as const, match: (p: string) => p.startsWith("/hr/settings") },
 ];

@@ -40,8 +40,11 @@ export function isHrPending(err: unknown): boolean {
 }
 export const HR_PENDING = "DB 준비 전입니다. supabase/migrations/hr/001_hr_init.sql 을 적용하고 Supabase Exposed schemas 에 hr 을 추가하세요.";
 
-export function hrError(err: unknown, fallback: string): NextResponse {
-  if (isHrPending(err)) return hrJson({ ok: false, pending: true, error: HR_PENDING }, 503);
+export const HR_PENDING_002 = "DB 준비 전입니다. supabase/migrations/hr/002_work_logs.sql 을 적용하세요.";
+
+// pending = 표가 없을 때 보일 안내(그 기능이 기대하는 마이그레이션). 비우면 hr/001 안내.
+export function hrError(err: unknown, fallback: string, pending: string = HR_PENDING): NextResponse {
+  if (isHrPending(err)) return hrJson({ ok: false, pending: true, error: pending }, 503);
   const m = (err as { message?: string })?.message;
   return hrJson({ ok: false, error: typeof m === "string" && m ? m : fallback }, 500);
 }

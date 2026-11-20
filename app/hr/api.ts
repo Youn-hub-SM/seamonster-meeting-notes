@@ -4,12 +4,14 @@
 
 export class HrApiError extends Error {
   fields: Record<string, string>;
+  rows: Record<string, string>;   // 줄 단위 오류(근무대장: 날짜 → 문장)
   pending: boolean;
   status: number;
-  constructor(message: string, status: number, fields?: Record<string, string>, pending?: boolean) {
+  constructor(message: string, status: number, fields?: Record<string, string>, pending?: boolean, rows?: Record<string, string>) {
     super(message);
     this.status = status;
     this.fields = fields || {};
+    this.rows = rows || {};
     this.pending = !!pending;
   }
 }
@@ -29,8 +31,10 @@ export async function hrApi<T = Record<string, unknown>>(url: string, method = "
     toLogin();
     throw new HrApiError("로그인이 끝났습니다. 다시 들어오세요.", 401);
   }
-  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; fields?: Record<string, string>; pending?: boolean };
-  if (!res.ok || !j.ok) throw new HrApiError(j.error || "요청을 처리하지 못했습니다.", res.status, j.fields, j.pending);
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; fields?: Record<string, string>; pending?: boolean; rows?: unknown };
+  // rows 는 성공 응답에서는 다른 뜻(목록)일 수 있으므로 실패일 때만 줄 오류로 읽는다
+  const rowErrors = j.rows && typeof j.rows === "object" && !Array.isArray(j.rows) ? (j.rows as Record<string, string>) : undefined;
+  if (!res.ok || !j.ok) throw new HrApiError(j.error || "요청을 처리하지 못했습니다.", res.status, j.fields, j.pending, rowErrors);
   return j as T;
 }
 
