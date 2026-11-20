@@ -29,6 +29,14 @@ export type InventoryFacts = {
 };
 
 const qty = (n: number) => (Math.round(n * 10) / 10).toLocaleString("ko-KR");
+
+// 리포트에 쓰는 품목 이름 = 상품명 (옵션) — 2026-11-20 대표: "연어순살 1kg" 만으로는 어느 옵션인지 모른다 → "연어순살 1kg (200g)".
+//  옵션은 상품 마스터의 규격(products.spec). 옵션이 없거나 이름에 이미 들어 있으면 이름만.
+export function withOption(name: unknown, option: unknown): string {
+  const n = String(name ?? "").replace(/\s+/g, " ").trim();
+  const o = String(option ?? "").replace(/\s+/g, " ").trim().slice(0, 24);
+  return !o || n.includes(o) ? n : `${n} (${o})`;
+}
 const cell = (s: string) => s.replace(/[|\r\n]+/g, "/").replace(/\s+/g, " ").trim().slice(0, 40) || "-";
 
 // '재고 주의 품목' 표 — 머리 첫 칸이 '… 품목'이라 팀즈에선 adTablesForTeams 가 한 줄씩으로 바꾼다.

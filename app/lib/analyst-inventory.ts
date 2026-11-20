@@ -5,7 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getInventoryRows } from "./production-inventory";
 import { MOVE_SOURCES } from "./production-velocity";
-import type { InventoryFacts, InvFlowRow, InvWatchRow } from "./report-sections";
+import { withOption, type InventoryFacts, type InvFlowRow, type InvWatchRow } from "./report-sections";
 
 type Range = { since: string; until: string };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -68,10 +68,10 @@ d0 as (select product_id, txn_date, sum(qty) as q from inventory_txns where stat
 d as (select * from d0 union all select b.product_id, date '${cur.since}', 0 from b where b.q0 <= 0 and exists (select 1 from d0 where d0.product_id = b.product_id)),
 r as (select d.product_id, d.txn_date, coalesce(b.q0, 0) + sum(d.q) over w as bal, lead(d.txn_date, 1, date '${cur.until}' + 1) over w - d.txn_date as len
   from d left join b using (product_id) window w as (partition by d.product_id order by d.txn_date))
-select p.name, (sum(r.len) filter (where r.bal <= 0))::int as zero_days, (min(r.txn_date) filter (where r.bal <= 0))::text as first_zero
+select p.name, p.spec, (sum(r.len) filter (where r.bal <= 0))::int as zero_days, (min(r.txn_date) filter (where r.bal <= 0))::text as first_zero
 from r join products p on p.id = r.product_id
 where coalesce(p.stock_tracked, true) and coalesce(p.active, true)
-group by p.id, p.name having sum(r.len) filter (where r.bal <= 0) > 0
+group by p.id, p.name, p.spec having sum(r.len) filter (where r.bal <= 0) > 0
 order by zero_days desc, first_zero limit 5`;
 }
 
@@ -132,9 +132,19 @@ export async function collectInventory(
     const short = rows.filter((r) => (r.stock ?? 0) > 0 && r.belowSafety)
       .sort((a, b) => (a.requestByDays ?? 9999) - (b.requestByDays ?? 9999) || a.name.localeCompare(b.name, "ko"));
     const daysOf = (r: { stock: number | null; dailyOut: number }) => (r.dailyOut > 0 ? Math.max(0, Math.floor(Math.max(0, r.stock ?? 0) / r.dailyOut)) : null);
+    // 품목 이름 = 상품명 (옵션) — 리포트에 실리는 품목(최대 14개)의 규격만 읽는다. 못 읽으면 이름만 쓴다(리포트는 그대로 만든다).
+    const shown = [...new Set([...soldout.slice(0, 6), ...short.slice(0, 6)].map((r) => String(r.sku || "").trim().toUpperCase()).filter(Boolean))];
+    const specBySku = new Map<string, string>();
+    if (shown.length) {
+      try {
+        const rows = await sql<{ sku: string; spec: string }>(sb, `select upper(sku) as sku, max(spec) as spec from products where upper(sku) in (${shown.map((s) => `'${s.replace(/'/g, "''")}'`).join(", ")}) and coalesce(spec, '') <> '' group by 1`, 50);
+        for (const x of rows) specBySku.set(String(x.sku), String(x.spec));
+      } catch (e) { console.error("[analyst-inventory] 규격 조회 실패 — 품목 이름에 옵션 없이 진행", e instanceof Error ? e.message : e); }
+    }
+    const label = (r: { sku?: string | null; name: string }) => withOption(r.name, specBySku.get(String(r.sku || "").trim().toUpperCase()));
     const watch: InvWatchRow[] = [...soldout.map((r) => ({ r, state: "재고 없음" as const })), ...short.map((r) => ({ r, state: "부족" as const }))]
       .slice(0, 6)
-      .map(({ r, state }) => ({ name: r.name, stock: r.stock ?? 0, daily: r1(r.dailyOut), days: daysOf(r), inbound: r.inbound, due: r.inboundDue, state }));
+      .map(({ r, state }) => ({ name: label(r), stock: r.stock ?? 0, daily: r1(r.dailyOut), days: daysOf(r), inbound: r.inbound, due: r.inboundDue, state }));
     const od = await sb.from("production_requests").select("id", { count: "exact", head: true })
       .in("status", ["요청", "진행중"]).eq("purpose", "재고 보충").lt("due_date", today);
     if (!inv.inboundOk) notes.push("입고 예정 집계 실패 — 부족 판정이 실제보다 많을 수 있음");
@@ -143,8 +153,8 @@ export async function collectInventory(
       at: today,
       soldout: soldout.length,
       short: short.length,
-      soldout_top: soldout.slice(0, 5).map((r) => r.name),
-      urgent_top: short.slice(0, 3).map((r) => ({ name: r.name, days: daysOf(r), request_by_days: r.requestByDays })),
+      soldout_top: soldout.slice(0, 5).map((r) => label(r)),
+      urgent_top: short.slice(0, 3).map((r) => ({ name: label(r), days: daysOf(r), request_by_days: r.requestByDays })),
       inbound_total: Math.round(live.reduce((s, r) => s + (r.inbound || 0), 0)),
       inbound_overdue: Math.round(live.reduce((s, r) => s + (r.inboundOverdue || 0), 0)),
       overdue_requests: od.error ? null : od.count ?? 0,
@@ -153,7 +163,7 @@ export async function collectInventory(
   })() : Promise.resolve(null);
 
   const flowP = sqlWithSource<{ per: string; kind: string; qty: number; net: number; items: number; cost: number }>(sb, (src) => flowSql(range, period === "daily" ? undefined : prevRange, src));
-  const zeroP = period === "daily" ? Promise.resolve(null) : sql<{ name: string; zero_days: number; first_zero: string }>(sb, zeroedSql(range), 5);
+  const zeroP = period === "daily" ? Promise.resolve(null) : sql<{ name: string; spec: string | null; zero_days: number; first_zero: string }>(sb, zeroedSql(range), 5);
   const valueP = period === "monthly" && opts.prevMonthEnd ? sql<{ v1: number; v0: number; neg: number }>(sb, valueSql(range.until, opts.prevMonthEnd), 1) : Promise.resolve(null);
   const purchaseP = period === "monthly" ? (async () => {
     const month = range.since.slice(0, 7);
@@ -186,7 +196,7 @@ export async function collectInventory(
         ...(period !== "daily" ? { prev: sortFlow(flowRows.filter((r) => r.per === "prev").map(toRow)) } : {}),
       },
     } : {}),
-    ...(zeroR.status === "fulfilled" && zeroR.value ? { zeroed: zeroR.value.map((z) => ({ name: z.name, zero_days: Number(z.zero_days) || 0, first_zero: z.first_zero })) } : {}),
+    ...(zeroR.status === "fulfilled" && zeroR.value ? { zeroed: zeroR.value.map((z) => ({ name: withOption(z.name, z.spec), zero_days: Number(z.zero_days) || 0, first_zero: z.first_zero })) } : {}),
     ...(valueR.status === "fulfilled" && valueR.value?.[0] ? { value: { end: Number(valueR.value[0].v1) || 0, prev_end: Number(valueR.value[0].v0) || 0, neg_items: Number(valueR.value[0].neg) || 0 } } : {}),
     ...(purR.status === "fulfilled" && purR.value ? { purchase: purR.value } : {}),
     ...(notes.length ? { note: notes.join(" / ") } : {}),
