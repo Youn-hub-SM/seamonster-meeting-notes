@@ -42,7 +42,13 @@ export function isPending007(err: unknown): boolean {
   return /(stock_lots|stock_txns|target_kg|\bkg\b)/.test(m) && /(column|schema cache|Could not find|does not exist)/i.test(m);
 }
 export const PENDING_007 = "DB 준비 전입니다 — supabase/migrations/factory/007_kg_basis.sql 을 적용하세요.";
-export const PENDING_006_HINT = "규격은 supabase/migrations/factory/006_products_spec.sql 적용 뒤 저장됩니다.";
+// migration factory/010(예상 화면의 흐름 표·함수) 미적용
+export function isPending010(err: unknown): boolean {
+  const m = String((err as { message?: string })?.message ?? err ?? "");
+  return /(flows|flow_overview|flow_item|commit_flows)/.test(m) && /(does not exist|schema cache|Could not find)/i.test(m);
+}
+export const PENDING_010 = "DB 준비 전입니다 — supabase/migrations/factory/010_flows.sql 을 적용하세요.";
+export const PENDING_006_HINT ="규격은 supabase/migrations/factory/006_products_spec.sql 적용 뒤 저장됩니다.";
 
 // 품목 입력 정리 — 순수 함수라 공용 파일(factory.ts)에 있다. 기존 import 경로 유지용 재수출.
 export { parseProductInput, histValue, MASTER_FIELDS, PRICE_FIELDS, type ProductPatch } from "./factory";

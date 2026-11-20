@@ -18,7 +18,11 @@ const NAV = [
   { href: "/factory/products", label: "상품마스터", icon: "fish" as const },
 ];
 // 계정(직원 계정 만들기)은 관리자에게만 — 서버(/api/factory/accounts)가 관리자 여부를 답한다
-const ADMIN_NAV = [{ href: "/factory/accounts", label: "계정", icon: "user" as const, exact: false }];
+//  예상(출고·생산 예상, 2026-11-20)도 관리자에게만 — 서버(/api/factory/forecast)도 관리자만 답한다
+const ADMIN_NAV = [
+  { href: "/factory/forecast", label: "예상", icon: "trend" as const, exact: false },
+  { href: "/factory/accounts", label: "계정", icon: "user" as const, exact: false },
+];
 
 export default function FactoryShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/factory";
