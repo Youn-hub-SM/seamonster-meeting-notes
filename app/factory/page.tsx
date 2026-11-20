@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { DEFAULT_FACTORY_FIELDS, HIST_COLOR, boxBreakdown, boxGroups, boxQty, boxSummary, boxesOf, kgStr, kgNum, lotLabel, signedKg, type FactoryFields, type StockRow, type TxnType } from "@/app/lib/factory";
+import { DEFAULT_FACTORY_FIELDS, DEFAULT_STORAGE, HIST_COLOR, KIND_LABEL, boxBreakdown, boxGroups, boxQty, boxSummary, boxesOf, kgStr, kgNum, lotKeyOf, lotLabel, signedKg, type FactoryFields, type FormType, type StockRow, type TxnKind, type TxnType } from "@/app/lib/factory";
 import TxnForm from "./TxnForm";
 import { today, daysAgo } from "./util";
 
@@ -34,16 +34,25 @@ export default function FactoryStockPage() {
   const [cto, setCto] = useState(today());
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "depletion_days", dir: "asc" });
   const [open, setOpen] = useState<Set<string>>(new Set());
-  const [form, setForm] = useState<{ type: TxnType; productId?: string } | null>(null);
+  const [form, setForm] = useState<{ type: FormType; productId?: string } | null>(null);
   const [priceFor, setPriceFor] = useState<StockRow | null>(null);
   const [historyFor, setHistoryFor] = useState<StockRow | null>(null);
   // 선택 칸 설정 + 이전에 적은 값(드롭다운) — 입출고 창이 쓰고, 로트 줄 표시도 이 설정을 따른다
   const [fields, setFields] = useState<FactoryFields>(DEFAULT_FACTORY_FIELDS);
   const [suggest, setSuggest] = useState<{ partners: string[]; tape_colors: string[] }>({ partners: [], tape_colors: [] });
+  // 구분·보관처·단가·이동(factory/011) — DB 가 준비됐을 때만 켠다. 보관처가 둘 이상이면 [이동]이 보인다
+  const [kinds, setKinds] = useState(false);
+  const [storages, setStorages] = useState<string[]>([DEFAULT_STORAGE]);
+  const [admin, setAdmin] = useState(false);
+  const canMove = kinds && storages.length > 1;
   const loadFields = useCallback(async () => {
     try {
       const j = await (await fetch("/api/factory/fields", { cache: "no-store" })).json();
-      if (j.ok) { setFields(j.fields); setSuggest({ partners: j.partners || [], tape_colors: j.tape_colors || [] }); }
+      if (j.ok) {
+        setFields(j.fields); setSuggest({ partners: j.partners || [], tape_colors: j.tape_colors || [] });
+        setKinds(!!j.kinds); setAdmin(!!j.admin);
+        if (Array.isArray(j.storages) && j.storages.length) setStorages(j.storages);
+      }
     } catch { /* 설정을 못 읽으면 기본값(둘 다 보임) */ }
   }, []);
   useEffect(() => { loadFields(); }, [loadFields]);
@@ -108,7 +117,7 @@ export default function FactoryStockPage() {
   const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" || key === "depletion_days" ? "asc" : "desc" }));
-  const openForm = (type: TxnType, productId?: string) => { setNotice(""); setForm({ type, productId }); };
+  const openForm = (type: FormType, productId?: string) => { setNotice(""); setForm({ type, productId }); };
 
   const Th = ({ k, label, numeric }: { k: SortKey; label: string; numeric?: boolean }) => (
     <th className={`fac-th-sort ${numeric ? "num" : ""}`} onClick={() => toggleSort(k)} title="눌러서 정렬">
@@ -134,7 +143,7 @@ export default function FactoryStockPage() {
       {r.lots.length === 0 ? <div className="fac-sub">기록이 없습니다.</div> : (
         <div className="fac-lots">
           {r.lots.filter((l) => l.kg !== 0 || open.has(`${r.id}:all`)).map((l) => (
-            <div key={`${l.mfg_date || "none"}|${l.box_kg ?? ""}`} className={`fac-lot ${l.kg === 0 ? "is-zero" : ""}`}>
+            <div key={lotKeyOf(l)} className={`fac-lot ${l.kg === 0 ? "is-zero" : ""}`}>
               <span className="fac-lot-name">{lotLabel(l)}</span>
               <span className="fac-sub">
                 {[l.in_date ? `입고 ${l.in_date}` : "", l.adj_kg ? `조정 ${signedKg(l.adj_kg)}` : "",
@@ -159,6 +168,7 @@ export default function FactoryStockPage() {
           <button type="button" className="b2b-btn-secondary" onClick={() => openForm("입고", r.id)}>입고</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => openForm("출고", r.id)} disabled={r.kg <= 0}>출고</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => openForm("조정", r.id)}>조정</button>
+          {canMove && <button type="button" className="b2b-btn-secondary" onClick={() => openForm("이동", r.id)} disabled={r.kg <= 0}>이동</button>}
           <button type="button" className="b2b-btn-secondary" onClick={() => setPriceFor(r)}>가격 수정</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => setHistoryFor(r)}>히스토리</button>
         </div>
@@ -174,6 +184,7 @@ export default function FactoryStockPage() {
           <button className="b2b-btn-primary" onClick={() => openForm("입고")}>입고</button>
           <button className="b2b-btn-secondary" onClick={() => openForm("출고")}>출고</button>
           <button className="b2b-btn-secondary" onClick={() => openForm("조정")}>조정</button>
+          {canMove && <button className="b2b-btn-secondary" onClick={() => openForm("이동")}>이동</button>}
         </div>
       </header>
 
@@ -288,6 +299,7 @@ export default function FactoryStockPage() {
       {form && (
         <TxnForm rows={rows} initialType={form.type} initialProductId={form.productId}
           fields={fields} suggest={suggest} onFields={setFields}
+          kinds={kinds} storages={storages} admin={admin} onStorages={setStorages}
           onClose={() => setForm(null)}
           onSaved={(msg) => { setForm(null); setNotice(msg); load(); loadFields(); }} />
       )}
@@ -345,6 +357,7 @@ function StockTableRow({ r, opened, onToggle, detail, onHistory, onRecord }: {
 type HistTxn = {
   id: string; txn_date: string; type: TxnType; mfg_date: string | null; kg: number; box_kg: number | null; boxes: number | null;
   partner: string | null; memo: string | null; created_by: string | null; cancelled_at: string | null;
+  kind?: TxnKind | null; storage?: string | null;
 };
 function HistoryModal({ product, onClose }: { product: StockRow; onClose: () => void }) {
   const [rows, setRows] = useState<HistTxn[]>([]);
@@ -400,7 +413,7 @@ function HistoryModal({ product, onClose }: { product: StockRow; onClose: () => 
                         <tr key={t.id} className={t.cancelled_at ? "fac-row-cancelled" : undefined}>
                           <td className="sm-nowrap">{t.txn_date}</td>
                           <td className="sm-nowrap">
-                            <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span>
+                            <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.kind ? KIND_LABEL[t.kind] : t.type}</span>
                             {t.cancelled_at && <span className="b2b-status-pill" style={{ marginLeft: 4, background: HIST_COLOR.취소.bg, color: HIST_COLOR.취소.fg }}>취소</span>}
                           </td>
                           <td className="sm-nowrap">{lotLabel(t)}</td>

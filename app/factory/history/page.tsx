@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
-import { HIST_COLOR, FIELD_LABEL, boxQty, boxesOf, kgStr, kgNum, lotLabel, signedKg, type HistEvent, type HistKind } from "@/app/lib/factory";
+import { HIST_COLOR, FIELD_LABEL, KIND_LABEL, boxQty, boxesOf, kgStr, kgNum, lotLabel, signedKg, type HistEvent, type HistKind } from "@/app/lib/factory";
 import { today, daysAgo } from "../util";
 
 const KINDS: ("전체" | HistKind)[] = ["전체", "입고", "출고", "조정", "취소", "변경"];
@@ -25,7 +25,9 @@ function describe(e: HistEvent): string {
     if (f === "삭제") return "품목 삭제";
     return `${FIELD_LABEL[f] || f} ${money(f, e.old_value)} → ${money(f, e.new_value)}`;
   }
-  const parts = [lotLabel({ mfg_date: e.mfg_date ?? null, box_kg: e.box_kg })];
+  const parts = [lotLabel({ mfg_date: e.mfg_date ?? null, box_kg: e.box_kg, storage: e.storage })];
+  if (e.txn_kind) parts.unshift(KIND_LABEL[e.txn_kind]);
+  if (e.unit_price != null) parts.push(`${e.unit_price.toLocaleString("ko-KR")}원/kg`);
   if (e.txn_type === "조정" && e.target_kg != null && e.kg != null) parts.push(`실사 ${kgStr(e.target_kg)}(이전 ${kgStr(kgNum(e.target_kg - e.kg))})`);
   if (e.partner) parts.push(e.partner);
   if (e.tape_color) parts.push(`테잎 ${e.tape_color}`);
@@ -43,6 +45,7 @@ export default function FactoryHistoryPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [capped, setCapped] = useState(false);
+  const [kinds, setKinds] = useState(false); // factory/011 적용 — 엑셀 추출을 보인다
   const [busy, setBusy] = useState<string | null>(null);
   const seq = useRef(0); // 기간을 빨리 바꿀 때 늦게 온 이전 응답이 덮어쓰지 않게
 
@@ -54,7 +57,7 @@ export default function FactoryHistoryPage() {
       if (my !== seq.current) return;
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setEvents(j.events || []);
-      setCapped(!!j.capped);
+      setCapped(!!j.capped); setKinds(!!j.kinds);
     } catch (e) { if (my === seq.current) setError(e instanceof Error ? e.message : "조회 오류"); }
     if (my === seq.current) setLoading(false);
   }, [from, to]);
@@ -64,14 +67,14 @@ export default function FactoryHistoryPage() {
     const q = kw.trim();
     return events
       .filter((e) => kind === "전체" || e.kind === kind)
-      .filter((e) => !q || matchKoQuery(`${e.name || ""} ${e.sku || ""} ${e.who || ""} ${e.partner || ""} ${e.tape_color || ""} ${e.memo || ""}`, q));
+      .filter((e) => !q || matchKoQuery(`${e.name || ""} ${e.sku || ""} ${e.who || ""} ${e.partner || ""} ${e.tape_color || ""} ${e.memo || ""} ${e.txn_kind ? KIND_LABEL[e.txn_kind] : ""} ${e.storage || ""}`, q));
   }, [events, kind, kw]);
 
-  // 기간 합계(kg) — 거래일이 기간 안이고 취소 안 된 기록만(입력만 기간 안인 지난 날짜 기록은 빼고)
+  // 기간 합계(kg) — 거래일이 기간 안이고 취소 안 된 기록만(입력만 기간 안인 지난 날짜 기록은 빼고). 창고 사이 이동은 뺀다(보관처만 바뀜)
   const sums = useMemo(() => {
     const s = { 입고: 0, 출고: 0, 조정: 0 };
     for (const e of events)
-      if ((e.kind === "입고" || e.kind === "출고" || e.kind === "조정") && !e.cancelled_at && e.date >= from && e.date <= to) s[e.kind] += e.kg || 0;
+      if ((e.kind === "입고" || e.kind === "출고" || e.kind === "조정") && !e.cancelled_at && e.txn_kind !== "이동" && e.date >= from && e.date <= to) s[e.kind] += e.kg || 0;
     return { 입고: kgNum(s.입고), 출고: kgNum(s.출고), 조정: kgNum(s.조정) };
   }, [events, from, to]);
 
@@ -82,7 +85,7 @@ export default function FactoryHistoryPage() {
 
   async function cancel(e: HistEvent) {
     if (!e.txn_id) return;
-    if (!confirm(`이 ${e.txn_type} 기록을 취소할까요?\n${e.name} · ${describe(e)} · ${signedKg(e.kg || 0)}`)) return;
+    if (!confirm(`이 ${e.txn_type} 기록을 취소할까요?${e.move_id ? " 이동은 나간 기록과 들어온 기록이 함께 취소됩니다." : ""}\n${e.name} · ${describe(e)} · ${signedKg(e.kg || 0)}`)) return;
     setBusy(e.txn_id); setError(""); setNotice("");
     try {
       const res = await fetch(`/api/factory/txns/${e.txn_id}`, { method: "DELETE" });
@@ -111,6 +114,13 @@ export default function FactoryHistoryPage() {
           <h1 className="b2b-page-title">히스토리</h1>
           <p className="b2b-page-subtitle">입고 {kgStr(sums.입고)} · 출고 {kgStr(Math.abs(sums.출고))} · 조정 {signedKg(sums.조정)}</p>
         </div>
+        {/* 엑셀 추출 — 위에서 고른 기간의 기록을 ERP 두 양식으로(모든 계정) */}
+        {kinds && (
+          <div className="b2b-page-actions">
+            <a className="b2b-btn-secondary" href={`/api/factory/export?file=ship&from=${from}&to=${to}`}>출고 엑셀</a>
+            <a className="b2b-btn-secondary" href={`/api/factory/export?file=prod&from=${from}&to=${to}`}>매입·생산 엑셀</a>
+          </div>
+        )}
       </header>
 
       {error && <div className="b2b-error">{error}</div>}

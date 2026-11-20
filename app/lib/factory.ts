@@ -43,13 +43,25 @@ export interface FactoryProduct {
 }
 
 // 선택 칸(2026-11-17) — 거래처(partner)·테잎색(tape_color)을 입출고 창·재고 목록에 보일지. b2b_settings kv 'factory_fields'.
+// 기록 구분(factory/011) — 입고·출고 아래의 꼬리표. 이동은 '출고(이동) + 입고(이동)' 두 줄(같은 move_id).
+export const IN_KINDS = ["생산", "매입", "반품"] as const;
+export const OUT_KINDS = ["매출", "현장투입"] as const;
+export type TxnKind = (typeof IN_KINDS)[number] | (typeof OUT_KINDS)[number] | "이동";
+export const KIND_LABEL: Record<TxnKind, string> = { 생산: "생산", 매입: "매입", 반품: "반품", 매출: "매출", 현장투입: "현장 투입", 이동: "이동" };
+// 단가(kg당)를 적는 구분
+export const PRICED_KINDS: TxnKind[] = ["매입", "매출", "반품"];
+export const DEFAULT_STORAGE = "구평창고1층";
+// 화면의 기록 종류 — 이동은 저장할 때 출고·입고 두 줄로 풀린다
+export type FormType = TxnType | "이동";
+
 export interface FactoryFields { partner: boolean; tape_color: boolean }
 export const DEFAULT_FACTORY_FIELDS: FactoryFields = { partner: true, tape_color: true };
 
-// 로트 = 품목 × 제조일자 × 박스 중량 (factory.stock_lots 뷰 1행, 단위 kg · 박스 수 = kg ÷ box_kg)
+// 로트 = 품목 × 제조일자 × 박스 중량 × 보관처 (factory.stock_lots 뷰 1행, 단위 kg · 박스 수 = kg ÷ box_kg)
 export interface StockLot {
   mfg_date: string | null;
   box_kg: number | null;        // 박스 중량(없으면 kg 만)
+  storage: string;              // 보관처(011 전에는 전부 기본 보관처)
   tape_colors: string[];        // 이 로트 입고 때 적은 테잎색(최근 순, 고유)
   partners: string[];           // 이 로트 입고 때 적은 거래처(최근 순, 고유)
   kg: number;                   // 현재 kg
@@ -98,6 +110,10 @@ export interface HistEvent {
   boxes?: number | null;        // 참고: 박스 수(부호 있음)
   partner?: string | null;
   tape_color?: string | null;   // 입고 때 적은 테잎색(009)
+  txn_kind?: TxnKind | null;    // 구분(011) — 비어 있으면 옛 기록
+  storage?: string | null;      // 보관처(011)
+  unit_price?: number | null;   // kg당 단가(011)
+  move_id?: string | null;      // 이동 짝 번호(011)
   memo?: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;
@@ -160,10 +176,15 @@ export function productLabel(p: { name: string; spec?: string | null }): string 
 }
 
 // 로트 이름 — "제조 2026-09-01 · 16kg박스" (제조일자 없으면 '제조일 미상', 박스 중량 없으면 날짜만)
-export function lotLabel(l: { mfg_date: string | null; box_kg?: number | null }): string {
+//  보관처는 기본 보관처가 아닐 때만 붙인다(한 곳만 쓰는 동안 화면이 지금과 같게)
+export function lotLabel(l: { mfg_date: string | null; box_kg?: number | null; storage?: string | null }): string {
   const d = l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상";
-  return l.box_kg ? `${d} · ${kgStr(Number(l.box_kg))}박스` : d;
+  const s = l.box_kg ? `${d} · ${kgStr(Number(l.box_kg))}박스` : d;
+  return l.storage && l.storage !== DEFAULT_STORAGE ? `${s} · ${l.storage}` : s;
 }
+// 로트 열쇠 — 화면 key·같은 로트 판정에 쓴다
+export const lotKeyOf = (l: { mfg_date: string | null; box_kg?: number | null; storage?: string | null }) =>
+  `${l.mfg_date || ""}|${l.box_kg == null ? "" : Number(l.box_kg)}|${l.storage || DEFAULT_STORAGE}`;
 
 // 품목 변경 이력의 필드 이름
 export const FIELD_LABEL: Record<string, string> = {

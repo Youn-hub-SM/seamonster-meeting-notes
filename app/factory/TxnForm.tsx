@@ -11,40 +11,52 @@
 //   수량·제조일자는 첫 로트 줄(lines[0])의 값이다. 줄을 더하면 아래에 보통 줄로 붙는다.
 //   품목은 [입고 저장] 때 /api/factory/products/quick 으로 먼저 등록하고(이름·규격·원산지가 같으면 기존 품목) 그 id 로 입고한다.
 //   창을 닫으면 아무것도 남지 않는다.
+//  구분·보관처·단가·이동(factory/011, 2026-11-20 대표 지시 — kinds 가 true 일 때만 보인다):
+//   입고는 생산·매입·반품, 출고는 매출·현장 투입 중 하나를 고른다(한 번 저장 = 한 구분). 매입·매출·반품은 줄마다 kg당 단가.
+//   보관처가 둘 이상이면 입고·조정 새 줄이 들어갈 보관처를 창 머리에서 고르고, [이동]으로 로트를 다른 보관처로 옮긴다.
+//   로트 줄(출고·조정·이동)은 그 로트의 보관처를 따른다. 보관처 목록은 '칸 설정'에서 관리자가 고친다.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { ORIGINS, boxBreakdown, boxSummary, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type FactoryFields, type StockRow, type TxnType } from "@/app/lib/factory";
+import { DEFAULT_STORAGE, IN_KINDS, KIND_LABEL, ORIGINS, OUT_KINDS, PRICED_KINDS, boxBreakdown, boxSummary, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type FactoryFields, type FormType, type StockRow, type TxnKind } from "@/app/lib/factory";
 import { today } from "./util";
 
 // kg = 이 줄의 수량(입고·출고) 또는 실사 kg(조정). box_kg = 박스 중량(로트 줄은 로트의 값), boxes = 박스 수. have = 기존 로트의 현재 kg.
 // partner = 이 재고가 나갈 거래처(입고 줄마다, 2026-11-17 대표: 입고처가 아니라 출고될 곳). 출고는 창 머리의 거래처 하나.
-type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; boxes: string; kg: string; have: number; in_date: string | null; tape_color: string; partner: string };
+// storage = 로트 줄의 보관처(새 줄은 비어 있고 창 머리의 보관처로 들어간다). price = kg당 단가.
+type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; boxes: string; kg: string; have: number; in_date: string | null; tape_color: string; partner: string; storage: string; price: string };
 // draft = 아직 등록 전인 새 품목(입고 저장 때 등록). product_id 는 그때까지 비어 있다.
 type Block = { key: string; product_id: string; lines: Line[]; draft?: { name: string; spec: string; origin: string } };
 const normName = (s: string) => s.trim().replace(/\s+/g, " ");
 
 let seq = 0;
 const k = () => `k${++seq}`;
-const newLine = (): Line => ({ key: k(), lot: false, mfg_date: today(), box_kg: "", boxes: "", kg: "", have: 0, in_date: null, tape_color: "", partner: "" });
+const newLine = (): Line => ({ key: k(), lot: false, mfg_date: today(), box_kg: "", boxes: "", kg: "", have: 0, in_date: null, tape_color: "", partner: "", storage: "", price: "" });
+// 재고를 빼는 종류 — 로트에서 고르고 재고보다 많이 못 뺀다
+const takes = (t: FormType) => t === "출고" || t === "이동";
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-function makeLines(p: StockRow, type: TxnType): Line[] {
+function makeLines(p: StockRow, type: FormType): Line[] {
   if (type === "입고") return [newLine()];
-  const lots = p.lots.filter((l) => (type === "출고" ? l.kg > 0 : l.kg !== 0));
-  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: l.box_kg == null ? "" : String(l.box_kg), boxes: "", kg: "", have: l.kg, in_date: l.in_date, tape_color: "", partner: "" }));
+  const lots = p.lots.filter((l) => (takes(type) ? l.kg > 0 : l.kg !== 0));
+  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: l.box_kg == null ? "" : String(l.box_kg), boxes: "", kg: "", have: l.kg, in_date: l.in_date, tape_color: "", partner: "", storage: l.storage, price: "" }));
 }
 
-const TITLE: Record<TxnType, string> = { 입고: "입고", 출고: "출고", 조정: "조정" };
+const TITLE: Record<FormType, string> = { 입고: "입고", 출고: "출고", 조정: "조정", 이동: "이동" };
+const defaultKind = (t: FormType): TxnKind => (t === "출고" ? "매출" : "생산");
 // 입력 번호 — 창을 열 때 한 번 만들고 다시 눌러도 같은 번호(서버가 두 번 기록하지 않는다)
 const newBatch = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : undefined);
 const numOr = (s: string) => (s.trim() === "" ? null : Number(s));
 
-export default function TxnForm({ rows, initialType, initialProductId, fields, suggest, onFields, onClose, onSaved }: {
+export default function TxnForm({ rows, initialType, initialProductId, fields, suggest, kinds, storages, admin, onStorages, onFields, onClose, onSaved }: {
   rows: StockRow[];
-  initialType: TxnType;
+  initialType: FormType;
   initialProductId?: string;
+  kinds: boolean;                                          // factory/011 적용 — 구분·보관처·단가·이동 칸을 보인다
+  storages: string[];                                      // 보관처 목록(첫째 = 기본)
+  admin: boolean;                                          // 보관처 목록은 관리자만 고친다
+  onStorages: (s: string[]) => void;
   fields: FactoryFields;                                   // 선택 칸(거래처·테잎색) 보이기
   suggest: { partners: string[]; tape_colors: string[] };   // 이전에 적은 값 — 드롭다운
   onFields: (f: FactoryFields) => void;
@@ -62,8 +74,22 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
       if (!r.ok || !j.ok) throw new Error(j.error || "칸 설정 저장 실패");
     } catch (e) { setError(e instanceof Error ? e.message : "칸 설정 저장 실패"); onFields(fields); }
   }
+  const [newStorage, setNewStorage] = useState("");
+  async function editStorage(body: { add_storage?: string; remove_storage?: string }) {
+    try {
+      const r = await fetch("/api/factory/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "보관처 저장 실패");
+      onStorages(j.storages); setNewStorage("");
+    } catch (e) { setError(e instanceof Error ? e.message : "보관처 저장 실패"); }
+  }
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
-  const [type, setType] = useState<TxnType>(initialType);
+  const [type, setType] = useState<FormType>(initialType);
+  const [kind, setKind] = useState<TxnKind>(defaultKind(initialType));
+  const [storage, setStorage] = useState(storages[0] || DEFAULT_STORAGE);   // 새로 들어오는 줄의 보관처
+  const [toStorage, setToStorage] = useState("");                             // 이동: 옮길 곳
+  const multi = kinds && storages.length > 1;
+  const priced = kinds && (type === "입고" || type === "출고") && PRICED_KINDS.includes(kind);
   const [date, setDate] = useState(today());
   const [batch, setBatch] = useState<string | undefined>(newBatch);
   const [partner, setPartner] = useState("");
@@ -79,9 +105,9 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
   const suggestRef = useRef<HTMLDivElement>(null);
   useEscClose(onClose, saving);
 
-  function switchType(t: TxnType) {
+  function switchType(t: FormType) {
     if (t === type) return;
-    setType(t); setError(""); setBatch(newBatch());
+    setType(t); setKind(defaultKind(t)); setError(""); setBatch(newBatch());
     if (t === "조정") setDate(today()); // 조정은 오늘 실사 기준
     // 새 품목은 입고에서만 — 다른 유형으로 바꾸면 뺀다(재고가 없으니 출고·조정할 게 없다)
     setBlocks((bs) => bs.filter((b) => t === "입고" || !b.draft).map((b) => { const p = byId.get(b.product_id); return p ? { ...b, lines: makeLines(p, t) } : b; }));
@@ -93,7 +119,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
     const added = new Set(blocks.map((b) => b.product_id));
     return rows
       .filter((p) => !added.has(p.id))
-      .filter((p) => type !== "출고" || p.kg > 0)
+      .filter((p) => !takes(type) || p.kg > 0)
       .filter((p) => matchKoQuery(`${p.name} ${p.spec || ""} ${p.sku} ${p.origin || ""} ${p.note || ""}`, q))
       .slice(0, 12);
   }, [rows, search, blocks, type]);
@@ -193,12 +219,15 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
       if (!Number.isFinite(n) || (type === "조정" ? n < 0 : n <= 0)) { setError(`${name}: ${type === "조정" ? "실사 kg 은 0 이상" : "kg 은 0보다 크게"} 입력하세요.`); return; }
       const bk = numOr(l.box_kg);
       if (bk !== null && !(bk > 0)) { setError(`${name}: 박스 중량(kg)이 올바르지 않습니다.`); return; }
-      if (type === "출고" && n > l.have + 0.0005) { setError(`${name} (${lotLabel({ mfg_date: l.mfg_date || null, box_kg: bk })}): 재고 ${kgBox(l.have, bk)}보다 많습니다.`); return; }
+      if (takes(type) && n > l.have + 0.0005) { setError(`${name} (${lotLabel({ mfg_date: l.mfg_date || null, box_kg: bk, storage: l.storage })}): 재고 ${kgBox(l.have, bk)}보다 많습니다.`); return; }
+      if (type === "이동" && (l.storage || DEFAULT_STORAGE) === toStorage) { setError(`${name}: 이미 ${toStorage}에 있는 재고입니다.`); return; }
+      if (priced && l.price.trim() !== "" && !(Number(l.price) >= 0)) { setError(`${name}: 단가가 올바르지 않습니다.`); return; }
     }
+    if (type === "이동" && !toStorage) { setError("옮길 보관처를 고르세요."); return; }
     // 같은 로트를 두 줄에 적으면(입고 새 줄끼리·조정 새 로트가 기존 로트와 겹침) 합계가 헷갈린다 — 막는다
     const seen = new Set<string>();
     for (const { b, l } of filled) {
-      const key = `${b.product_id || b.key}|${l.mfg_date}|${numOr(l.box_kg) ?? ""}`;
+      const key = `${b.product_id || b.key}|${l.mfg_date}|${numOr(l.box_kg) ?? ""}|${l.lot ? l.storage : storage}`;
       if (seen.has(key)) { setError(`${blockName(b)}: 같은 제조일자·박스 중량이 두 줄에 있습니다 — 한 줄로 합치세요.`); return; }
       seen.add(key);
     }
@@ -206,7 +235,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
       for (const { b, l } of filled) {
         if (l.lot) continue;
         const p = byId.get(b.product_id);
-        if (p?.lots.some((x) => (x.mfg_date || "") === l.mfg_date && (x.box_kg ?? null) === numOr(l.box_kg) && x.kg !== 0)) {
+        if (p?.lots.some((x) => (x.mfg_date || "") === l.mfg_date && (x.box_kg ?? null) === numOr(l.box_kg) && x.storage === storage && x.kg !== 0)) {
           setError(`${p.name}: 이미 있는 로트입니다 — 위 목록에서 실사 kg 을 적으세요.`); return;
         }
       }
@@ -235,12 +264,20 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
           box_kg: numOr(l.box_kg), boxes: bx !== null && Number.isInteger(bx) && bx > 0 ? bx : null,
           tape_color: type === "입고" && fields.tape_color ? l.tape_color.trim() || null : null,
           partner: type === "입고" && fields.partner ? l.partner.trim() || null : null,
+          // 011 — 로트 줄은 그 로트의 보관처, 단가는 적은 줄만
+          ...(kinds && l.lot ? { storage: l.storage } : {}),
+          ...(priced && l.price.trim() !== "" ? { unit_price: Number(l.price) } : {}),
           ...(type === "조정" ? { target_kg: Number(l.kg) } : { kg: Number(l.kg) }),
         };
       });
+      const extra = !kinds ? {} : {
+        ...(type === "입고" || type === "출고" ? { kind } : {}),
+        ...(type === "입고" || type === "조정" ? { storage } : {}),
+        ...(type === "이동" ? { to_storage: toStorage } : {}),
+      };
       const res = await fetch("/api/factory/txns", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, txn_date: type === "조정" ? today() : date, partner: type === "출고" && fields.partner ? partner : "", memo, lines, batch_id: batch }),
+        body: JSON.stringify({ type, txn_date: type === "조정" ? today() : date, partner: type === "출고" && fields.partner && kind !== "현장투입" ? partner : "", memo, lines, batch_id: batch, ...extra }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
@@ -268,9 +305,16 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
         <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1" value={l.kg}
           onChange={(e) => setLine(b.key, l.key, { kg: e.target.value })} />
       </label>
+      {type === "입고" && priced && (
+        <label className="fac-f fac-f-qty">
+          <span>단가(원/kg)</span>
+          <input className="b2b-input" type="number" inputMode="decimal" min={0} step={1} value={l.price} placeholder="선택"
+            onChange={(e) => setLine(b.key, l.key, { price: e.target.value })} />
+        </label>
+      )}
       {type === "입고" && fields.partner && (
         <label className="fac-f fac-f-tape">
-          <span>거래처</span>
+          <span>{kinds && kind === "매입" ? "매입처" : "거래처"}</span>
           <input className="b2b-input" list="fac-partners" value={l.partner} placeholder="선택" autoComplete="off"
             onChange={(e) => setLine(b.key, l.key, { partner: hangulInputValue(e) })} />
         </label>
@@ -295,7 +339,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
         <div className="b2b-modal-body">
           <div className="fac-txn-top">
             <div className="sm-tabs fac-txn-types">
-              {(["입고", "출고", "조정"] as TxnType[]).map((t) => (
+              {((multi ? ["입고", "출고", "조정", "이동"] : ["입고", "출고", "조정"]) as FormType[]).map((t) => (
                 <button key={t} type="button" className={`sm-tab ${type === t ? "is-active" : ""}`} onClick={() => switchType(t)}>{t}</button>
               ))}
             </div>
@@ -306,10 +350,36 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                 <div className="fac-fields-pop">
                   <label className="fac-check"><input type="checkbox" className="b2b-checkbox" checked={fields.partner} onChange={() => toggleField("partner")} /> 거래처</label>
                   <label className="fac-check"><input type="checkbox" className="b2b-checkbox" checked={fields.tape_color} onChange={() => toggleField("tape_color")} /> 테잎색</label>
+                  {kinds && (
+                    <div className="fac-storages">
+                      <span className="fac-sub">보관처</span>
+                      {storages.map((s, i) => (
+                        <span key={s} className="fac-storage">
+                          {s}
+                          {admin && i > 0 && <button type="button" className="b2b-link-btn" onClick={() => editStorage({ remove_storage: s })} aria-label={`${s} 빼기`}>✕</button>}
+                        </span>
+                      ))}
+                      {admin && (
+                        <span className="fac-storage-add">
+                          <input className="b2b-input" value={newStorage} placeholder="보관처 추가" maxLength={40} onChange={(e) => setNewStorage(hangulInputValue(e))}
+                            onKeyDown={(e) => { if (e.key === "Enter" && newStorage.trim()) { e.preventDefault(); editStorage({ add_storage: newStorage.trim() }); } }} />
+                          <button type="button" className="b2b-btn-secondary" disabled={!newStorage.trim()} onClick={() => editStorage({ add_storage: newStorage.trim() })}>추가</button>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
+          {/* 구분(011) — 한 번 저장 = 한 구분 */}
+          {kinds && (type === "입고" || type === "출고") && (
+            <div className="sm-tabs fac-txn-kinds">
+              {(type === "입고" ? IN_KINDS : OUT_KINDS).map((kd) => (
+                <button key={kd} type="button" className={`sm-tab ${kind === kd ? "is-active" : ""}`} onClick={() => setKind(kd)}>{KIND_LABEL[kd]}</button>
+              ))}
+            </div>
+          )}
           <datalist id="fac-partners">{suggest.partners.map((v) => <option key={v} value={v} />)}</datalist>
           <datalist id="fac-tape-colors">{suggest.tape_colors.map((v) => <option key={v} value={v} />)}</datalist>
 
@@ -319,7 +389,24 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
               <input className="b2b-input" type="date" value={type === "조정" ? today() : date} max={today()} disabled={type === "조정"} onChange={(e) => setDate(e.target.value)} />
             </label>
             {/* 입고의 거래처는 줄마다(재고가 나갈 곳) — 창 머리에는 출고 때만 */}
-            {type === "출고" && fields.partner && (
+            {multi && (type === "입고" || type === "조정") && (
+              <label className="b2b-field">
+                <span className="b2b-field-label">보관처</span>
+                <select className="b2b-input" value={storage} onChange={(e) => setStorage(e.target.value)}>
+                  {storages.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+            )}
+            {type === "이동" && (
+              <label className="b2b-field">
+                <span className="b2b-field-label">옮길 곳</span>
+                <select className="b2b-input" value={toStorage} onChange={(e) => setToStorage(e.target.value)}>
+                  <option value="">선택</option>
+                  {storages.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+            )}
+            {type === "출고" && fields.partner && !(kinds && kind === "현장투입") && (
               <label className="b2b-field">
                 <span className="b2b-field-label">거래처</span>
                 <input className="b2b-input" list="fac-partners" value={partner} autoComplete="off" onChange={(e) => setPartner(hangulInputValue(e))} placeholder="선택" />
@@ -353,7 +440,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
               </div>
             )}
             {search.trim() && optCount === 0 && (
-              <div className="fac-suggest"><div className="fac-suggest-none">{type === "출고" ? "재고 있는 품목 중 일치하는 것이 없습니다." : "일치하는 품목이 없습니다."}</div></div>
+              <div className="fac-suggest"><div className="fac-suggest-none">{takes(type) ? "재고 있는 품목 중 일치하는 것이 없습니다." : "일치하는 품목이 없습니다."}</div></div>
             )}
           </div>
 
@@ -408,7 +495,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                 </div>
 
                 {b.lines.length === 0 && type !== "입고" && (
-                  <div className="fac-sub fac-blk-empty">{type === "출고" ? "출고할 재고가 없습니다." : "로트가 없습니다."}</div>
+                  <div className="fac-sub fac-blk-empty">{takes(type) ? `${type}할 재고가 없습니다.` : "로트가 없습니다."}</div>
                 )}
 
                 {b.lines.filter((l, i) => !(b.draft && i === 0)).map((l) => l.lot ? (() => {
@@ -417,7 +504,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                   return (
                     <div key={l.key} className="fac-line is-lot">
                       <div className="fac-line-lot">
-                        <span>{lotLabel({ mfg_date: l.mfg_date || null, box_kg: bk })}</span>
+                        <span>{lotLabel({ mfg_date: l.mfg_date || null, box_kg: bk, storage: l.storage })}</span>
                         <span className="fac-sub">{l.in_date ? `입고 ${l.in_date} · ` : ""}재고 {kgBox(l.have, bk)}</span>
                       </div>
                       <div className="fac-line-qty">
@@ -426,17 +513,24 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                             <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.01" value={l.boxes}
                               placeholder={type === "조정" ? String(r2(l.have / bk)) : "0"}
                               onChange={(e) => setLine(b.key, l.key, { boxes: e.target.value })}
-                              aria-label={type === "조정" ? "실사 박스 수" : "출고 박스 수"} />
+                              aria-label={type === "조정" ? "실사 박스 수" : `${type} 박스 수`} />
                             <span className="fac-unit">박스</span>
                           </>
                         )}
                         <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1"
-                          max={type === "출고" ? l.have : undefined} value={l.kg}
+                          max={takes(type) ? l.have : undefined} value={l.kg}
                           placeholder={type === "조정" ? String(l.have) : "0"}
                           onChange={(e) => setLine(b.key, l.key, { kg: e.target.value })}
-                          aria-label={type === "조정" ? "실사 kg" : "출고 kg"} />
+                          aria-label={type === "조정" ? "실사 kg" : `${type} kg`} />
                         <span className="fac-unit">kg</span>
-                        {type === "출고" && <button type="button" className="b2b-link-btn" onClick={() => setLine(b.key, l.key, { kg: String(l.have) })}>전량</button>}
+                        {takes(type) && <button type="button" className="b2b-link-btn" onClick={() => setLine(b.key, l.key, { kg: String(l.have) })}>전량</button>}
+                        {type === "출고" && priced && (
+                          <>
+                            <input className="b2b-input fac-price" type="number" inputMode="decimal" min={0} step={1} value={l.price} placeholder="단가"
+                              onChange={(e) => setLine(b.key, l.key, { price: e.target.value })} aria-label="kg당 단가" />
+                            <span className="fac-unit">원/kg</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -454,7 +548,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                   </div>
                 ))}
 
-                {type !== "출고" && (
+                {!takes(type) && (
                   <button type="button" className="b2b-link-btn fac-add-line" onClick={() => addLine(b.key)}>
                     + {type === "입고" ? "제조일자·중량 추가" : "새 로트"}
                   </button>

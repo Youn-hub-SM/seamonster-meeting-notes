@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, isPending007, PENDING_007 } from "@/app/lib/factory-db";
-import { kgNum, type FactoryProduct, type StockLot, type StockMeta, type StockRow } from "@/app/lib/factory";
+import { DEFAULT_STORAGE, kgNum, type FactoryProduct, type StockLot, type StockMeta, type StockRow } from "@/app/lib/factory";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +11,9 @@ const validDate = (s: string) => DATE_RE.test(s) && !Number.isNaN(Date.parse(`${
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400e3);
 
 // factory.stock_lots 1행 — 품목 × 제조일자 × 박스 중량, kg (008)
+//  011 부터 보관처(storage)까지 나뉜다 — 미적용이면 열이 없어 기본 보관처로 본다
 type LotRow = {
-  product_id: string; mfg_date: string | null; box_kg: number | string | null;
+  product_id: string; mfg_date: string | null; box_kg: number | string | null; storage?: string | null;
   kg: number | string; in_kg: number | string; out_kg: number | string; adj_kg: number | string;
   first_in_date: string | null; last_in_date: string | null; first_txn_date: string | null;
   live_in_date: string | null;
@@ -30,22 +31,23 @@ async function allLots(): Promise<LotRow[]> {
   }
 }
 
-type PeriodTxn = { id: string; product_id: string; type: "입고" | "출고"; kg: number | string };
-type InTag = { product_id: string; mfg_date: string | null; box_kg: number | string | null; partner: string | null; tape_color: string | null };
-const lotKey = (t: { product_id: string; mfg_date: string | null; box_kg: number | string | null }) => `${t.product_id}|${t.mfg_date ?? ""}|${t.box_kg == null ? "" : Number(t.box_kg)}`;
+type PeriodTxn = { id: string; product_id: string; type: "입고" | "출고"; kg: number | string; kind?: string | null };
+type InTag = { product_id: string; mfg_date: string | null; box_kg: number | string | null; storage?: string | null; partner: string | null; tape_color: string | null };
+const lotKey = (t: { product_id: string; mfg_date: string | null; box_kg: number | string | null; storage?: string | null }) =>
+  `${t.product_id}|${t.mfg_date ?? ""}|${t.box_kg == null ? "" : Number(t.box_kg)}|${t.storage || DEFAULT_STORAGE}`;
+const isMissing011 = (e: { message?: string } | null) => !!e?.message && /(kind|storage)/.test(e.message);
 
 // 입고 때 적은 거래처·테잎색 — 로트별로 최근 순 고유값(취소 제외). 009 미적용이면 tape_color 없이.
 async function inboundTags(): Promise<Map<string, { partners: string[]; tape_colors: string[] }>> {
   const out = new Map<string, { partners: string[]; tape_colors: string[] }>();
-  let cols = "product_id, mfg_date, box_kg, partner, tape_color";
+  // 새 열이 없으면(011·009 미적용) 그 열을 빼고 다시 읽는다
+  const tries = ["product_id, mfg_date, box_kg, storage, partner, tape_color", "product_id, mfg_date, box_kg, partner, tape_color", "product_id, mfg_date, box_kg, partner"];
+  let ti = 0;
   for (let at = 0; ; at += 1000) {
-    let { data, error } = await factoryDb().from("stock_txns").select(cols)
+    const read = () => factoryDb().from("stock_txns").select(tries[ti])
       .is("cancelled_at", null).eq("type", "입고").order("created_at", { ascending: false }).range(at, at + 999);
-    if (error && /tape_color/.test(error.message)) {
-      cols = "product_id, mfg_date, box_kg, partner";
-      ({ data, error } = await factoryDb().from("stock_txns").select(cols)
-        .is("cancelled_at", null).eq("type", "입고").order("created_at", { ascending: false }).range(at, at + 999));
-    }
+    let { data, error } = await read();
+    while (error && ti < tries.length - 1 && /(storage|tape_color)/.test(error.message)) { ti++; ({ data, error } = await read()); }
     if (error) throw error;
     for (const t of (data || []) as unknown as InTag[]) {
       const k = lotKey(t);
@@ -60,14 +62,18 @@ async function inboundTags(): Promise<Map<string, { partners: string[]; tape_col
 }
 
 // 기간 입고·출고 — 거래일이 [from, to] 안, 취소 제외. 1000행 한도를 넘어도 잘리지 않게 id 순 페이지로 읽는다.
+//  창고 사이 이동(011)은 입고·출고 합에 넣지 않는다 — 보관처만 바뀐 것이라 하루 출고·예상소진이 부풀면 안 된다.
 async function periodTxns(from: string, to: string): Promise<PeriodTxn[]> {
   const out: PeriodTxn[] = [];
+  let cols = "id, product_id, type, kg, kind";
   for (let at = 0; ; at += 1000) {
-    const { data, error } = await factoryDb().from("stock_txns").select("id, product_id, type, kg")
+    const read = () => factoryDb().from("stock_txns").select(cols)
       .is("cancelled_at", null).in("type", ["입고", "출고"]).gte("txn_date", from).lte("txn_date", to)
       .order("id").range(at, at + 999);
+    let { data, error } = await read();
+    if (isMissing011(error)) { cols = "id, product_id, type, kg"; ({ data, error } = await read()); }
     if (error) throw error;
-    out.push(...((data || []) as PeriodTxn[]));
+    out.push(...((data || []) as unknown as PeriodTxn[]).filter((t) => t.kind !== "이동"));
     if (!data || data.length < 1000) return out;
   }
 }
@@ -116,6 +122,7 @@ export async function GET(req: NextRequest) {
       const lots: StockLot[] = (byProduct.get(p.id) || []).map((l) => ({
         mfg_date: l.mfg_date,
         box_kg: l.box_kg == null ? null : Number(l.box_kg),
+        storage: l.storage || DEFAULT_STORAGE,
         tape_colors: tags.get(lotKey(l))?.tape_colors ?? [],
         partners: tags.get(lotKey(l))?.partners ?? [],
         kg: kgNum(Number(l.kg) || 0),
@@ -129,7 +136,8 @@ export async function GET(req: NextRequest) {
       lots.sort((a, b) => (Number(b.kg > 0) - Number(a.kg > 0))
         || String(a.in_date || "9999").localeCompare(String(b.in_date || "9999"))
         || String(a.mfg_date || "9999").localeCompare(String(b.mfg_date || "9999"))
-        || (b.box_kg ?? 0) - (a.box_kg ?? 0));
+        || (b.box_kg ?? 0) - (a.box_kg ?? 0)
+        || a.storage.localeCompare(b.storage, "ko"));
       const sum = (f: (l: StockLot) => number) => kgNum(lots.reduce((s, l) => s + f(l), 0));
       const live = lots.filter((l) => l.kg > 0);
       const inDates = lots.map((l) => l.last_in_date).filter((d): d is string => !!d).sort();

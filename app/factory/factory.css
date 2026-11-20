@@ -322,3 +322,11 @@
 .fac-fc-progress { display: grid; gap: var(--sm-space-2); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
 .fac-fc-bar { height: 6px; border-radius: var(--sm-radius-pill); background: var(--sm-bg-subtle); overflow: hidden; }
 .fac-fc-bar > span { display: block; height: 100%; background: var(--fac-blue); transition: width .2s; }
+
+/* ── 구분·보관처·단가·이동(factory/011) ──────────────────────────── */
+.fac-txn-kinds { margin: 0 0 var(--sm-space-3); }
+.fac-storages { display: flex; flex-direction: column; gap: var(--sm-space-1); margin-top: var(--sm-space-2); padding-top: var(--sm-space-2); border-top: 1px solid var(--sm-border); }
+.fac-storage { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-2); font-size: var(--sm-fs-base); }
+.fac-storage-add { display: flex; gap: var(--sm-space-1); margin-top: var(--sm-space-1); }
+.fac-storage-add .b2b-input { width: 140px; min-width: 0; }
+.fac-line-qty .fac-price { width: 96px; }

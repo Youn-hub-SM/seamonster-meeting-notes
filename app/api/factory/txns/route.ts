@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, isPending007, PENDING_007 } from "@/app/lib/factory-db";
-import { TXN_TYPES, kgNum, productLabel, signedKg, type HistEvent, type TxnType } from "@/app/lib/factory";
+import { DEFAULT_STORAGE, IN_KINDS, OUT_KINDS, PRICED_KINDS, TXN_TYPES, kgNum, productLabel, signedKg, type HistEvent, type TxnKind, type TxnType } from "@/app/lib/factory";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,12 +22,21 @@ type TxnRow = {
   id: string; batch_id: string; product_id: string; txn_date: string; type: TxnType;
   mfg_date: string | null; kg: number | string; target_kg: number | string | null;
   box_kg: number | string | null; boxes: number | null; partner: string | null; tape_color?: string | null; memo: string | null;
+  kind?: TxnKind | null; storage?: string | null; unit_price?: number | string | null; move_id?: string | null;
   created_by: string | null; created_at: string; cancelled_at: string | null; cancelled_by: string | null;
 };
 // 열 목록은 string 으로 둔다 — 리터럴이면 supabase 가 결과 타입을 추론하지만 폴백(COLS_NO_TAPE)과 타입이 어긋난다. 결과는 TxnRow 로 캐스팅.
-const COLS: string = "id, batch_id, product_id, txn_date, type, mfg_date, kg, target_kg, box_kg, boxes, partner, tape_color, memo, created_by, created_at, cancelled_at, cancelled_by";
-const COLS_NO_TAPE: string = COLS.replace(", tape_color", ""); // 009 미적용 폴백
-const isMissingTape = (e: { message?: string } | null) => !!e?.message && /tape_color/.test(e.message);
+const COLS_009: string = "id, batch_id, product_id, txn_date, type, mfg_date, kg, target_kg, box_kg, boxes, partner, tape_color, memo, created_by, created_at, cancelled_at, cancelled_by";
+// 새 열이 없는 DB 에서도 죽지 않게 차례로 줄여 읽는다: 011(구분·보관처·단가·이동) → 009(테잎색) → 그 전
+const COL_TRIES: string[] = [`${COLS_009}, kind, storage, unit_price, move_id`, COLS_009, COLS_009.replace(", tape_color", "")];
+const isMissingCol = (e: { message?: string } | null) => !!e?.message && /(tape_color|kind|storage|unit_price|move_id)/.test(e.message);
+// run(cols) 를 되는 열 목록이 나올 때까지 시도한다. level = 쓴 목록 번호(0 이면 011 적용됨)
+async function withCols<T extends { error: { message?: string } | null }>(run: (cols: string) => PromiseLike<T>, from = 0): Promise<{ res: T; level: number }> {
+  let level = from;
+  let res = await run(COL_TRIES[level]);
+  while (isMissingCol(res.error) && level < COL_TRIES.length - 1) res = await run(COL_TRIES[++level]);
+  return { res, level };
+}
 
 // GET ?from=&to= — 히스토리: 기록(입고·출고·조정) + 기록 취소(취소한 날) + 품목 변경(바꾼 날). 최신순.
 //  기록은 거래일이 기간 안이거나 **입력한 날**이 기간 안이면 나온다 — 지난 날짜로 넣은 기록도 입력한 날 이력에서 보인다.
@@ -40,9 +49,7 @@ export async function GET(req: NextRequest) {
     const productId = sp.get("product_id") || "";
     if (productId) {
       if (!UUID_RE.test(productId)) return NextResponse.json({ ok: false, error: "품목이 올바르지 않습니다." }, { status: 400 });
-      let { data, error } = await factoryDb().from("stock_txns").select(COLS).eq("product_id", productId)
-        .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT);
-      if (isMissingTape(error)) ({ data, error } = await factoryDb().from("stock_txns").select(COLS_NO_TAPE).eq("product_id", productId)
+      const { res: { data, error } } = await withCols((cols) => factoryDb().from("stock_txns").select(cols).eq("product_id", productId)
         .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT));
       if (error) throw error;
       const rows = ((data || []) as unknown as TxnRow[]).map((t) => ({ ...t, kg: Number(t.kg), target_kg: num(t.target_kg), box_kg: num(t.box_kg) }));
@@ -61,8 +68,8 @@ export async function GET(req: NextRequest) {
       .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT);
     const cxQ = (cols: string) => db.from("stock_txns").select(cols).gte("cancelled_at", fromTs).lt("cancelled_at", toTs)
       .order("cancelled_at", { ascending: false }).limit(LIMIT);
-    let [tx, cx] = await Promise.all([txQ(COLS), cxQ(COLS)]);
-    if (isMissingTape(tx.error) || isMissingTape(cx.error)) [tx, cx] = await Promise.all([txQ(COLS_NO_TAPE), cxQ(COLS_NO_TAPE)]);
+    const { res: tx, level } = await withCols(txQ);
+    const { res: cx } = await withCols(cxQ, level);
     const [ch, pr] = await Promise.all([
       db.from("product_changes").select("*").gte("changed_at", fromTs).lt("changed_at", toTs)
         .order("changed_at", { ascending: false }).limit(LIMIT),
@@ -76,6 +83,7 @@ export async function GET(req: NextRequest) {
       txn_id: t.id, txn_type: t.type, mfg_date: t.mfg_date,
       kg: Number(t.kg), target_kg: num(t.target_kg), box_kg: num(t.box_kg), boxes: t.boxes,
       partner: t.partner, tape_color: t.tape_color ?? null, memo: t.memo, cancelled_at: t.cancelled_at, cancelled_by: t.cancelled_by,
+      txn_kind: t.kind ?? null, storage: t.storage ?? null, unit_price: num(t.unit_price ?? null), move_id: t.move_id ?? null,
       sku: prod.get(t.product_id)?.sku ?? null, name: prod.get(t.product_id)?.name ?? null,
     });
     const events: HistEvent[] = [
@@ -93,7 +101,7 @@ export async function GET(req: NextRequest) {
     ];
     events.sort((a, b) => b.date.localeCompare(a.date) || b.at.localeCompare(a.at));
     const capped = [tx, cx, ch].some((r) => (r.data || []).length >= LIMIT);
-    return NextResponse.json({ ok: true, events, from, to, capped });
+    return NextResponse.json({ ok: true, events, from, to, capped, kinds: level === 0 });
   } catch (err) {
     if (isPending005(err)) return pending();
     if (isPending007(err)) return pending7();
@@ -102,7 +110,11 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { type, txn_date?, partner?, memo?, batch_id?, lines: [{ product_id, mfg_date?, kg | target_kg, box_kg?, boxes?, tape_color?, partner? }] }
+// POST { type, kind?, storage?, to_storage?, txn_date?, partner?, memo?, batch_id?,
+//        lines: [{ product_id, mfg_date?, kg | target_kg, box_kg?, boxes?, tape_color?, partner?, storage?, unit_price? }] }
+//  011: kind = 구분(입고: 생산·매입·반품 / 출고: 매출·현장투입). storage = 새로 들어오는 줄의 보관처(창 머리), 줄의 storage = 그 로트의 보관처(출고·조정·이동).
+//       unit_price = kg당 단가(매입·매출·반품). type '이동' = 줄마다 '출고(이동) + 입고(이동)' 두 기록(같은 move_id), to_storage 로 옮긴다.
+//       화면은 011 이 적용됐을 때만 이 칸들을 보낸다 — 안 보내면 전과 똑같이 저장된다.
 //  입고·출고 = kg(양수, 0.001 단위), 조정 = target_kg(실사 kg — 현재와의 차이만 기록, 오늘 날짜만).
 //  box_kg·boxes 는 입고 때 적은 참고(총 kg 계산 보조) — 없어도 된다.
 //  batch_id = 화면이 만든 입력 번호 — 응답을 못 받고 다시 눌러도 한 번만 기록된다.
@@ -111,8 +123,23 @@ export async function POST(req: NextRequest) {
   try {
     const u = await factoryWho(req);
     const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const type = String(b.type || "") as TxnType;
+    const isMove = b.type === "이동";
+    const type = (isMove ? "출고" : String(b.type || "")) as TxnType;
     if (!TXN_TYPES.includes(type)) return NextResponse.json({ ok: false, error: "유형을 고르세요." }, { status: 400 });
+    const bad = (error: string) => NextResponse.json({ ok: false, error }, { status: 400 });
+    // 구분 — 유형에 맞는 것만. 조정에는 없다
+    const kindIn = String(b.kind || "").trim();
+    let kind: TxnKind | null = null;
+    if (isMove) kind = "이동";
+    else if (kindIn) {
+      const allowed: readonly string[] = type === "입고" ? IN_KINDS : type === "출고" ? OUT_KINDS : [];
+      if (!allowed.includes(kindIn)) return bad("구분이 올바르지 않습니다.");
+      kind = kindIn as TxnKind;
+    }
+    const storageOf = (v: unknown) => String(v ?? "").trim();
+    const headStorage = storageOf(b.storage), toStorage = storageOf(b.to_storage);
+    if (headStorage.length > 40 || toStorage.length > 40) return bad("보관처 이름이 너무 깁니다(40자까지).");
+    if (isMove && !toStorage) return bad("옮길 보관처를 고르세요.");
     const txn_date = String(b.txn_date || "") || kstToday();
     if (!validDate(txn_date)) return NextResponse.json({ ok: false, error: "날짜가 올바르지 않습니다." }, { status: 400 });
     if (txn_date > kstToday()) return NextResponse.json({ ok: false, error: "오늘 이후 날짜로는 기록할 수 없습니다." }, { status: 400 });
@@ -126,6 +153,11 @@ export async function POST(req: NextRequest) {
     if (raw.length > 200) return NextResponse.json({ ok: false, error: "한 번에 200줄까지 저장할 수 있습니다." }, { status: 400 });
 
     const db = factoryDb();
+    if (isMove) {
+      // 이동은 011 이 있어야 한다 — 옛 저장 함수는 보관처를 몰라 같은 로트에 넣었다 빼는 헛기록이 된다
+      const probe = await db.from("stock_txns").select("storage, move_id").limit(1);
+      if (probe.error) return NextResponse.json({ ok: false, error: "DB 준비 전입니다 — supabase/migrations/factory/011_txn_kinds.sql 을 적용하세요." }, { status: 503 });
+    }
     const ids = [...new Set(raw.map((l) => String(l.product_id || "")))];
     const { data: prods, error: pe } = await db.from("products").select("id, sku, name, spec, stock_tracked").in("id", ids);
     if (pe) throw pe;
@@ -143,6 +175,19 @@ export async function POST(req: NextRequest) {
       const linePartner = String(l.partner ?? "").trim();
       if (linePartner.length > 60) return NextResponse.json({ ok: false, error: `${p.name}: 거래처가 너무 깁니다(60자까지).` }, { status: 400 });
       const row: Record<string, unknown> = { product_id: p.id, type, txn_date, mfg_date: mfg || null, partner: linePartner || partner, memo, box_kg: null, boxes: null };
+      // 011 — 보낸 것만 싣는다(안 보내면 DB 기본값: 구분 없음·기본 보관처)
+      if (kind) row.kind = kind;
+      const lineStorage = storageOf(l.storage);
+      if (lineStorage.length > 40) return bad(`${p.name}: 보관처 이름이 너무 깁니다(40자까지).`);
+      // 입고 새 줄은 창 머리의 보관처, 출고·조정·이동의 로트 줄은 그 로트의 보관처
+      const storage = lineStorage || headStorage;
+      if (storage) row.storage = storage;
+      if (isMove && (storage || DEFAULT_STORAGE) === toStorage) return bad(`${p.name}: 이미 ${toStorage}에 있는 재고입니다.`);
+      if (l.unit_price !== undefined && l.unit_price !== null && String(l.unit_price) !== "") {
+        const up = Math.round(Number(l.unit_price) * 100) / 100;
+        if (!Number.isFinite(up) || up < 0 || up > 1e9) return bad(`${p.name}: 단가가 올바르지 않습니다.`);
+        if (kind && PRICED_KINDS.includes(kind)) row.unit_price = up;
+      }
       // 테잎색(009) — 입고 줄마다. 60자까지
       const tape = String(l.tape_color ?? "").trim();
       if (tape) {
@@ -178,7 +223,28 @@ export async function POST(req: NextRequest) {
       if (de) throw de;
       if ((dup || []).length) return NextResponse.json({ ok: true, count: 0, duplicate: true });
     }
-    const { data, error } = await db.rpc("post_stock_txns", { p_rows: rows, p_actor: u.name, p_batch: batch });
+    // 이동 — 줄마다 나간 줄(출고) 바로 뒤에 들어온 줄(입고)을 붙인다. 들어온 줄은 원래 로트의 거래처·테잎색을 물려받는다.
+    let post = rows;
+    if (isMove) {
+      post = [];
+      for (const r of rows) {
+        const from = String(r.storage || DEFAULT_STORAGE);
+        let q = db.from("stock_txns").select("partner, tape_color").eq("product_id", String(r.product_id)).eq("type", "입고").eq("storage", from)
+          .is("cancelled_at", null).order("created_at", { ascending: false }).limit(20);
+        q = r.mfg_date == null ? q.is("mfg_date", null) : q.eq("mfg_date", String(r.mfg_date));
+        q = r.box_kg == null ? q.is("box_kg", null) : q.eq("box_kg", Number(r.box_kg));
+        const { data: tags, error: te } = await q;
+        if (te) throw te;
+        const tag = (tags || []) as { partner: string | null; tape_color: string | null }[];
+        const move_id = crypto.randomUUID();
+        post.push({ ...r, type: "출고", kind: "이동", storage: from, partner: null, move_id });
+        post.push({
+          ...r, type: "입고", kind: "이동", storage: toStorage, move_id,
+          partner: tag.find((t) => t.partner)?.partner ?? null, tape_color: tag.find((t) => t.tape_color)?.tape_color ?? null,
+        });
+      }
+    }
+    const { data, error } = await db.rpc("post_stock_txns", { p_rows: post, p_actor: u.name, p_batch: batch });
     if (error) {
       if ((error as { code?: string }).code === "P0001") return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
       if (/tape_color/.test(error.message)) return NextResponse.json({ ok: false, error: "DB 준비 전입니다 — supabase/migrations/factory/009_tape_color.sql 을 적용하세요." }, { status: 503 });
@@ -188,7 +254,7 @@ export async function POST(req: NextRequest) {
     if (saved.length === 0) return NextResponse.json({ ok: false, error: "현재 수량과 같아 바뀐 것이 없습니다." }, { status: 400 });
     if (!("kg" in saved[0])) return pending7(); // 옛 함수가 돌았다(007 미적용)
 
-    return NextResponse.json({ ok: true, count: saved.length });
+    return NextResponse.json({ ok: true, count: isMove ? saved.length / 2 : saved.length });
   } catch (err) {
     if (isPending005(err)) return pending();
     if (isPending007(err)) return pending7();
