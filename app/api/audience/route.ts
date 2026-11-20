@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { verifySessionFull, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
+import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { logAudience } from "@/app/lib/b2b-activity";
 import { normalizeCond, isEmptyCond, condSummary, condLines, findAudience, loadContacts, listChannels, listProducts, listOrderNames, maskName, maskPhone, MAX_AUDIENCE } from "@/app/lib/audience";
 import { loadTallyExclusion, dropResponders, type TallyStat } from "@/app/lib/audience-tally";
@@ -31,8 +31,8 @@ export const maxDuration = 300; // 조회 제한 60초 + 연락처 읽기(고객
 //                                    탈리를 읽지 못하면 오류로 끝낸다(빼지 못한 채 뽑지 않는다).
 //  로그인한 내부 직원 누구나 쓸 수 있다(공장 계정 제외) — 대신 누가 언제 어떤 조건으로 몇 명을 봤는지 전부 화면에 보인다.
 //
-//  ■ 알림톡 보내기(2026-11-20, app/lib/audience-send.ts) — 관리자만. 정보성 알림톡·대체 발송 없음·즉시만·야간에는 보내지 않는다.
-//  GET                         → 위에 더해 canSend(관리자인가)·sends(알림톡 발송 기록 최근 50건, 표가 없으면 null)
+//  ■ 알림톡 보내기(2026-11-20, app/lib/audience-send.ts) — 내부 직원 누구나(대표 11-20: "모두가 보낼 수 있게", 공장 계정 제외). 대신 발송 기록이 모두에게 보인다. 정보성 알림톡·대체 발송 없음·즉시만·야간에는 보내지 않는다.
+//  GET                         → 위에 더해 canSend(알림톡을 보낼 수 있는가 — 지금은 늘 true)·sends(알림톡 발송 기록 최근 50건, 표가 없으면 null)
 //  GET ?templates=1            → 승인된 알림톡 템플릿(이름·본문·변수) + 지금 보낼 수 있는 시각인가
 //  POST { action: "send", cond, requestId, templateId, vars, expected } → 조건으로 '지금' 다시 찾아(탈리 응답자 제외 포함) 그 고객에게 보낸다
 //  POST { action: "test", requestId, templateId, vars, phone }         → 적은 번호 한 곳에 시험 발송(고객 이름 자리는 보내는 사람 이름)
@@ -72,7 +72,6 @@ export async function GET(req: NextRequest) {
     if (!me) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
     const sb = supabaseAdmin();
     if (req.nextUrl.searchParams.get("templates") === "1") {
-      if (!isAdminName(me)) return NextResponse.json({ ok: false, error: "알림톡은 관리자만 보냅니다." }, { status: 403 });
       if (!isSolapiConfigured()) return NextResponse.json({ ok: false, error: "솔라피 키가 설정되지 않았습니다." }, { status: 400 });
       const templates = (await fetchAlimtalkTemplates()).filter(usable).map((t) => ({ templateId: t.templateId, name: t.name, content: t.content, variables: t.variables }));
       return NextResponse.json({ ok: true, templates, open: sendWindowOpen(), nightMessage: NIGHT_MSG, max: MAX_SEND });
@@ -97,7 +96,7 @@ export async function GET(req: NextRequest) {
       .map((r) => ({ id: r.id, action: r.event_type === "sales.audience_export" ? "추출" : "검색", cond: r.meta?.summary || r.summary, count: r.meta?.count ?? null, actor: r.actor, created_at: r.created_at,
         again: !!r.meta?.from_log,            // 예전 기록의 조건으로 다시 추출한 줄
         saved: r.meta?.cond ?? null }));     // 그때의 조건(전화번호·이름 없음) — [다시 추출]이 이 조건을 그대로 보낸다
-    return NextResponse.json({ ok: true, channels, history, sends, canSend: isAdminName(me) });
+    return NextResponse.json({ ok: true, channels, history, sends, canSend: true });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "오디언스 기록을 불러오지 못했습니다") }, { status: 500 });
   }
@@ -204,7 +203,6 @@ async function findRecipients(raw: unknown): Promise<{ mode: "buy" | "sub"; cond
 
 type SendBody = { action?: string; cond?: unknown; requestId?: unknown; templateId?: unknown; vars?: unknown; expected?: unknown; phone?: unknown; id?: unknown };
 async function handleSend(b: SendBody, name: string): Promise<NextResponse> {
-  if (!isAdminName(name)) return NextResponse.json({ ok: false, error: "알림톡은 관리자만 보냅니다." }, { status: 403 });
   if (!isSolapiConfigured()) return NextResponse.json({ ok: false, error: "솔라피 키가 설정되지 않았습니다." }, { status: 400 });
   const sb = supabaseAdmin();
   if (b.action === "send_result") {
