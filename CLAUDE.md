@@ -69,6 +69,9 @@ git add app/sales/page.tsx app/api/sales/upload/route.ts   # 경로를 손으로
 어기면 두 번호열의 적용 순서에 결과가 좌우되는데, 그걸 잡아줄 장치가 없다.
 factory 스키마는 Supabase Dashboard > Settings > API > **Exposed schemas 에 `factory` 가 등록돼야** PostgREST 로 읽힌다.
 
+**셋째 번호열(2026-11-20): `supabase/migrations/hr/NNN_*.sql`(급여·연차 창).** factory 와 같은 규칙이다 —
+hr 번호열은 `hr` 스키마 밖을 만들거나 바꾸지 않고, Exposed schemas 에 `hr` 이 등록돼야 읽힌다.
+
 ### (b) 공용 파일 수정
 
 내 기능만 고치는 것처럼 보이지만 전 서비스가 쓰는 파일:
@@ -137,6 +140,12 @@ grep -oE "^\.[a-zA-Z0-9_-]+ *\{" app/b2b/b2b.css | sed 's/ *{//' | sort | uniq -
     같은 의미는 lib 색 지도(`INV_TYPE_COLOR`·`VOC_STATUS_COLOR` 등)를 조회 — 화면에서 색을 새로 선언하지 않는다.
   - `:root` 토큰을 바꿨으면 `npm run sync-tokens` — public/ 정적 HTML 2개(iframe 도구)의 :root 가 따라온다.
     `npm run build` 는 이를 자동 실행하므로 배포 산출물은 항상 동기 상태다.
+- **급여·연차 창(`/hr`)은 따로 잠긴 구역이다(2026-11-20 대표: "오류조차 허용하지 않도록 창 자체를 별도로").** 기획 `docs/payroll-leave-plan.md`.
+  - `app/hr/*` · `app/api/hr/*` · `app/lib/hr*.ts` · DB `hr` 스키마는 그 창만 쓴다. **다른 기능에서 import·조회하지 않는다**(`hrDb()` 는 `/api/hr` 밖에서 부르지 않는다).
+  - 로그인이 따로다: 쿠키 `hr_auth`, 서명 키 `HR_SECRET`, 계정 `HR_USERS`(환경변수에만 — 계정 화면을 만들지 않는다). `b2b-auth.ts` 와 섞지 않는다.
+  - `/api/hr/*` 핸들러의 첫 줄은 `requireHr(req)`. 미들웨어가 막아도 생략하지 않는다(확장자를 붙인 주소는 미들웨어를 건너뛸 수 있다).
+  - 주민등록번호는 `hr-crypto.ts` 로 암호화한 값만 저장한다. 평문을 DB·로그·이력에 남기지 않는다.
+  - **메뉴(`nav.ts`)·전역 검색·사용 가이드(`guide-data.ts`)·업데이트 노트(`changelog.ts`)·`activity_log` 에 올리지 않는다** — 아래 '가이드 동시 갱신' 규칙의 예외다. 이력은 `hr.audit_log` 에만.
 - **이모지 금지** (전문성).
 - **번들(세트)은 자체 재고가 없다.** 현재고는 구성품에서 파생된다. 모든 입출고는 `app/lib/product-bundles.ts` 의 `expandBundleQty()` 로 구성품 전개해 기록할 것 — 경로마다 따로 구현하면 같은 판매가 경로에 따라 다르게 차감된다(실제 발생한 버그).
 - **테스트가 없다.** 동작 변경을 잡아줄 장치가 `npx tsc --noEmit` + `npm run build` 뿐이므로, 의미가 바뀌는 수정은 직접 확인할 것.

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getB2BUsers, isAdminName, resolveUserName, signSession, verifySessionFull } from "@/app/lib/b2b-auth";
+import { HR_COOKIE, isHrPath, verifyHrSession } from "@/app/lib/hr-auth";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 
@@ -48,6 +49,31 @@ export async function middleware(req: NextRequest) {
     url.pathname = pathname === "/b2b/login" ? "/factory/login" : "/factory";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  // 급여·연차 창(/hr·/api/hr, 2026-11-20). 업무도우미 로그인과 완전히 따로 잠근다 —
+  //  여기서 끝내고 아래 b2b_auth 판정으로 내려가지 않는다. 업무도우미 관리자·파도소리 계정이어도 hr_auth 쿠키가 없으면 못 들어온다.
+  //  (반대로 hr_auth 만 가진 사람은 아래에서 b2b_auth 가 없어 업무도우미 로그인으로 간다)
+  //  각 /api/hr 경로도 스스로 한 번 더 검증한다(app/lib/hr-db.ts requireHr) — 이 분기가 실수로 빠져도 열리지 않게.
+  if (isHrPath(pathname)) {
+    const noStore = (res: NextResponse) => {
+      res.headers.set("Cache-Control", "no-store");
+      res.headers.set("X-Robots-Tag", "noindex, nofollow");
+      return res;
+    };
+    // 로그인 화면이 쓰는 아이콘 두 개는 연다(아래 matcher 가 /hr 아래는 확장자와 상관없이 전부 이 분기로 보낸다)
+    if (pathname === "/hr/icon.png" || pathname === "/hr/apple-icon.png") return NextResponse.next();
+    if (pathname === "/hr/login" || pathname === "/api/hr/auth") return noStore(NextResponse.next());
+    const who = await verifyHrSession(req.cookies.get(HR_COOKIE)?.value);
+    if (who) return noStore(NextResponse.next());
+    if (pathname.startsWith("/api/")) {
+      return noStore(NextResponse.json({ ok: false, error: "인증이 필요합니다." }, { status: 401 }));
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = "/hr/login";
+    url.search = "";
+    if (pathname !== "/hr") url.searchParams.set("redirect", pathname + (req.nextUrl.search || ""));
+    return noStore(NextResponse.redirect(url));
   }
 
   // 로그인 페이지·로그인 API + QR 숏링크(/q/*) + 아침 다이제스트 크론·일일 리포트 크론·은행입금 동기화 크론·입금문자 웹훅·신청자 문자 예약 신호(/api/form-sms/tick)·인증번호 문자 웹훅(/api/sms/otp) + 인스타 댓글 웹훅·Tally 설문 웹훅(서명 검증) + GA MCP 서버(/api/mcp/*, Bearer MCP_API_KEY) — 자체 검증이 있어 보호 제외
@@ -141,5 +167,13 @@ export const config = {
   // 2026-10-28 호출 감축: 자체 검증이 있어 위에서 그냥 통과시키던 경로(웹훅·크론·채널 명령·MCP·QR)와 txt·xml·json 파일은(public 의 html 2개는 로그인 보호를 유지)
   //  matcher 에서 아예 빼 미들웨어가 실행되지 않게 한다 — 미들웨어 실행도 Vercel 호출 한도(100만)에 함께 센다(10월 61%).
   //  link.seamonster.kr/코드 리라이트는 단일 세그먼트 경로라 여전히 matcher 에 남는다. docs/vercel-invocation-plan.md
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|q/|api/mcp/|api/channel-commands(?:/|$)|api/detail/applies(?:/|$)|api/detail/sources(?:/|$)|api/detail/sets(?:/|$)|api/b2b/schedule-digest(?:/|$)|api/analyst/cron(?:/|$)|api/agents/tick(?:/|$)|api/form-sms/tick(?:/|$)|api/b2b/deposits/webhook(?:/|$)|api/sms/otp(?:/|$)|api/instagram/webhook(?:/|$)|api/voc/tally$|api/naver/catalog/(?:sync|upload)(?:/|$)|api/claims/report(?:/|$)|api/subscription/sync(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|map|txt|xml|json|webmanifest)$).*)"],
+  // 2026-11-20 확장자 구멍 막음: 맨 끝의 확장자 제외는 /api/·/b2b/ 아래에는 적용하지 않는다(그 대안 앞의 (?!api/|b2b/)).
+  //  마지막 칸이 동적인 경로(/api/b2b/orders/[id]·/b2b/orders/[id] 등)는 '아무값.json'·'아무값.png' 로도 닿아, 로그인 검사 없이 핸들러·화면이 실행됐다.
+  //  /api·/b2b 아래에는 정적 파일이 없다. 이름으로 뺀 웹훅·크론·MCP 경로는 앞쪽 대안에 먼저 걸려 그대로 미들웨어를 타지 않는다.
+  //  마지막 칸이 동적인 화면을 다른 구역에 새로 만들면 그 구역 접두사를 여기에 더한다(로그인 화면 아이콘이 있는 /factory 는 통째로 넣지 않는다).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|q/|api/mcp/|api/channel-commands(?:/|$)|api/detail/applies(?:/|$)|api/detail/sources(?:/|$)|api/detail/sets(?:/|$)|api/b2b/schedule-digest(?:/|$)|api/analyst/cron(?:/|$)|api/agents/tick(?:/|$)|api/form-sms/tick(?:/|$)|api/b2b/deposits/webhook(?:/|$)|api/sms/otp(?:/|$)|api/instagram/webhook(?:/|$)|api/voc/tally$|api/naver/catalog/(?:sync|upload)(?:/|$)|api/claims/report(?:/|$)|api/subscription/sync(?:/|$)|(?!api/|b2b/).*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|map|txt|xml|json|webmanifest)$).*)",
+    // 급여·연차 창은 확장자 제외를 적용하지 않는다(2026-11-20). 위 패턴은 .json·.png 로 끝나는 주소에서 미들웨어를 건너뛰는데,
+    //  동적 경로(/api/hr/employees/[id])는 '아무값.json' 으로도 닿는다 — /hr·/api/hr 아래는 무엇으로 끝나든 반드시 위 hr 분기를 탄다.
+    "/hr/:path*", "/api/hr/:path*",
+  ],
 };

@@ -1,0 +1,155 @@
+/* 급여·연차 창(/hr) 전용 — .hr-* 접두사. 공용 컴포넌트(.b2b-*, .sm-*)는 그대로 쓰고 여기서는 배치만 정한다.
+   색·간격·글자는 app/globals.css :root 토큰만 쓴다(docs/design-system.md). */
+
+/* ── 셸: 왼쪽 고정 메뉴 + 본문 ───────────────────────────────────── */
+.hr-shell { display: flex; min-height: 100dvh; background: var(--sm-white); }
+
+.hr-sb {
+  width: 208px; flex: 0 0 208px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sm-space-4) var(--sm-space-3) var(--sm-space-4);
+  border-right: 1px solid var(--sm-border);
+  position: sticky; top: 0; height: 100dvh; overflow-y: auto;
+  background: var(--sm-white);
+}
+.hr-brand {
+  display: block; padding: 2px 10px var(--sm-space-4);
+  font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading);
+  color: var(--sm-black); text-decoration: none;
+}
+.hr-nav { display: flex; flex-direction: inherit; gap: inherit; }
+.hr-nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; border-radius: var(--sm-radius);
+  font-size: var(--sm-fs-lg); font-weight: 500; line-height: var(--sm-lh-ui);
+  color: var(--sm-text-mid); text-decoration: none; white-space: nowrap;
+}
+.hr-nav-item:hover { background: var(--sm-bg-subtle); }
+.hr-nav-item.is-active { background: var(--sm-orange-light); color: var(--sm-black); font-weight: 600; }
+.hr-nav-item svg { flex: 0 0 auto; }
+.hr-sb-foot {
+  margin-top: auto; padding: var(--sm-space-3) 10px 0; border-top: 1px solid var(--sm-border-light);
+  display: flex; flex-direction: column; gap: var(--sm-space-2);
+  font-size: var(--sm-fs-xs); color: var(--sm-text-mid);
+}
+.hr-sb-foot button {
+  background: none; border: none; padding: 0; font: inherit; line-height: var(--sm-lh-ui);
+  cursor: pointer; color: var(--sm-text-mid); text-align: left; text-decoration: underline; text-underline-offset: 2px;
+}
+.hr-sb-foot button:hover { color: var(--sm-orange-text); }
+
+.hr-main { flex: 1; min-width: 0; padding: var(--sm-space-6) clamp(16px, 3vw, 40px) 96px; }
+.hr-main .b2b-container { max-width: 1320px; margin: 0 auto; }
+.hr-main .b2b-table .b2b-link-btn + .b2b-link-btn { margin-left: var(--sm-space-3); }
+
+@media (max-width: 768px) {
+  .hr-shell { flex-direction: column; }
+  .hr-sb {
+    width: 100%; flex: none; height: auto; position: static;
+    flex-direction: row; align-items: center;
+    padding: var(--sm-space-2) var(--sm-space-3); border-right: none; border-bottom: 1px solid var(--sm-border);
+    overflow-x: auto;
+  }
+  .hr-brand { display: none; }
+  .hr-nav-item { padding: 8px 10px; }
+  .hr-sb-foot { margin-top: 0; margin-left: auto; padding: 0 0 0 var(--sm-space-3); border-top: none; flex-direction: row; white-space: nowrap; }
+}
+
+/* ── 로그인 ──────────────────────────────────────────────────────── */
+.hr-login {
+  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+  padding: var(--sm-space-5); background: var(--sm-bg);
+}
+.hr-login-card {
+  width: 100%; max-width: 360px; background: var(--sm-white);
+  border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card);
+  padding: var(--sm-space-6) var(--sm-space-5); box-shadow: var(--sm-shadow-float);
+}
+.hr-login-title {
+  margin: 0 0 var(--sm-space-5); text-align: center;
+  font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-heading);
+}
+.hr-login-card form { display: flex; flex-direction: column; gap: var(--sm-space-3); }
+
+/* ── 목록 위 조건 줄 ─────────────────────────────────────────────── */
+.hr-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2); margin-bottom: var(--sm-space-4); }
+.hr-filters .sm-tabs { margin: 0; }
+.hr-filters select.b2b-input { width: auto; min-width: 140px; }
+.hr-filters .hr-search { width: 220px; margin-left: auto; }
+@media (max-width: 768px) { .hr-filters .hr-search { width: 100%; margin-left: 0; } }
+.hr-rule { margin: 0 0 var(--sm-space-3); font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.hr-table td, .hr-table th { white-space: nowrap; }
+.hr-pill-off { background: var(--sm-bg-subtle); color: var(--sm-text-mid); border: 1px solid var(--sm-border); }
+.hr-pill-ok { background: var(--sm-success-bg); color: var(--sm-success); border: 1px solid var(--sm-success-border); }
+.hr-mono { font-family: var(--sm-mono); font-variant-numeric: tabular-nums; }
+
+/* ── 입력 창(넓은 모달) ──────────────────────────────────────────── */
+.b2b-modal.hr-modal-wide { max-width: 880px; }
+.b2b-modal.hr-modal-mid { max-width: 680px; }
+.hr-form { display: flex; flex-direction: column; gap: var(--sm-space-5); }
+.hr-form-sec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sm-space-3) var(--sm-space-4); }
+.hr-form-sec > h3 {
+  grid-column: 1 / -1; margin: 0; padding-bottom: var(--sm-space-2); border-bottom: 1px solid var(--sm-border-light);
+  font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-text-mid);
+}
+.hr-form-sec .hr-wide { grid-column: 1 / -1; }
+.hr-form-sec .hr-span2 { grid-column: span 2; }
+.hr-form-sec textarea.b2b-input { min-height: 72px; resize: vertical; }
+@media (max-width: 720px) {
+  .hr-form-sec { grid-template-columns: minmax(0, 1fr); }
+  .hr-form-sec .hr-span2 { grid-column: 1 / -1; }
+}
+/* 칸 아래 한 줄 — 입력에서 나온 결과(생년월일·성별)와 조건부 경고만. 고정 안내문은 두지 않는다 */
+.hr-field-note { font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.hr-field-note.is-warn { color: var(--sm-danger); }
+.hr-checks { display: flex; flex-wrap: wrap; gap: var(--sm-space-2) var(--sm-space-4); align-items: center; min-height: 40px; }
+.hr-checks label { display: inline-flex; align-items: center; gap: var(--sm-space-2); font-size: var(--sm-fs-base); cursor: pointer; }
+.hr-days { display: flex; flex-wrap: wrap; gap: var(--sm-space-1); }
+.hr-days .sm-tab { min-width: 40px; justify-content: center; }
+.hr-form .sm-tabs { margin: 0; }
+
+/* ── 인사기록카드 ────────────────────────────────────────────────── */
+.hr-card-title { display: flex; align-items: center; gap: var(--sm-space-3); flex-wrap: wrap; }
+.hr-back { display: inline-block; margin-bottom: var(--sm-space-3); font-size: var(--sm-fs-xs); }
+.hr-card-sec { margin-bottom: var(--sm-space-5); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); }
+.hr-card-sec > h2 {
+  margin: 0; padding: var(--sm-space-3) var(--sm-space-4); border-bottom: 1px solid var(--sm-border);
+  font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-text-mid); background: var(--sm-bg-subtle);
+  border-radius: var(--sm-radius) var(--sm-radius) 0 0;
+}
+/* 칸 사이 줄은 긋지 않는다 — 3칸 격자의 빈 칸에서 줄이 끊겨 보인다. 묶음은 카드 테두리로만 나눈다 */
+.hr-dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: var(--sm-space-2) 0; }
+.hr-dl > div { display: flex; flex-direction: column; gap: 2px; padding: var(--sm-space-2) var(--sm-space-4); min-width: 0; }
+.hr-dl > div.hr-wide { grid-column: 1 / -1; }
+.hr-dl dt { font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.hr-dl dd { margin: 0; font-size: var(--sm-fs-lg); line-height: var(--sm-lh-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
+.hr-dl dd.is-empty { color: var(--sm-text-faint); }
+.hr-card-sec .b2b-table-wrap { border: none; border-top: 1px solid var(--sm-border-light); border-radius: 0 0 var(--sm-radius) var(--sm-radius); }
+@media (max-width: 720px) { .hr-dl { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── 인쇄 ────────────────────────────────────────────────────────── */
+/* 종이 크기·방향(@page)은 화면마다 다르므로 각 화면이 <style> 로 넣는다(이 파일에 두면 다른 화면 인쇄까지 바뀐다). */
+.hr-print-only { display: none; }
+@media print {
+  .hr-sb, .hr-noprint, .sm-toast-stack, .b2b-modal-backdrop { display: none !important; }
+  .hr-shell { display: block; min-height: 0; }
+  .hr-main { padding: 0; }
+  .hr-main .b2b-container { max-width: none; }
+  .hr-print-only { display: block; }
+  .hr-screen-only { display: none !important; }
+  .hr-print-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+  .hr-print-head h1 { margin: 0; font-size: 16pt; font-weight: 600; }
+  .hr-print-head span { font-size: 8pt; color: #333; }
+  .hr-print-table { width: 100%; border-collapse: collapse; font-size: 7.5pt; line-height: 1.35; }
+  .hr-print-table th, .hr-print-table td { border: 0.5pt solid #333; padding: 3px 4px; text-align: left; vertical-align: top; word-break: keep-all; overflow-wrap: anywhere; }
+  .hr-print-table th { background: #eee; font-weight: 600; white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hr-print-table tr { break-inside: avoid; }
+  .hr-card-sec { break-inside: avoid; border-color: #333; border-radius: 0; margin-bottom: 10px; }
+  .hr-card-sec > h2 { border-color: #333; border-radius: 0; background: #eee; color: #000; font-size: 9pt; padding: 4px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hr-dl { padding: 2px 0; }
+  .hr-dl > div { padding: 3px 8px; }
+  .hr-dl dt { font-size: 7.5pt; color: #333; }
+  .hr-dl dd { font-size: 9.5pt; }
+  .hr-card-title h1 { font-size: 16pt; }
+  .hr-card-sec .b2b-table th, .hr-card-sec .b2b-table td { padding: 4px 8px; font-size: 9pt; }
+}

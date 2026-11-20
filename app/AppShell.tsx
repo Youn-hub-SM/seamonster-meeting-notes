@@ -18,6 +18,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // 탭 제목 = 지금 화면 이름(여러 탭을 띄워도 구분되게). Next 가 화면 이동 뒤 루트 제목을 늦게 다시 넣으면
   //  덮어쓰이므로, 제목이 바뀔 때마다 다시 맞춘다(같으면 아무것도 안 해 무한 반복 없음).
   useEffect(() => {
+    // 급여·연차 창(/hr)의 탭 제목은 그 창의 셸(app/hr/HrShell.tsx)이 정한다 — 여기서 업무도우미 이름으로 덮어쓰지 않는다
+    if (pathname === "/hr" || pathname.startsWith("/hr/")) return;
     const want = pageTitleOf(pathname);
     const apply = () => { if (document.title !== want) document.title = want; };
     apply();
@@ -48,6 +50,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === "/b2b/login") return <>{children}</>;
   // 파도소리(/factory)는 별도 사이트처럼 자체 셸을 쓴다 — app/factory/layout.tsx
   if (pathname.startsWith("/factory")) return <>{children}</>;
+  // 급여·연차(/hr)는 로그인부터 따로인 별도 창 — app/hr/layout.tsx. 업무도우미 메뉴·검색을 그리지 않는다
+  if (pathname === "/hr" || pathname.startsWith("/hr/")) return <>{children}</>;
   // 주요 지표(/board)는 메뉴 없이 숫자만 있는 독립 화면 — app/board/layout.tsx
   if (pathname === "/board" || pathname.startsWith("/board/")) return <>{children}</>;
 
