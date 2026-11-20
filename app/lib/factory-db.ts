@@ -3,6 +3,7 @@
 import type { NextRequest } from "next/server";
 import { supabaseAdmin } from "./supabase";
 import { verifySession, resolveUserName, isAdminName } from "./b2b-auth";
+import { EMPTY_COMPANY, type FactoryCompany } from "./factory-partners";
 
 // factory 스키마 전용 핸들. **파도소리 라우트는 supabaseAdmin() 대신 반드시 이걸 쓴다.**
 //  public(매출·고객·재고)에 실수로 손이 닿지 않게 하는 앱 레이어 경계다 — 이 핸들로는
@@ -48,6 +49,24 @@ export function isPending010(err: unknown): boolean {
   return /(flows|flow_overview|flow_item|commit_flows)/.test(m) && /(does not exist|schema cache|Could not find)/i.test(m);
 }
 export const PENDING_010 = "DB 준비 전입니다 — supabase/migrations/factory/010_flows.sql 을 적용하세요.";
+// migration factory/012(거래처 목록·출고 번호·본선명) 미적용
+export function isPending012(err: unknown): boolean {
+  const m = String((err as { message?: string })?.message ?? err ?? "");
+  return /(partners|out_docs|issue_out_doc|vessel)/.test(m) && /(does not exist|schema cache|Could not find|column)/i.test(m);
+}
+export const PENDING_012 = "DB 준비 전입니다 — supabase/migrations/factory/012_partners_docs.sql 을 적용하세요.";
+
+// 회사 정보(출고증에 찍힌다) — b2b_settings kv. 못 읽으면 빈 값
+export const FACTORY_COMPANY_KEY = "factory_company";
+export async function readFactoryCompany(): Promise<FactoryCompany> {
+  const out = { ...EMPTY_COMPANY };
+  try {
+    const { data } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", FACTORY_COMPANY_KEY).maybeSingle();
+    const v = (data?.value ?? {}) as Partial<FactoryCompany>;
+    for (const k of Object.keys(out) as (keyof FactoryCompany)[]) if (typeof v[k] === "string") out[k] = v[k] as string;
+  } catch { /* 빈 값 */ }
+  return out;
+}
 export const PENDING_006_HINT ="규격은 supabase/migrations/factory/006_products_spec.sql 적용 뒤 저장됩니다.";
 
 // 품목 입력 정리 — 순수 함수라 공용 파일(factory.ts)에 있다. 기존 import 경로 유지용 재수출.

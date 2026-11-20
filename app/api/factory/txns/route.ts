@@ -22,15 +22,17 @@ type TxnRow = {
   id: string; batch_id: string; product_id: string; txn_date: string; type: TxnType;
   mfg_date: string | null; kg: number | string; target_kg: number | string | null;
   box_kg: number | string | null; boxes: number | null; partner: string | null; tape_color?: string | null; memo: string | null;
-  kind?: TxnKind | null; storage?: string | null; unit_price?: number | string | null; move_id?: string | null;
+  kind?: TxnKind | null; storage?: string | null; unit_price?: number | string | null; move_id?: string | null; vessel?: string | null;
   created_by: string | null; created_at: string; cancelled_at: string | null; cancelled_by: string | null;
 };
 // 열 목록은 string 으로 둔다 — 리터럴이면 supabase 가 결과 타입을 추론하지만 폴백(COLS_NO_TAPE)과 타입이 어긋난다. 결과는 TxnRow 로 캐스팅.
 const COLS_009: string = "id, batch_id, product_id, txn_date, type, mfg_date, kg, target_kg, box_kg, boxes, partner, tape_color, memo, created_by, created_at, cancelled_at, cancelled_by";
-// 새 열이 없는 DB 에서도 죽지 않게 차례로 줄여 읽는다: 011(구분·보관처·단가·이동) → 009(테잎색) → 그 전
-const COL_TRIES: string[] = [`${COLS_009}, kind, storage, unit_price, move_id`, COLS_009, COLS_009.replace(", tape_color", "")];
-const isMissingCol = (e: { message?: string } | null) => !!e?.message && /(tape_color|kind|storage|unit_price|move_id)/.test(e.message);
-// run(cols) 를 되는 열 목록이 나올 때까지 시도한다. level = 쓴 목록 번호(0 이면 011 적용됨)
+// 새 열이 없는 DB 에서도 죽지 않게 차례로 줄여 읽는다: 012(본선명) → 011(구분·보관처·단가·이동) → 009(테잎색) → 그 전
+const COLS_011 = `${COLS_009}, kind, storage, unit_price, move_id`;
+const COL_TRIES: string[] = [`${COLS_011}, vessel`, COLS_011, COLS_009, COLS_009.replace(", tape_color", "")];
+const LEVEL_011 = 1; // 이 번호 이하로 읽혔으면 011 이 적용된 DB
+const isMissingCol = (e: { message?: string } | null) => !!e?.message && /(tape_color|kind|storage|unit_price|move_id|vessel)/.test(e.message);
+// run(cols) 를 되는 열 목록이 나올 때까지 시도한다. level = 쓴 목록 번호
 async function withCols<T extends { error: { message?: string } | null }>(run: (cols: string) => PromiseLike<T>, from = 0): Promise<{ res: T; level: number }> {
   let level = from;
   let res = await run(COL_TRIES[level]);
@@ -84,6 +86,7 @@ export async function GET(req: NextRequest) {
       kg: Number(t.kg), target_kg: num(t.target_kg), box_kg: num(t.box_kg), boxes: t.boxes,
       partner: t.partner, tape_color: t.tape_color ?? null, memo: t.memo, cancelled_at: t.cancelled_at, cancelled_by: t.cancelled_by,
       txn_kind: t.kind ?? null, storage: t.storage ?? null, unit_price: num(t.unit_price ?? null), move_id: t.move_id ?? null,
+      vessel: t.vessel ?? null, batch_id: t.batch_id,
       sku: prod.get(t.product_id)?.sku ?? null, name: prod.get(t.product_id)?.name ?? null,
     });
     const events: HistEvent[] = [
@@ -101,7 +104,7 @@ export async function GET(req: NextRequest) {
     ];
     events.sort((a, b) => b.date.localeCompare(a.date) || b.at.localeCompare(a.at));
     const capped = [tx, cx, ch].some((r) => (r.data || []).length >= LIMIT);
-    return NextResponse.json({ ok: true, events, from, to, capped, kinds: level === 0 });
+    return NextResponse.json({ ok: true, events, from, to, capped, kinds: level <= LEVEL_011, docs: level === 0 });
   } catch (err) {
     if (isPending005(err)) return pending();
     if (isPending007(err)) return pending7();
@@ -188,6 +191,12 @@ export async function POST(req: NextRequest) {
         if (!Number.isFinite(up) || up < 0 || up > 1e9) return bad(`${p.name}: 단가가 올바르지 않습니다.`);
         if (kind && PRICED_KINDS.includes(kind)) row.unit_price = up;
       }
+      // 본선명(012) — 입고 줄마다(선택 칸). 60자까지
+      const vessel = String(l.vessel ?? "").trim();
+      if (vessel) {
+        if (vessel.length > 60) return bad(`${p.name}: 본선명이 너무 깁니다(60자까지).`);
+        if (type === "입고") row.vessel = vessel;
+      }
       // 테잎색(009) — 입고 줄마다. 60자까지
       const tape = String(l.tape_color ?? "").trim();
       if (tape) {
@@ -254,7 +263,24 @@ export async function POST(req: NextRequest) {
     if (saved.length === 0) return NextResponse.json({ ok: false, error: "현재 수량과 같아 바뀐 것이 없습니다." }, { status: 400 });
     if (!("kg" in saved[0])) return pending7(); // 옛 함수가 돌았다(007 미적용)
 
-    return NextResponse.json({ ok: true, count: isMove ? saved.length / 2 : saved.length });
+    // 012 — 적은 거래처가 목록에 없으면 이름만으로 등록해 둔다(매입 기록이면 매입처). 실패해도 기록 저장에는 영향이 없다
+    const names = [...new Set(saved.map((t) => String(t.partner || "").trim().replace(/\s+/g, " ")).filter((x) => x && x.length <= 60))];
+    if (names.length && !isMove) {
+      try {
+        const { data: have } = await db.from("partners").select("name").limit(5000);
+        const known = new Set(((have || []) as { name: string }[]).map((x) => x.name.toLowerCase()));
+        const fresh = names.filter((x) => !known.has(x.toLowerCase())).map((name) => ({ name, kind: kind === "매입" ? "매입처" : "매출처", created_by: u.name, updated_by: u.name }));
+        if (fresh.length) await db.from("partners").insert(fresh);
+      } catch { /* 012 미적용 등 — 넘어간다 */ }
+    }
+    // 012 — 매출 출고면 출고 번호를 매긴다(출고증). 번호를 못 매겨도 기록은 저장된 것이다
+    let doc: { batch_id: string; doc_no: string } | null = null;
+    if (type === "출고" && !isMove && (kind === "매출" || kind === null)) {
+      const r = await db.rpc("issue_out_doc", { p_batch: saved[0].batch_id, p_actor: u.name });
+      if (!r.error && r.data) doc = { batch_id: saved[0].batch_id, doc_no: (r.data as { doc_no: string }).doc_no };
+    }
+
+    return NextResponse.json({ ok: true, count: isMove ? saved.length / 2 : saved.length, doc });
   } catch (err) {
     if (isPending005(err)) return pending();
     if (isPending007(err)) return pending7();

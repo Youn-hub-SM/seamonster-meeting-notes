@@ -54,8 +54,9 @@ export const DEFAULT_STORAGE = "구평창고1층";
 // 화면의 기록 종류 — 이동은 저장할 때 출고·입고 두 줄로 풀린다
 export type FormType = TxnType | "이동";
 
-export interface FactoryFields { partner: boolean; tape_color: boolean }
-export const DEFAULT_FACTORY_FIELDS: FactoryFields = { partner: true, tape_color: true };
+// vessel = 본선명(012). 출고증에 찍히는 칸이라 쓰는 곳만 켠다(기본 꺼짐)
+export interface FactoryFields { partner: boolean; tape_color: boolean; vessel: boolean }
+export const DEFAULT_FACTORY_FIELDS: FactoryFields = { partner: true, tape_color: true, vessel: false };
 
 // 로트 = 품목 × 제조일자 × 박스 중량 × 보관처 (factory.stock_lots 뷰 1행, 단위 kg · 박스 수 = kg ÷ box_kg)
 export interface StockLot {
@@ -114,6 +115,8 @@ export interface HistEvent {
   storage?: string | null;      // 보관처(011)
   unit_price?: number | null;   // kg당 단가(011)
   move_id?: string | null;      // 이동 짝 번호(011)
+  vessel?: string | null;       // 본선명(012, 입고 때 적음)
+  batch_id?: string | null;     // 입력 번호 — 출고 한 건(출고증)을 가리킨다
   memo?: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;

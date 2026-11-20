@@ -27,6 +27,7 @@ export default function FactoryStockPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [doc, setDoc] = useState<{ batch_id: string; doc_no: string } | null>(null); // 방금 저장한 매출 출고의 출고증
   const [kw, setKw] = useState("");
   const [showEmpty, setShowEmpty] = useState(false);
   const [pmode, setPmode] = useState<PMode>("30일");
@@ -117,7 +118,7 @@ export default function FactoryStockPage() {
   const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" || key === "depletion_days" ? "asc" : "desc" }));
-  const openForm = (type: FormType, productId?: string) => { setNotice(""); setForm({ type, productId }); };
+  const openForm = (type: FormType, productId?: string) => { setNotice(""); setDoc(null); setForm({ type, productId }); };
 
   const Th = ({ k, label, numeric }: { k: SortKey; label: string; numeric?: boolean }) => (
     <th className={`fac-th-sort ${numeric ? "num" : ""}`} onClick={() => toggleSort(k)} title="눌러서 정렬">
@@ -189,7 +190,12 @@ export default function FactoryStockPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
-      {notice && <div className="sm-success">{notice}</div>}
+      {notice && (
+        <div className="sm-success">
+          {notice}
+          {doc && <> <a className="sm-link" href={`/factory/outdoc?batch=${doc.batch_id}`} target="_blank" rel="noreferrer">출고증 {doc.doc_no}</a></>}
+        </div>
+      )}
 
       {/* 요약 카드 — 표에 보이는 범위(재고 없는 품목 포함 여부)와 같은 범위로 센다. 검색은 무시 */}
       <div className="b2b-dash-grid fac-cards">
@@ -301,7 +307,7 @@ export default function FactoryStockPage() {
           fields={fields} suggest={suggest} onFields={setFields}
           kinds={kinds} storages={storages} admin={admin} onStorages={setStorages}
           onClose={() => setForm(null)}
-          onSaved={(msg) => { setForm(null); setNotice(msg); load(); loadFields(); }} />
+          onSaved={(msg, d) => { setForm(null); setNotice(msg); setDoc(d || null); load(); loadFields(); }} />
       )}
       {priceFor && (
         <PriceModal product={priceFor} onClose={() => setPriceFor(null)}

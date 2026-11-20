@@ -25,14 +25,14 @@ import { today } from "./util";
 // kg = 이 줄의 수량(입고·출고) 또는 실사 kg(조정). box_kg = 박스 중량(로트 줄은 로트의 값), boxes = 박스 수. have = 기존 로트의 현재 kg.
 // partner = 이 재고가 나갈 거래처(입고 줄마다, 2026-11-17 대표: 입고처가 아니라 출고될 곳). 출고는 창 머리의 거래처 하나.
 // storage = 로트 줄의 보관처(새 줄은 비어 있고 창 머리의 보관처로 들어간다). price = kg당 단가.
-type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; boxes: string; kg: string; have: number; in_date: string | null; tape_color: string; partner: string; storage: string; price: string };
+type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; boxes: string; kg: string; have: number; in_date: string | null; tape_color: string; partner: string; storage: string; price: string; vessel: string };
 // draft = 아직 등록 전인 새 품목(입고 저장 때 등록). product_id 는 그때까지 비어 있다.
 type Block = { key: string; product_id: string; lines: Line[]; draft?: { name: string; spec: string; origin: string } };
 const normName = (s: string) => s.trim().replace(/\s+/g, " ");
 
 let seq = 0;
 const k = () => `k${++seq}`;
-const newLine = (): Line => ({ key: k(), lot: false, mfg_date: today(), box_kg: "", boxes: "", kg: "", have: 0, in_date: null, tape_color: "", partner: "", storage: "", price: "" });
+const newLine = (): Line => ({ key: k(), lot: false, mfg_date: today(), box_kg: "", boxes: "", kg: "", have: 0, in_date: null, tape_color: "", partner: "", storage: "", price: "", vessel: "" });
 // 재고를 빼는 종류 — 로트에서 고르고 재고보다 많이 못 뺀다
 const takes = (t: FormType) => t === "출고" || t === "이동";
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -40,7 +40,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 function makeLines(p: StockRow, type: FormType): Line[] {
   if (type === "입고") return [newLine()];
   const lots = p.lots.filter((l) => (takes(type) ? l.kg > 0 : l.kg !== 0));
-  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: l.box_kg == null ? "" : String(l.box_kg), boxes: "", kg: "", have: l.kg, in_date: l.in_date, tape_color: "", partner: "", storage: l.storage, price: "" }));
+  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: l.box_kg == null ? "" : String(l.box_kg), boxes: "", kg: "", have: l.kg, in_date: l.in_date, tape_color: "", partner: "", storage: l.storage, price: "", vessel: "" }));
 }
 
 const TITLE: Record<FormType, string> = { 입고: "입고", 출고: "출고", 조정: "조정", 이동: "이동" };
@@ -61,7 +61,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
   suggest: { partners: string[]; tape_colors: string[] };   // 이전에 적은 값 — 드롭다운
   onFields: (f: FactoryFields) => void;
   onClose: () => void;
-  onSaved: (msg: string) => void;
+  onSaved: (msg: string, doc?: { batch_id: string; doc_no: string } | null) => void; // doc = 매출 출고에 붙은 출고 번호(출고증)
 }) {
   // 칸 설정 — 창 안에서 바로 켜고 끈다(서버 kv 에 저장, 모든 계정 공용)
   const [fieldsOpen, setFieldsOpen] = useState(false);
@@ -264,6 +264,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
           box_kg: numOr(l.box_kg), boxes: bx !== null && Number.isInteger(bx) && bx > 0 ? bx : null,
           tape_color: type === "입고" && fields.tape_color ? l.tape_color.trim() || null : null,
           partner: type === "입고" && fields.partner ? l.partner.trim() || null : null,
+          ...(type === "입고" && fields.vessel && l.vessel.trim() ? { vessel: l.vessel.trim() } : {}),
           // 011 — 로트 줄은 그 로트의 보관처, 단가는 적은 줄만
           ...(kinds && l.lot ? { storage: l.storage } : {}),
           ...(priced && l.price.trim() !== "" ? { unit_price: Number(l.price) } : {}),
@@ -282,7 +283,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
       const created = drafts.length ? ` (새 품목 ${drafts.length}개 포함)` : "";
-      onSaved(j.duplicate ? "이미 저장된 입력입니다." : `${type} ${j.count}건을 저장했습니다.${created}${specWarn}`);
+      onSaved(j.duplicate ? "이미 저장된 입력입니다." : `${type} ${j.count}건을 저장했습니다.${created}${specWarn}`, j.doc || null);
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
   }
@@ -326,6 +327,13 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
             onChange={(e) => setLine(b.key, l.key, { tape_color: hangulInputValue(e) })} />
         </label>
       )}
+      {type === "입고" && fields.vessel && (
+        <label className="fac-f fac-f-tape">
+          <span>본선명</span>
+          <input className="b2b-input" value={l.vessel} placeholder="선택" autoComplete="off" maxLength={60}
+            onChange={(e) => setLine(b.key, l.key, { vessel: hangulInputValue(e) })} />
+        </label>
+      )}
     </>
   );
 
@@ -350,6 +358,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                 <div className="fac-fields-pop">
                   <label className="fac-check"><input type="checkbox" className="b2b-checkbox" checked={fields.partner} onChange={() => toggleField("partner")} /> 거래처</label>
                   <label className="fac-check"><input type="checkbox" className="b2b-checkbox" checked={fields.tape_color} onChange={() => toggleField("tape_color")} /> 테잎색</label>
+                  <label className="fac-check"><input type="checkbox" className="b2b-checkbox" checked={fields.vessel} onChange={() => toggleField("vessel")} /> 본선명</label>
                   {kinds && (
                     <div className="fac-storages">
                       <span className="fac-sub">보관처</span>

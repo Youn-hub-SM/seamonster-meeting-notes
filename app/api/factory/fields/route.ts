@@ -24,6 +24,12 @@ async function readStorages(): Promise<string[]> {
   }
 }
 // 011(구분·보관처·단가·이동) 적용 여부 — 적용 전에는 화면이 새 칸을 보이지 않는다
+// 거래처 목록(012)의 이름 — 기록 창의 거래처 칸이 이 목록을 먼저 보여 준다. 표가 없으면 빈 목록
+async function partnerNames(): Promise<string[]> {
+  const { data, error } = await factoryDb().from("partners").select("name").order("name").limit(1000);
+  if (error) return [];
+  return ((data || []) as { name: string }[]).map((p) => p.name);
+}
 async function kindsReady(): Promise<boolean> {
   const { error } = await factoryDb().from("stock_txns").select("kind, storage, unit_price, move_id").limit(1);
   return !error;
@@ -33,7 +39,8 @@ async function readFields(): Promise<FactoryFields> {
   try {
     const { data } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", KV_KEY).maybeSingle();
     const v = (data?.value ?? {}) as Partial<FactoryFields>;
-    return { partner: typeof v.partner === "boolean" ? v.partner : DEFAULT_FACTORY_FIELDS.partner, tape_color: typeof v.tape_color === "boolean" ? v.tape_color : DEFAULT_FACTORY_FIELDS.tape_color };
+    const pick = (k: keyof FactoryFields) => (typeof v[k] === "boolean" ? (v[k] as boolean) : DEFAULT_FACTORY_FIELDS[k]);
+    return { partner: pick("partner"), tape_color: pick("tape_color"), vessel: pick("vessel") };
   } catch {
     return { ...DEFAULT_FACTORY_FIELDS };
   }
@@ -61,7 +68,9 @@ async function recentValues(col: "partner" | "tape_color"): Promise<string[]> {
 export async function GET(req: NextRequest) {
   try {
     const u = await factoryWho(req);
-    const [fields, partners, tape_colors, storages, kinds] = await Promise.all([readFields(), recentValues("partner"), recentValues("tape_color"), readStorages(), kindsReady()]);
+    const [fields, recent, tape_colors, storages, kinds, listed] = await Promise.all([readFields(), recentValues("partner"), recentValues("tape_color"), readStorages(), kindsReady(), partnerNames()]);
+    // 목록에 등록된 거래처 먼저, 그 뒤에 목록에 없는 최근 입력값
+    const partners = [...listed, ...recent.filter((x) => !listed.includes(x))];
     return NextResponse.json({ ok: true, fields, partners, tape_colors, storages, kinds, admin: u.admin });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "칸 설정 조회 실패") }, { status: 500 });
@@ -93,6 +102,7 @@ export async function POST(req: NextRequest) {
     const next: FactoryFields = {
       partner: typeof b.partner === "boolean" ? b.partner : cur.partner,
       tape_color: typeof b.tape_color === "boolean" ? b.tape_color : cur.tape_color,
+      vessel: typeof b.vessel === "boolean" ? b.vessel : cur.vessel,
     };
     const { error } = await supabaseAdmin().from("b2b_settings")
       .upsert({ key: KV_KEY, value: next, updated_at: new Date().toISOString() }, { onConflict: "key" });

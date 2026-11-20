@@ -31,6 +31,7 @@ function describe(e: HistEvent): string {
   if (e.txn_type === "조정" && e.target_kg != null && e.kg != null) parts.push(`실사 ${kgStr(e.target_kg)}(이전 ${kgStr(kgNum(e.target_kg - e.kg))})`);
   if (e.partner) parts.push(e.partner);
   if (e.tape_color) parts.push(`테잎 ${e.tape_color}`);
+  if (e.vessel) parts.push(`본선 ${e.vessel}`);
   const head = e.kind === "취소" ? `${e.txn_type} 기록 취소 · ` : "";
   return head + parts.join(" · ");
 }
@@ -46,6 +47,7 @@ export default function FactoryHistoryPage() {
   const [notice, setNotice] = useState("");
   const [capped, setCapped] = useState(false);
   const [kinds, setKinds] = useState(false); // factory/011 적용 — 엑셀 추출을 보인다
+  const [docs, setDocs] = useState(false);   // factory/012 적용 — 출고증을 보인다
   const [busy, setBusy] = useState<string | null>(null);
   const seq = useRef(0); // 기간을 빨리 바꿀 때 늦게 온 이전 응답이 덮어쓰지 않게
 
@@ -57,7 +59,7 @@ export default function FactoryHistoryPage() {
       if (my !== seq.current) return;
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setEvents(j.events || []);
-      setCapped(!!j.capped); setKinds(!!j.kinds);
+      setCapped(!!j.capped); setKinds(!!j.kinds); setDocs(!!j.docs);
     } catch (e) { if (my === seq.current) setError(e instanceof Error ? e.message : "조회 오류"); }
     if (my === seq.current) setLoading(false);
   }, [from, to]);
@@ -103,6 +105,10 @@ export default function FactoryHistoryPage() {
   );
   const cancelBtn = (e: HistEvent) => isTxn(e) && !e.cancelled_at ? (
     <button className="b2b-link-btn fac-cancel" disabled={busy === e.txn_id} onClick={() => cancel(e)}>{busy === e.txn_id ? "취소 중..." : "기록 취소"}</button>
+  ) : null;
+  // 출고증 — 취소 안 된 매출 출고(구분 없는 옛 출고 포함). 같은 입력으로 저장한 줄은 같은 출고증이다
+  const docBtn = (e: HistEvent) => docs && e.kind === "출고" && !e.cancelled_at && e.batch_id && (!e.txn_kind || e.txn_kind === "매출") ? (
+    <a className="b2b-link-btn" href={`/factory/outdoc?batch=${e.batch_id}`} target="_blank" rel="noreferrer">출고증</a>
   ) : null;
   const cancelledNote = (e: HistEvent) => isTxn(e) && e.cancelled_at
     ? <span className="fac-cancelled">취소됨 · {e.cancelled_by || "-"} · {hm(e.cancelled_at)}</span> : null;
@@ -172,7 +178,7 @@ export default function FactoryHistoryPage() {
                       <td className="num fac-num">{qtyBox(e) ?? "-"}</td>
                       <td className="sm-nowrap">{e.who || "-"}</td>
                       <td className="sm-faint">{e.memo || "-"}</td>
-                      <td className="sm-nowrap">{cancelBtn(e)}</td>
+                      <td className="sm-nowrap">{docBtn(e)}{cancelBtn(e)}</td>
                     </tr>
                   );
                 })}
@@ -196,8 +202,8 @@ export default function FactoryHistoryPage() {
                     <span>{e.who || "-"}</span>
                     {e.memo && <span>{e.memo}</span>}
                   </div>
-                  {(cancelledNote(e) || cancelBtn(e)) && (
-                    <div className="fac-hist-foot">{cancelledNote(e)}{cancelBtn(e)}</div>
+                  {(cancelledNote(e) || cancelBtn(e) || docBtn(e)) && (
+                    <div className="fac-hist-foot">{cancelledNote(e)}{docBtn(e)}{cancelBtn(e)}</div>
                   )}
                 </div>
               );

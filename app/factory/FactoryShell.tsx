@@ -16,6 +16,7 @@ const NAV = [
   { href: "/factory", label: "재고", icon: "box" as const, exact: true },
   { href: "/factory/history", label: "히스토리", icon: "receipt" as const },
   { href: "/factory/products", label: "상품마스터", icon: "fish" as const },
+  { href: "/factory/partners", label: "거래처", icon: "handshake" as const },
 ];
 // 계정(직원 계정 만들기)은 관리자에게만 — 서버(/api/factory/accounts)가 관리자 여부를 답한다
 //  예상(출고·생산 예상, 2026-11-20)도 관리자에게만 — 서버(/api/factory/forecast)도 관리자만 답한다
