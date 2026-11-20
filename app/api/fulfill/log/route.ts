@@ -79,7 +79,11 @@ export async function POST(req: NextRequest) {
         if (!note) return NextResponse.json({ ok: false, error: "내용(사유)을 입력하세요." }, { status: 400 });
         const token = req.cookies.get("b2b_auth")?.value;
         const by = (await verifySession(token)) || resolveUserName(token);
-        added = { id: randomUUID(), side, category, qty, note: note.slice(0, 200), at: new Date().toISOString(), by };
+        // id 를 함께 보내면(취소·반품 처리) 그 id 로 한 번만 기록한다 — 응답을 못 받고 다시 보내도 두 번 빠지지 않는다(S2)
+        const wantId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(a.id || "")) ? String(a.id) : null;
+        const prev = wantId ? entries.find((e) => e.id === wantId) : null;
+        if (prev) return NextResponse.json({ ok: true, entry: prev, entries, replay: true });
+        added = { id: wantId || randomUUID(), side, category, qty, note: note.slice(0, 200), at: new Date().toISOString(), by };
         entries = [...entries, added];
       } else {
         const id = String((b.del_entry as Record<string, unknown>)?.id || "");

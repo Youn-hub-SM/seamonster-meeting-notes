@@ -491,6 +491,16 @@ export async function logAudience(action: "search" | "export", summary: string, 
     actor,
   });
 }
+// 취소·반품 처리(온라인 발주 › 취소·반품, migration 175) — 매출 원장이 바뀌므로 매출 변경 기록(sales.*)에 남긴다. 알림은 보내지 않는다.
+export async function logOrderCancel(action: "apply" | "revert", p: { kind: string; channel: string; orderId: string; qty: number; amount: number; cancelId: number }, actor: string | null): Promise<void> {
+  await recordActivity({
+    event_type: action === "apply" ? "sales.order_cancel" : "sales.order_cancel_revert",
+    summary: `${p.kind} ${action === "apply" ? "처리" : "되돌리기"} · ${p.channel} ${p.orderId} · ${p.qty.toLocaleString("ko-KR")}개 · ${p.amount.toLocaleString("ko-KR")}원`,
+    meta: { cancel_id: p.cancelId, kind: p.kind, channel: p.channel, order_id: p.orderId, qty: p.qty, amount: p.amount },
+    notify: false,
+    actor,
+  });
+}
 export async function logSalesUpload(filename: string, inserted: number, skipped: number): Promise<void> {
   await recordActivity({
     event_type: "sales.upload",

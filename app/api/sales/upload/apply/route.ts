@@ -5,6 +5,7 @@ import { type SalesCustomerRow } from "@/app/lib/sales-normalize";
 import { planUpload, planReplace, readUploadOptions, replaceBlockReason, uncoveredBlockReason } from "@/app/lib/sales-upload";
 import { logSalesUpload, currentActor } from "@/app/lib/b2b-activity";
 import { randomUUID } from "node:crypto";
+import { loadCancelNets, applyCancelsToRows } from "@/app/lib/order-cancel";
 import { kstDay, md } from "@/app/lib/analyst";
 import { lastWeek, lastMonth, periodLabel } from "@/app/lib/analyst-period";
 
@@ -54,6 +55,13 @@ export async function POST(req: NextRequest) {
     }
 
     const sb = supabaseAdmin();
+
+    // 취소 장부(175, 온라인 발주 › 취소·반품) 적용 — 전부 취소한 줄은 다시 넣지 않고, 일부 취소한 줄은 남은 수량·금액으로 넣는다.
+    //  (이미 있는 줄은 해시가 같아 아래 upsert 가 건너뛴다 — 줄어든 값이 유지된다.) 장부를 읽지 못하면 아무것도 쓰지 않고 멈춘다(S4).
+    //  기간 교체의 '파일에 있는 행' 판정에는 원래 파일 행(orders)을 그대로 쓴다.
+    let writeOrders = orders;
+    try { writeOrders = applyCancelsToRows(orders, await loadCancelNets(sb)).rows; }
+    catch (e) { return NextResponse.json({ ok: false, error: `${(e as Error).message} — 아무것도 쓰지 않았습니다. 다시 시도하세요.` }, { status: 500 }); }
 
     // 삽입 전 기존 개수(정확한 신규 건수 산출)
     const hashes = orders.map((o) => o.row_hash);
@@ -131,8 +139,8 @@ export async function POST(req: NextRequest) {
     const dropHistory = () => sb.from("sales_uploads").delete().eq("id", batchId).then(() => undefined, () => undefined);
 
     // 멱등 upsert(중복 무시) — 기간 교체여도 넣기를 먼저 해, 중간에 실패해도 파일 행이 빠진 채 남지 않는다
-    for (let i = 0; i < orders.length; i += 1000) {
-      const chunk = orders.slice(i, i + 1000).map((o) => ({ ...o, source: "web", upload_batch: batchId }));
+    for (let i = 0; i < writeOrders.length; i += 1000) {
+      const chunk = writeOrders.slice(i, i + 1000).map((o) => ({ ...o, source: "web", upload_batch: batchId }));
       const { error } = await sb.from("sales_orders").upsert(chunk, { onConflict: "row_hash", ignoreDuplicates: true });
       if (error) {
         // 앞 묶음은 들어갔을 수 있다 — 넣은 건수를 세어 이력에 남긴다(되돌리기 확인창도 실제 행 수를 센다). 0건이면 이력을 지운다.
@@ -145,7 +153,7 @@ export async function POST(req: NextRequest) {
     }
 
     const counted = await countBatch();
-    const inserted = counted ?? Math.max(0, orders.length - existed);
+    const inserted = counted ?? Math.max(0, writeOrders.length - existed);
     const skipped = rows.length - inserted;
     const stale = replacePlan?.staleIds.length ?? 0;
     // 교체 삭제 전에 넣은 건수와 '삭제 중' 표시를 먼저 남긴다 — 삭제 도중 시간 초과로 끊겨도 신규 건수와 지울 행 수가 이력에 남는다

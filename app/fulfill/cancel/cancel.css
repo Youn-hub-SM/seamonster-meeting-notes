@@ -1,0 +1,29 @@
+/* 취소·반품(/fulfill/cancel) 전용 — 접두사 .oc-*. 색·간격·글자는 globals.css :root 토큰만. */
+.oc-find { display: flex; gap: var(--sm-space-3); align-items: flex-end; flex-wrap: wrap; }
+.oc-find-field { flex: 1 1 260px; max-width: 420px; }
+.oc-gap { margin-top: var(--sm-space-4); }
+/* 찾은 주문 */
+.oc-order { display: flex; align-items: baseline; gap: var(--sm-space-3); flex-wrap: wrap; margin: var(--sm-space-5) 0 var(--sm-space-3); }
+.oc-order-id { font-size: var(--sm-fs-lg); font-weight: 600; }
+.oc-order-sub { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.b2b-table.oc-lines { min-width: 720px; }
+.oc-name { white-space: normal; min-width: 220px; line-height: var(--sm-lh-body); }
+.oc-opt { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.oc-code { font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.b2b-input.oc-num { width: 72px; text-align: right; font-variant-numeric: tabular-nums; }
+.b2b-input.oc-amount { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+/* 처리 내용 — 구분·메모·배송일지·재고 */
+.oc-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-4) var(--sm-space-5); margin-top: var(--sm-space-5); }
+.oc-wide { grid-column: 1 / -1; }
+.oc-row { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; }
+.oc-row .b2b-input.oc-date { width: auto; }
+.oc-row .b2b-select.oc-cat { width: auto; min-width: 120px; }
+.oc-stock { margin-top: var(--sm-space-2); }
+.oc-stock-name { flex: 0 1 360px; min-width: 0; }
+.oc-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sm-space-3); flex-wrap: wrap; }
+.oc-total { font-weight: 600; font-variant-numeric: tabular-nums; }
+.b2b-table.oc-history { min-width: 1180px; }
+
+@media (max-width: 640px) {
+  .oc-form { grid-template-columns: 1fr; }
+}

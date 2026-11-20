@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/app/lib/supabase";
 import { parseSalesFile } from "@/app/lib/sales-parse";
+import { loadCancelNets, applyCancelsToRows } from "@/app/lib/order-cancel";
 import { planUpload, planReplace, readUploadOptions, findChangedRows, defaultReplacePeriod, monthReplacePeriod, replaceBlockReason, uncoveredKeys, type ReplacePeriod, type ReplaceScope } from "@/app/lib/sales-upload";
 
 export const runtime = "nodejs";
@@ -39,6 +40,9 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ ok: false, error: `DB 조회 오류: ${error.message} (마이그레이션 039 적용 확인)` }, { status: 500 });
       for (const r of data || []) existingHashes.add(r.row_hash as string);
     }
+    // 취소 장부(175)로 전부 취소한 줄 — 적용 때 다시 넣지 않으므로 '이미 있음'과 같이 센다(미리보기 숫자 = 적용 결과).
+    try { for (const h of applyCancelsToRows(orders, await loadCancelNets(sb)).dropped) existingHashes.add(h); }
+    catch (e) { return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 }); }
     const dupInDb = existingHashes.size;
 
     // 기간 교체 — 지워질 기존 행(조회 실패면 미리보기 자체를 실패로: 지울 범위를 모른 채 적용하지 않게).

@@ -55,6 +55,7 @@ const NAV_ALL: NavCategory[] = [
           { href: "/fulfill/locations", label: "창고 위치" },
           { href: "/fulfill/customers", label: "단골·블랙 고객" },
           { href: "/fulfill/log", label: "배송일지" },
+          { href: "/fulfill/cancel", label: "취소·반품" },
           { href: "/fulfill/stats", label: "발송 통계" },
         ],
       },
