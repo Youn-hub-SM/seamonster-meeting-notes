@@ -42,3 +42,12 @@ export function rrnHash(digits: string): string {
   const k = Buffer.from(hkdfSync("sha256", dataKey(), Buffer.alloc(0), "hr-rrn-hash-v1", 32));
   return createHmac("sha256", k).update(digits).digest("hex");
 }
+
+// ── 직원 확인 링크(app/lib/hr-me.ts)가 쓰는 것 ──────────────────────
+// 같은 암호화(AES-256-GCM, HR_DATA_KEY)로 짧은 비밀 글자를 감춘다 — 링크 토큰을 DB 에 평문으로 두지 않으려고.
+export const sealSecret = encryptRrn;
+export const openSecret = decryptRrn;
+// 용도별로 따로 뽑은 서명 키(HR_DATA_KEY 에서 HKDF) — 암호화 키를 서명에 그대로 쓰지 않는다.
+export function derivedKey(info: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", dataKey(), Buffer.alloc(0), info, 32));
+}

@@ -11,6 +11,7 @@ import {
 } from "@/app/lib/hr";
 import { HrApiError, errText, hrApi } from "../../api";
 import EmployeeForm from "../../EmployeeForm";
+import LinkField from "./LinkField";
 
 export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -194,6 +195,8 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
           {item("메모", e.memo, true)}
         </dl>
       </section>
+
+      <LinkField employeeId={e.id} name={e.name} hasRrn={e.has_rrn} />
 
       {formOpen && (
         <EmployeeForm employee={e} workplaces={workplaces} minWage={minWage} keyReady={keyReady}

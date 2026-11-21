@@ -142,6 +142,55 @@
 .hr-leave-box .b2b-table tr, .hr-leave-box .b2b-table tr:hover { cursor: default; }
 .hr-leave-dim > td { color: var(--sm-text-mid); }
 
+/* ── 증명서 ──────────────────────────────────────────────────────── */
+.hr-docs { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: var(--sm-space-5); align-items: start; }
+@media (max-width: 1180px) { .hr-docs { grid-template-columns: minmax(0, 1fr); } }
+.hr-docs-form { display: flex; flex-direction: column; gap: var(--sm-space-3); }
+.hr-docs-form .sm-tabs { margin: 0; flex-wrap: wrap; }
+.hr-docs-form .hr-rule { margin: 0; }
+.hr-docs-range { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sm-space-2); }
+.hr-doc-wrap { min-width: 0; overflow-x: auto; }
+/* 종이 한 장 — 화면의 미리보기가 그대로 인쇄된다 */
+.hr-doc {
+  /* 좁은 창에서도 종이 폭을 지킨다(표가 찌그러지지 않게) — 넘치면 .hr-doc-wrap 이 옆으로 민다 */
+  display: flex; flex-direction: column; width: 100%; min-width: 640px; max-width: 720px; min-height: 940px; margin: 0 auto;
+  padding: var(--sm-space-6) 48px; background: var(--sm-white); border: 1px solid var(--sm-border);
+  color: var(--sm-black); font-size: var(--sm-fs-lg); line-height: 1.7;
+}
+.hr-doc-no { min-height: 1.7em; font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+.hr-doc h1 { margin: var(--sm-space-5) 0 var(--sm-space-6); text-align: center; font-size: var(--sm-fs-2xl); font-weight: 600; letter-spacing: 0.3em; line-height: var(--sm-lh-heading); }
+.hr-doc h1.is-long { letter-spacing: 0; font-size: var(--sm-fs-xl); }
+.hr-doc-table { width: 100%; border-collapse: collapse; margin-bottom: var(--sm-space-4); }
+.hr-doc-table th, .hr-doc-table td { border: 1px solid var(--sm-black); padding: 8px 10px; text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
+.hr-doc-table th { width: 17%; background: var(--sm-bg-subtle); font-weight: 600; text-align: center; white-space: nowrap; }
+.hr-doc-money { font-size: var(--sm-fs-base); }
+.hr-doc-money th { width: auto; }
+.hr-doc-money td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hr-doc-money tr.is-sum td { font-weight: 600; background: var(--sm-bg-subtle); }
+.hr-doc-say { margin: var(--sm-space-5) 0 0; text-align: center; }
+.hr-doc-date { margin: var(--sm-space-6) 0 0; text-align: center; }
+.hr-doc-sign { margin-top: auto; padding-top: var(--sm-space-6); text-align: center; }
+.hr-doc-co { font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-heading); }
+.hr-doc-meta { display: flex; flex-direction: column; margin: var(--sm-space-2) 0 var(--sm-space-3); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+.hr-doc-ceo { font-size: var(--sm-fs-xl); }
+.hr-doc-ceo strong { margin: 0 var(--sm-space-2); font-weight: 600; letter-spacing: 0.2em; }
+/* 직인은 "(인)" 글자 위에 겹쳐 찍는다 */
+.hr-doc-seal { position: relative; display: inline-block; color: var(--sm-text-mid); }
+.hr-doc-seal img { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; max-width: none; object-fit: contain; transform: translate(-50%, -50%); mix-blend-mode: multiply; }
+/* 사업장 수정 창의 직인 칸 */
+.hr-stamp { display: flex; align-items: center; gap: var(--sm-space-4); }
+.hr-stamp-box {
+  display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; flex: 0 0 96px;
+  border: 1px dashed var(--sm-border-strong); border-radius: var(--sm-radius); background: var(--sm-white);
+  font-size: var(--sm-fs-xs); color: var(--sm-text-light);
+}
+.hr-stamp-box img { max-width: 88px; max-height: 88px; object-fit: contain; }
+.hr-stamp-actions { display: flex; flex-wrap: wrap; gap: var(--sm-space-2); }
+.hr-stamp-actions label { cursor: pointer; }
+/* 인사기록카드의 직원 확인 링크 */
+.hr-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2) var(--sm-space-3); padding: var(--sm-space-3) var(--sm-space-4); }
+.hr-link-url { flex: 1 1 280px; min-width: 0; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); overflow-wrap: anywhere; }
+
 /* ── 통계 ────────────────────────────────────────────────────────── */
 .hr-stats-sec { margin-top: var(--sm-space-6); }
 .hr-stats-sec:first-of-type { margin-top: var(--sm-space-4); }
@@ -255,6 +304,21 @@
   .hr-slip .hr-print-table { font-size: 9pt; margin-bottom: 10px; }
   .hr-slip .hr-print-table th, .hr-slip .hr-print-table td { padding: 4px 6px; }
   .hr-slip-net { display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 10px; border: 1pt solid #000; font-size: 12pt; font-weight: 600; }
+  /* 증명서 — 종이 한 장을 꽉 채운다 */
+  .hr-docs { display: block; }
+  .hr-doc-wrap { overflow: visible; }
+  .hr-doc { min-width: 0; max-width: none; min-height: 255mm; margin: 0; padding: 0; border: none; font-size: 12pt; }
+  .hr-doc-no { font-size: 10pt; color: #000; }
+  .hr-doc h1 { margin: 12mm 0 14mm; font-size: 24pt; }
+  .hr-doc h1.is-long { font-size: 17pt; }
+  .hr-doc-table th { background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hr-doc-money { font-size: 10pt; }
+  .hr-doc-money tr.is-sum td { background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hr-doc-co { font-size: 18pt; }
+  .hr-doc-meta { font-size: 10pt; color: #000; }
+  .hr-doc-ceo { font-size: 14pt; }
+  .hr-doc-seal { color: #000; }
+  .hr-doc-seal img { width: 22mm; height: 22mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* 사용 가이드 — 항목이 쪽 사이에서 잘리지 않게 */
   .hr-guide-card { border-color: #333; border-radius: 0; }
   .hr-guide-card details { break-inside: avoid; }

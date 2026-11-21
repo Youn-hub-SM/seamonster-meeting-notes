@@ -20,6 +20,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // 급여·연차 창(/hr)의 탭 제목은 그 창의 셸(app/hr/HrShell.tsx)이 정한다 — 여기서 업무도우미 이름으로 덮어쓰지 않는다
     if (pathname === "/hr" || pathname.startsWith("/hr/")) return;
+    // 직원 확인 링크(/me)도 제 화면이 탭 제목을 정한다(app/me/[token]/page.tsx)
+    if (pathname.startsWith("/me/")) return;
     const want = pageTitleOf(pathname);
     const apply = () => { if (document.title !== want) document.title = want; };
     apply();
@@ -52,6 +54,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname.startsWith("/factory")) return <>{children}</>;
   // 급여·연차(/hr)는 로그인부터 따로인 별도 창 — app/hr/layout.tsx. 업무도우미 메뉴·검색을 그리지 않는다
   if (pathname === "/hr" || pathname.startsWith("/hr/")) return <>{children}</>;
+  // 직원 확인 링크(/me)는 로그인 없이 직원이 여는 화면 — 업무도우미 메뉴·검색을 그리지 않는다
+  if (pathname.startsWith("/me/")) return <>{children}</>;
   // 주요 지표(/board)는 메뉴 없이 숫자만 있는 독립 화면 — app/board/layout.tsx
   if (pathname === "/board" || pathname.startsWith("/board/")) return <>{children}</>;
 

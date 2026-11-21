@@ -7,6 +7,7 @@ import { useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
 import { LEAVE_BASIS_LABEL, LEAVE_ROUND_LABEL, WEEKDAYS, rateText, type Workplace } from "@/app/lib/hr";
 import { HrApiError, errText, hrApi } from "../api";
+import StampField from "./StampField";
 
 export default function HrSettingsPage() {
   const toast = useToast();
@@ -174,6 +175,7 @@ function WorkplaceForm({ wp, onClose, onSaved }: { wp: Workplace | null; onClose
                 </select>
               </label>
             </section>
+            {wp && <StampField workplaceId={wp.id} />}
           </div>
         </div>
         <div className="b2b-modal-foot">

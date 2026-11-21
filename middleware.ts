@@ -11,6 +11,12 @@ function isFactoryPath(p: string): boolean {
     || p === "/b2b/login" || p === "/api/b2b/auth";
 }
 
+// 직원 확인 링크(/me/<토큰>·/api/me/<토큰>, 2026-11-21). 로그인 없이 열리는 구역 — 주소의 토큰과 본인 확인 쿠키를
+//  그 경로가 스스로 검증한다(app/api/me/[token]/route.ts). 업무도우미·급여 창·파도소리 로그인과 무관하다.
+function isMePath(p: string): boolean {
+  return p.startsWith("/me/") || p.startsWith("/api/me/");
+}
+
 // /b2b 와 /api/b2b 전체를 비밀번호로 보호.
 // 사용자별 비밀번호(B2B_USERS) + 관리자 비밀번호(B2B_PASSWORD) — 비밀번호로 사용자를 구분.
 // 쿠키 b2b_auth 값(비밀번호)을 직접 비교 (HttpOnly+Secure 라 노출 위험 낮음).
@@ -46,11 +52,19 @@ export async function middleware(req: NextRequest) {
   const onFactoryHost = factoryHosts.includes(host);
   //  급여·연차 창(/hr·/api/hr)은 파도소리 주소에서도 연다(2026-11-21 대표: 전용 도메인을 더 붙일 수 없어 pdsr.kr/hr 로).
   //  아래 hr 분기가 hr_auth 로 따로 잠그고, 그 창에는 업무도우미 이름·메뉴·로고·바깥 링크가 없다.
-  if (onFactoryHost && !isHrPath(pathname) && (pathname === "/b2b/login" || !isFactoryPath(pathname))) {
+  if (onFactoryHost && !isHrPath(pathname) && !isMePath(pathname) && (pathname === "/b2b/login" || !isFactoryPath(pathname))) {
     const url = req.nextUrl.clone();
     url.pathname = pathname === "/b2b/login" ? "/factory/login" : "/factory";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  // 직원 확인 링크는 그냥 통과시킨다(검증은 그 경로가 한다). 검색 엔진에 실리지 않게 하고 어디에도 캐시하지 않는다.
+  if (isMePath(pathname)) {
+    const res = NextResponse.next();
+    res.headers.set("Cache-Control", "no-store");
+    res.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return res;
   }
 
   // 급여·연차 창(/hr·/api/hr, 2026-11-20). 업무도우미 로그인과 완전히 따로 잠근다 —
