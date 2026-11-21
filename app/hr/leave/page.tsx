@@ -9,6 +9,7 @@ import { useConfirm, useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
 import { LEAVE_BASIS_LABEL, isActiveOn, isDate } from "@/app/lib/hr";
 import { GRANT_KIND_LABEL, dayText, leaveBasisOf, partTimeFactor, summarizeLeave, type GrantView, type LeaveEmployee, type LeaveGrant, type LeaveSummary, type LeaveUse, type LeaveWorkplace } from "@/app/lib/hr-leave";
+import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";   // 업무도우미와 같이 쓰는 검색 고르기(화면 부품일 뿐 — 자료에는 닿지 않는다)
 import { HrApiError, errText, hrApi } from "../api";
 
 type Data = {
@@ -302,7 +303,24 @@ function historyText(detail: Record<string, unknown>): string {
   return parts.join(" · ");
 }
 
-const employeeOptions = (employees: LeaveEmployee[]) => employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.emp_no ? ` (${e.emp_no})` : ""}{e.leave_date ? " · 퇴사" : ""}</option>);
+// 직원 고르기 — 이름·생년월일·사번·부서를 쳐서 찾는다(초성도 된다: "ㄱㅅㅎ"). 같은 이름은 아래 줄의 생년월일로 가린다.
+//  생년월일은 1990-01-01 · 19900101 · 900101 어느 모양으로 쳐도 찾힌다.
+const employeeLabel = (e: LeaveEmployee) => `${e.name}${e.emp_no ? ` (${e.emp_no})` : ""}${e.leave_date ? " · 퇴사" : ""}`;
+function EmployeePicker({ employees, value, onChange, invalid }: { employees: LeaveEmployee[]; value: string; onChange: (id: string) => void; invalid?: boolean }) {
+  const options: ComboOption[] = useMemo(() => employees.map((e) => {
+    const b = e.birth_date || "";
+    return {
+      id: e.id, label: employeeLabel(e),
+      sub: [b, e.dept, e.position].filter(Boolean).join(" · "),
+      extra: b ? `${b.replace(/-/g, "")} ${b.replace(/-/g, "").slice(2)}` : "",
+    };
+  }), [employees]);
+  const picked = employees.find((e) => e.id === value);
+  return (
+    <Combobox value={picked ? employeeLabel(picked) : ""} options={options} onSelect={(o) => onChange(o.id)}
+      placeholder="이름·생년월일·사번으로 찾기" emptyText="일치하는 직원이 없습니다" ariaLabel="직원" invalid={invalid} />
+  );
+}
 
 // 연차 추가 — 포상·이월·차감·도입 시점 잔여 맞추기. 일수가 음수면 빼는 건이다.
 function GrantForm({ employees, today, employee, onClose, onSaved }: { employees: LeaveEmployee[]; today: string; employee: string; onClose: () => void; onSaved: (g: LeaveGrant) => void }) {
@@ -337,14 +355,11 @@ function GrantForm({ employees, today, employee, onClose, onSaved }: { employees
           {formError && <div className="b2b-error" role="alert">{formError}</div>}
           <div className="hr-form">
             <section className="hr-form-sec">
-              <label className="b2b-field hr-span2">
+              <div className="b2b-field hr-span2">
                 <span className="b2b-field-label">직원<span className="req">*</span></span>
-                <select className="b2b-input" value={f.employee_id} onChange={(e) => set("employee_id", e.target.value)} aria-invalid={inv("employee_id")}>
-                  <option value="">직원 선택</option>
-                  {employeeOptions(employees)}
-                </select>
+                <EmployeePicker employees={employees} value={f.employee_id} onChange={(id) => set("employee_id", id)} invalid={!!errors.employee_id} />
                 {err("employee_id")}
-              </label>
+              </div>
               <label className="b2b-field">
                 <span className="b2b-field-label">일수<span className="req">*</span><span className="opt"> 빼려면 음수</span></span>
                 <input className="b2b-input num" inputMode="decimal" value={f.days} placeholder="0" onChange={(e) => set("days", e.target.value.replace(/[^\d.-]/g, ""))} aria-invalid={inv("days")} />
@@ -415,14 +430,11 @@ function UseForm({ employees, today, employee, onClose, onSaved }: {
           {formError && <div className="b2b-error" role="alert">{formError}</div>}
           <div className="hr-form">
             <section className="hr-form-sec">
-              <label className="b2b-field hr-wide">
+              <div className="b2b-field hr-wide">
                 <span className="b2b-field-label">직원<span className="req">*</span></span>
-                <select className="b2b-input" value={f.employee_id} onChange={(e) => set("employee_id", e.target.value)} aria-invalid={inv("employee_id")}>
-                  <option value="">직원 선택</option>
-                  {employeeOptions(employees)}
-                </select>
+                <EmployeePicker employees={employees} value={f.employee_id} onChange={(id) => set("employee_id", id)} invalid={!!errors.employee_id} />
                 {err("employee_id")}
-              </label>
+              </div>
               <label className="b2b-field">
                 <span className="b2b-field-label">시작일<span className="req">*</span></span>
                 <input className="b2b-input" type="date" value={f.from} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, from: v, to: isDate(v) && (!isDate(p.to) || p.to < v) ? v : p.to })); }} aria-invalid={inv("from")} />

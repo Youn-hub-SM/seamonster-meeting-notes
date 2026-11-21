@@ -10,7 +10,7 @@ type Row = Record<string, unknown>;
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
 const PAGE = 1000;
 
-const EMP_COLS = "id,workplace_id,emp_no,name,dept,position,hire_date,leave_date,work_days,daily_hours,leave_basis";
+const EMP_COLS = "id,workplace_id,emp_no,name,dept,position,hire_date,leave_date,work_days,daily_hours,leave_basis,birth_date";
 export const GRANT_COLS = "id,employee_id,grant_date,expire_date,days,kind,auto_key,reason,voided,created_by,created_at";
 const LOG_COLS = "employee_id,work_date,kind,start_time,end_time,break_min,hours,night_hours,leave_days,memo";
 
@@ -26,6 +26,7 @@ const toEmployee = (r: Row): LeaveEmployee => ({
   dept: String(r.dept ?? ""), position: String(r.position ?? ""), hire_date: String(r.hire_date ?? ""), leave_date: (r.leave_date as string) || null,
   work_days: Array.isArray(r.work_days) ? (r.work_days as unknown[]).map(Number) : [], daily_hours: num(r.daily_hours),
   leave_basis: r.leave_basis === "hire" || r.leave_basis === "fiscal" ? r.leave_basis : "",
+  birth_date: (r.birth_date as string) || null,
 });
 
 export async function fetchLeaveWorkplaces(): Promise<LeaveWorkplace[]> {

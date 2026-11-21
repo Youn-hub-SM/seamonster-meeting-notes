@@ -19,6 +19,7 @@ import { addDays, round2, weekdayOf } from "./hr-work";
 export type LeaveEmployee = {
   id: string; workplace_id: string; emp_no: string; name: string; dept: string; position: string;
   hire_date: string; leave_date: string | null; work_days: number[]; daily_hours: number; leave_basis: "" | "hire" | "fiscal";
+  birth_date?: string | null;   // 화면에서 직원을 찾을 때만 쓴다(같은 이름 가리기) — 연차 계산에는 쓰지 않는다
 };
 export type LeaveWorkplace = Pick<Workplace, "id" | "name" | "five_plus" | "fiscal_start" | "leave_basis" | "leave_round">;
 export type LeaveGrant = {
