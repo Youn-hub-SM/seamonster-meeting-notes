@@ -6,6 +6,7 @@ import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProd
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getRequestFullness } from "@/app/lib/production-allocate";
 import { companyTitle } from "@/app/lib/production-request-create";
+import { requireLogin } from "@/app/lib/require-login";
 import { releasePromotionOnClose, markPromoReleased, promoReleasedQty, backfillReleaseReceipts, claimPromoRelease, promoClaimFilter, PROMO_RELEASE_CLAIM_MS, type PromoRelease } from "@/app/lib/promotion-close";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,9 @@ const PROMO_LEGACY_MSG = "합류 시작 기록이 없는 요청서입니다(이�
 const PROMO_LEGACY_CONFIRM = "합류 시작 기록이 없는 요청서입니다(이전 버전에서 마감). 합류는 그 마감 때 실행됐고, 다시 실행하면 마감 뒤 배정 없이 프로모션 칸에 옮겨 둔 재고까지 소매로 넘어갑니다.\n\n합류 완료로 표시만 할까요? 프로모션 칸에 이 요청서 재고가 남아 있으면 [재고 이동]에서 직접 옮기세요.";
 
 // GET — 요청서 단건(품목·입고 이력 포함)
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const [row] = await loadRequests(supabaseAdmin(), { id });
@@ -45,6 +48,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 //  단, 입고 기록이 있는 품목은 뺄 수 없다(items FK cascade 가 입고 증거까지 지워 재고 정합이 깨짐).
 //  expect_status: 클라이언트가 본 상태. 지금 상태와 다르면 409(오래된 목록의 [확인]이 그사이 자동 완료·취소된 요청서를 되살리는 것 방지).
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const b = (await req.json()) as Record<string, unknown>;
@@ -381,6 +386,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
 // DELETE — 요청서 삭제. 입고 기록이 있으면 거부(재고 정합성 보호) → '취소'로 기록 보존.
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(_req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const sb = supabaseAdmin();

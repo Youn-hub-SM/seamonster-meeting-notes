@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { isMissing131, loadByRequestKey, lockKindOf, type LedgerMark } from "../../txn/ledger-write";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,8 @@ const FAIL = "이 반품으로 재고에서 뺀 출고가 있는지 확인하지
 //  키로 못 찾는 같은 날·같은 품목 출고는 지우지 않고 409(code 'return_maybe_outflow'), confirm=keep 이면 반품만 지운다. 조회 실패는 503(S4).
 //  409 마다 confirm_as = 확인했을 때 다시 보낼 confirm 값 — 확인 사이에 상황이 바뀌면 다른 409 가 다시 온다.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: "잘못된 반품 id 입니다." }, { status: 400 });

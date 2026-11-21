@@ -5,6 +5,7 @@ import {
   parseProductInput, histValue, type ProductPatch, isMissingSpec, PENDING_006_HINT,
 } from "@/app/lib/factory-db";
 import { productKey } from "@/app/lib/factory";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -15,6 +16,8 @@ const pending = () => NextResponse.json({ ok: false, error: PENDING_005, pending
 //  바뀐 값은 DB 트리거(factory.log_product_change)가 같은 트랜잭션에서 product_changes 에 남긴다(히스토리 '변경').
 //  '누가'는 updated_by 로 넘긴다.
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req, "factory");
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const u = await factoryWho(req);
@@ -66,6 +69,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 // DELETE — 품목 삭제. 입출고 기록이 한 줄이라도 있으면(취소 포함) DB 함수가 막는다 — 히스토리가 끊긴다.
 //  삭제 이력과 삭제는 DB 함수(factory.delete_product) 한 트랜잭션.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req, "factory");
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const u = await factoryWho(req);

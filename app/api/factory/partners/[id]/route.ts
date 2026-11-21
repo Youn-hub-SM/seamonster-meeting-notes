@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending012, PENDING_012 } from "@/app/lib/factory-db";
 import { parsePartnerInput } from "@/app/lib/factory-partners";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -10,6 +11,8 @@ const bad = (error: string, status = 400) => NextResponse.json({ ok: false, erro
 
 // PATCH — 거래처 수정(모든 계정). 이름을 바꿔도 이미 적힌 기록의 거래처 글자는 그대로다.
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req, "factory");
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     if (!UUID_RE.test(id)) return bad("거래처를 찾을 수 없습니다.", 404);
@@ -33,6 +36,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
 // DELETE — 목록에서 지운다(관리자). 기록에 적힌 거래처 글자는 남는다.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req, "factory");
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     if (!UUID_RE.test(id)) return bad("거래처를 찾을 수 없습니다.", 404);

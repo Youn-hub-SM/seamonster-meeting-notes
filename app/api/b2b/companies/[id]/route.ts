@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { cancelledDeductionByOrder } from "@/app/lib/b2b-cancel";
 import { fetchAllPages, fetchInChunks } from "@/app/lib/sales-paging";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,9 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // GET /api/b2b/companies/[id]
 // 거래처 정보 + 발주 이력 + 집계(총매출·미수금·발주수·주력품목)
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const sb = supabaseAdmin();

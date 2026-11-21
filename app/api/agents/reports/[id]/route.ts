@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
 import { getReport, deleteReport } from "@/app/lib/agents/store";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,9 @@ async function actor(req: NextRequest): Promise<string | null> {
 }
 
 // GET — 보고서 한 장('작성 중' 확인용)
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: "없는 보고서입니다." }, { status: 404 });
@@ -27,6 +30,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 // DELETE — 보고서 삭제. 실패한 보고서는 누구나, 완료된 보고서는 관리자만(쌓이는 기록이 비교 자료다). 요청서로 만든 보고서는 지우지 않는다.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: "없는 보고서입니다." }, { status: 404 });

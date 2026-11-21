@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,7 +8,9 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 // DELETE — 업로드 1건 삭제(해당 라인 cascade)
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const sb = supabaseAdmin();

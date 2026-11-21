@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadThreadItems, archiveThread, isPending139, PENDING_139, getRunningSince } from "@/app/lib/chat-assistant";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,8 @@ async function who(req: NextRequest): Promise<string> {
 const pending = () => NextResponse.json({ ok: false, error: PENDING_139, pending_migration: true }, { status: 503 });
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await ctx.params;
     if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: "대화 번호가 올바르지 않습니다." }, { status: 400 });
@@ -28,6 +31,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await ctx.params;
     if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: "대화 번호가 올바르지 않습니다." }, { status: 400 });

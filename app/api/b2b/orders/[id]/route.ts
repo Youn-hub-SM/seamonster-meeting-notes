@@ -40,6 +40,7 @@ import {
   logOrderDeleted,
 } from "@/app/lib/b2b-activity";
 import { syncOrderSalesSafe, deleteOrderSales } from "@/app/lib/b2b-sales-sync";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const runtime = "nodejs"; // sales-sync 가 crypto(sales-normalize) 사용
 export const dynamic = "force-dynamic";
@@ -61,7 +62,9 @@ const isRealSchedule = (s: ShipSchedule) => !!s.ship_date || (s.items || []).som
 // ─────────────────────────────────────────────
 // GET /api/b2b/orders/[id] — 라인아이템 + 업체 풀 디테일
 // ─────────────────────────────────────────────
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const sb = supabaseAdmin();
@@ -105,6 +108,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 //  차수는 DB 에서 재구성해 다시 저장한다(수량이 바뀌면 선점·매출이 따라온다).
 // ─────────────────────────────────────────────
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   // 뒷단계가 실패하면 catch 에서 헤더·대량 표식·라인·차수를 되돌린다(DB 트랜잭션이 없어 보상으로 원자성을 흉내낸다, S3).
   let rollbackHeader: (() => Promise<void>) | null = null;
   let rollbackBulk: (() => Promise<void>) | null = null;
@@ -437,7 +442,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 //  발송된 발주(발송완료 또는 발송 시각이 남은 차수)는 지우지 않는다(대표 결정 D3) — 지우면 cascade 로
 //  선점 출고가 사라져 실제로 나간 물건이 장부에 되살아난다. 취소로 바꾸면 반품 여부를 묻고 재고를 맞춘다.
 // ─────────────────────────────────────────────
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const sb = supabaseAdmin();
@@ -500,6 +507,8 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
 //  발송된 발주 취소: body.returned(true=반품으로 돌아옴 → 재고 복구, false=안 돌아옴 → 출고 유지) 필수(D3).
 // ─────────────────────────────────────────────
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const body = (await req.json()) as Partial<{

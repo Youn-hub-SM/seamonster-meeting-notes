@@ -11,6 +11,7 @@ import {
   type SaveShipmentsOpts,
 } from "@/app/lib/b2b-shipments";
 import { logShipmentStatusChanged } from "@/app/lib/b2b-activity";
+import { requireLogin } from "@/app/lib/require-login";
 
 export const runtime = "nodejs"; // sales-sync 가 crypto(sales-normalize) 사용
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ type Ctx = { params: Promise<{ id: string }> };
 //   발송된 차수를 취소하면 returned(돌아옴/안 돌아옴)가 필요하다(D3).
 //   박스 수·송장만 고치는 요청은 재고·매출과 무관해 그 칸만 고친다.
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const login = await requireLogin(req);
+  if (login.res) return login.res;
   try {
     const { id } = await params;
     const body = (await req.json()) as {
