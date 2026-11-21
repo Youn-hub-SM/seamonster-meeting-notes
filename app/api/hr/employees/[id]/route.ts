@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
-import { EMPLOYEE_COLS, applyRrn, parseEmployeeInput, rrnOwner, toEmployee, wagesOf } from "@/app/lib/hr-employees";
+import { HR_PENDING_006, applyRrn, parseEmployeeInput, readEmployees, rrnOwner, toEmployee, wagesOf, writeEmployee } from "@/app/lib/hr-employees";
 import { dataKeyReady } from "@/app/lib/hr-crypto";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   if (!UUID.test(id)) return hrJson({ ok: false, error: "없는 직원입니다." }, 404);
   try {
-    const { data, error } = await hrDb().from("employees").select(EMPLOYEE_COLS).eq("id", id).maybeSingle();
+    const { data, error } = await readEmployees((cols) => hrDb().from("employees").select(cols).eq("id", id).maybeSingle());
     if (error) throw error;
     if (!data) return hrJson({ ok: false, error: "없는 직원입니다." }, 404);
     const wages = await wagesOf([id]);
@@ -38,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (!UUID.test(id)) return hrJson({ ok: false, error: "없는 직원입니다." }, 404);
   try {
     const body = (await req.json()) as Row;
-    const before = await hrDb().from("employees").select(EMPLOYEE_COLS).eq("id", id).maybeSingle();
+    const before = await readEmployees((cols) => hrDb().from("employees").select(cols).eq("id", id).maybeSingle());
     if (before.error) throw before.error;
     if (!before.data) return hrJson({ ok: false, error: "없는 직원입니다." }, 404);
     const old = before.data as unknown as Row;
@@ -63,6 +63,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const changed: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(row)) {
       if (k === "rrn_enc" || k === "rrn_hash") continue;
+      if (k === "affiliation" && !("affiliation" in old) && !v) continue; // 소속 칸이 아직 없는 DB — 빈 값은 바뀐 것이 아니다
       const a = JSON.stringify(old[k] ?? null), b = JSON.stringify(v ?? null);
       if (a !== b) changed[k] = QUIET.has(k) ? "변경" : [old[k] ?? null, v ?? null];
     }
@@ -70,10 +71,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     delete changed.rrn_masked;
 
     if (Object.keys(row).length > 0) {
-      const { error } = await hrDb().from("employees").update({ ...row, updated_by: who.name, updated_at: new Date().toISOString() }).eq("id", id);
+      const { error } = await writeEmployee(row, (r) => hrDb().from("employees").update({ ...r, updated_by: who.name, updated_at: new Date().toISOString() }).eq("id", id));
       if (error) {
-        if (/employees_emp_no_uq/.test(error.message)) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { emp_no: "이미 쓰는 사번입니다" } }, 409);
-        if (/employees_rrn_uq/.test(error.message)) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { rrn: "이미 등록된 번호입니다" } }, 409);
+        if (error.code === "HR006") return hrJson({ ok: false, pending: true, error: HR_PENDING_006 }, 503);
+        if (/employees_emp_no_uq/.test(String(error.message))) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { emp_no: "이미 쓰는 사번입니다" } }, 409);
+        if (/employees_rrn_uq/.test(String(error.message))) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { rrn: "이미 등록된 번호입니다" } }, 409);
         throw error;
       }
     }
@@ -86,7 +88,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       await hrAudit({ actor: who.name, action: "employee_update", ip: clientIp(req), targetType: "employee", targetId: id, targetName: String(row.name ?? old.name), detail: { changed } });
     }
 
-    const after = await hrDb().from("employees").select(EMPLOYEE_COLS).eq("id", id).single();
+    const after = await readEmployees((cols) => hrDb().from("employees").select(cols).eq("id", id).single());
     if (after.error) throw after.error;
     const wages = await wagesOf([id]);
     return hrJson({ ok: true, employee: toEmployee(after.data as unknown as Row, wages.get(id) || []), rrnWarn: !!input.rrn?.warn });

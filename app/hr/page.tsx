@@ -29,6 +29,7 @@ export default function HrEmployeesPage() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("active");
   const [wp, setWp] = useState("");
+  const [aff, setAff] = useState("");                               // 소속으로 좁혀 보기
   const [q, setQ] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);              // 엑셀 올리기 창
@@ -55,7 +56,15 @@ export default function HrEmployeesPage() {
   useEffect(() => { load(); }, [load]);
 
   const wpName = useMemo(() => new Map(workplaces.map((w) => [w.id, w.name])), [workplaces]);
-  const inWp = useMemo(() => employees.filter((e) => !wp || e.workplace_id === wp), [employees, wp]);
+  // 소속: 고를 수 있는 이름 = (고른 사업장 또는 모든 사업장의) 소속 목록 + 직원에게 실제로 들어 있는 이름. 하나도 없으면 소속 열·칸을 보이지 않는다
+  const affNames = useMemo(() => {
+    const names: string[] = [];
+    for (const w of workplaces) if (!wp || w.id === wp) for (const a of w.affiliations) if (!names.includes(a)) names.push(a);
+    for (const e of employees) if ((!wp || e.workplace_id === wp) && e.affiliation && !names.includes(e.affiliation)) names.push(e.affiliation);
+    return names;
+  }, [workplaces, employees, wp]);
+  const hasAff = affNames.length > 0;
+  const inWp = useMemo(() => employees.filter((e) => (!wp || e.workplace_id === wp) && (!aff || e.affiliation === aff)), [employees, wp, aff]);
   const counts = useMemo(() => {
     const active = inWp.filter((e) => isActiveOn(e, today)).length;
     return { active, left: inWp.length - active, all: inWp.length } as Record<Tab, number>;
@@ -67,7 +76,7 @@ export default function HrEmployeesPage() {
       if (tab === "active" && !active) return false;
       if (tab === "left" && active) return false;
       if (!k) return true;
-      return [e.name, e.emp_no, e.dept, e.position, e.job, e.phone].some((v) => v.toLowerCase().includes(k));
+      return [e.name, e.emp_no, e.affiliation, e.dept, e.position, e.job, e.phone].some((v) => v.toLowerCase().includes(k));
     });
   }, [inWp, tab, q, today]);
 
@@ -94,7 +103,7 @@ export default function HrEmployeesPage() {
 
   async function doExcel(full: boolean) {
     try {
-      await hrDownload("/api/hr/employees/export", { workplace_id: wp || undefined, status: tab, rrn: full ? "full" : "masked" }, `employees-${today}.xlsx`);
+      await hrDownload("/api/hr/employees/export", { workplace_id: wp || undefined, affiliation: aff || undefined, status: tab, rrn: full ? "full" : "masked" }, `employees-${today}.xlsx`);
       setOut(null);
     } catch (err) { toast.error(errText(err, "인사대장을 내보내지 못했습니다.")); }
   }
@@ -135,9 +144,15 @@ export default function HrEmployeesPage() {
               ))}
             </div>
             {multiWp && (
-              <select className="b2b-input" value={wp} onChange={(e) => setWp(e.target.value)} aria-label="사업장">
+              <select className="b2b-input" value={wp} onChange={(e) => { setWp(e.target.value); setAff(""); }} aria-label="사업장">
                 <option value="">모든 사업장</option>
                 {workplaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            )}
+            {hasAff && (
+              <select className="b2b-input" value={aff} onChange={(e) => setAff(e.target.value)} aria-label="소속">
+                <option value="">모든 소속</option>
+                {affNames.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             )}
             <input className="b2b-input hr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="성명·사번·부서 검색" />
@@ -145,10 +160,10 @@ export default function HrEmployeesPage() {
 
           {rows.length === 0 ? (
             <div className="b2b-empty hr-noprint">
-              {q.trim() || wp ? "조건에 맞는 직원이 없습니다." : tab === "left" ? "퇴사한 직원이 없습니다." : "등록된 직원이 없습니다."}
+              {q.trim() || wp || aff ? "조건에 맞는 직원이 없습니다." : tab === "left" ? "퇴사한 직원이 없습니다." : "등록된 직원이 없습니다."}
               <div className="b2b-empty-action">
-                {q.trim() || wp
-                  ? <button type="button" className="b2b-btn-secondary" onClick={() => { setQ(""); setWp(""); }}>조건 지우기</button>
+                {q.trim() || wp || aff
+                  ? <button type="button" className="b2b-btn-secondary" onClick={() => { setQ(""); setWp(""); setAff(""); }}>조건 지우기</button>
                   : <button type="button" className="b2b-btn-secondary" onClick={() => setFormOpen(true)}>직원 등록</button>}
               </div>
             </div>
@@ -158,6 +173,7 @@ export default function HrEmployeesPage() {
                 <thead>
                   <tr>
                     {multiWp && <th>사업장</th>}
+                    {hasAff && <th>소속</th>}
                     <th>사번</th><th>성명</th><th>주민등록번호</th><th>입사일</th>
                     {tab === "active" ? <th>근속</th> : <th>퇴사일</th>}
                     <th>부서</th><th>직위</th><th className="num">임금</th><th>연락처</th>
@@ -168,6 +184,7 @@ export default function HrEmployeesPage() {
                     <tr key={e.id} onClick={() => router.push(`/hr/employees/${e.id}`)} tabIndex={0} role="link"
                       onKeyDown={(ev) => { if (ev.key === "Enter") router.push(`/hr/employees/${e.id}`); }}>
                       {multiWp && <td>{wpName.get(e.workplace_id) || ""}</td>}
+                      {hasAff && <td>{e.affiliation}</td>}
                       <td className="hr-mono">{e.emp_no}</td>
                       <td><strong>{e.name}</strong></td>
                       <td className="hr-mono">{e.rrn_masked || <span className="sm-faint">미입력</span>}</td>
@@ -188,12 +205,13 @@ export default function HrEmployeesPage() {
           <div className="hr-print-only">
             <div className="hr-print-head">
               <h1>인사대장</h1>
-              <span>{wp ? wpName.get(wp) : workplaces.length === 1 ? workplaces[0].name : "모든 사업장"} · {TAB_LABEL[tab]} {rows.length}명 · {today} 기준</span>
+              <span>{wp ? wpName.get(wp) : workplaces.length === 1 ? workplaces[0].name : "모든 사업장"}{aff ? ` · ${aff}` : ""} · {TAB_LABEL[tab]} {rows.length}명 · {today} 기준</span>
             </div>
             <table className="hr-print-table">
               <thead>
                 <tr>
                   {multiWp && !wp && <th>사업장</th>}
+                  {hasAff && !aff && <th>소속</th>}
                   <th>사번</th><th>성명</th><th>주민등록번호</th><th>주소</th><th>연락처</th><th>입사일</th><th>퇴사일</th>
                   <th>부서</th><th>직위</th><th>업무</th><th>고용 형태</th><th>임금</th>
                 </tr>
@@ -202,6 +220,7 @@ export default function HrEmployeesPage() {
                 {rows.map((e) => (
                   <tr key={e.id}>
                     {multiWp && !wp && <td>{wpName.get(e.workplace_id) || ""}</td>}
+                    {hasAff && !aff && <td>{e.affiliation}</td>}
                     <td>{e.emp_no}</td><td>{e.name}</td><td>{printRrn?.[e.id] || e.rrn_masked}</td><td>{e.address}</td><td>{e.phone}</td>
                     <td>{e.hire_date}</td><td>{e.leave_date || ""}</td><td>{e.dept}</td><td>{e.position}</td><td>{e.job}</td><td>{e.emp_type}</td>
                     <td>{PAY_TYPE_LABEL[e.pay_type]} {numText(e.pay_type === "hourly" ? currentWage(e.wages)?.hourly_wage : currentWage(e.wages)?.monthly_wage)}</td>

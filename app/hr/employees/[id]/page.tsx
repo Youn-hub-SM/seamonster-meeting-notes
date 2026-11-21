@@ -95,7 +95,7 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
         <div className="hr-card-title">
           <h1 className="b2b-page-title">{e.name}</h1>
           <span className={`b2b-status-pill ${active ? "hr-pill-ok" : "hr-pill-off"}`}>{active ? "재직" : e.hire_date > today ? "입사 전" : "퇴사"}</span>
-          <span className="hr-print-only" style={{ fontSize: "9pt" }}>인사기록카드 · {wp?.name || ""} · {today}</span>
+          <span className="hr-print-only" style={{ fontSize: "9pt" }}>인사기록카드 · {[wp?.name, e.affiliation].filter(Boolean).join(" ")} · {today}</span>
         </div>
         <div className="b2b-page-actions hr-noprint">
           {e.has_rrn && (rrn
@@ -110,6 +110,7 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
         <h2>기본</h2>
         <dl className="hr-dl">
           {item("사업장", wp?.name)}
+          {((wp?.affiliations.length ?? 0) > 0 || e.affiliation) && item("소속", e.affiliation)}
           {item("사번", e.emp_no)}
           {item("성명", e.name)}
           <div>

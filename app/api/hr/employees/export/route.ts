@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
-import { EMPLOYEE_COLS, toEmployee, wagesOf } from "@/app/lib/hr-employees";
+import { readEmployees, toEmployee, wagesOf } from "@/app/lib/hr-employees";
 import { decryptRrn } from "@/app/lib/hr-crypto";
 import { PAY_TYPE_LABEL, currentWage, formatRrn, isActiveOn, todayKst, workDaysText } from "@/app/lib/hr";
 import { EMP_XLSX_LABELS, INS_BASIS_TEXT, LEAVE_BASIS_TEXT } from "@/app/lib/hr-import";
@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
   const who = await requireHr(req);
   if (who.res) return who.res;
   try {
-    const body = (await req.json()) as { workplace_id?: string; status?: string; rrn?: string };
+    const body = (await req.json()) as { workplace_id?: string; status?: string; rrn?: string; affiliation?: string };
+    const affiliation = String(body.affiliation ?? "").trim();   // 화면에서 소속을 골랐으면 그 소속만
     const full = body.rrn === "full";
     const status = body.status === "left" || body.status === "all" ? body.status : "active";
 
@@ -25,13 +26,16 @@ export async function POST(req: NextRequest) {
     if (wp.error) throw wp.error;
     const wpName = new Map(((wp.data || []) as { id: string; name: string }[]).map((w) => [w.id, w.name]));
 
-    let q = hrDb().from("employees").select(`${EMPLOYEE_COLS},rrn_enc`).order("hire_date").order("name");
-    if (body.workplace_id && /^[0-9a-f-]{36}$/i.test(body.workplace_id)) q = q.eq("workplace_id", body.workplace_id);
-    const { data, error } = await q;
+    const wpId = body.workplace_id && /^[0-9a-f-]{36}$/i.test(body.workplace_id) ? body.workplace_id : "";
+    const { data, error } = await readEmployees((cols) => {
+      const q = hrDb().from("employees").select(cols).order("hire_date").order("name");
+      return wpId ? q.eq("workplace_id", wpId) : q;
+    }, "rrn_enc");
     if (error) throw error;
     const today = todayKst();
     const rows = ((data || []) as unknown as Row[]).filter((r) => {
       const active = isActiveOn({ hire_date: String(r.hire_date), leave_date: (r.leave_date as string) || null }, today);
+      if (affiliation && String(r.affiliation ?? "") !== affiliation) return false;
       return status === "all" ? true : status === "active" ? active : !active;
     });
     const wages = await wagesOf(rows.map((r) => String(r.id)));
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
       const w = currentWage(e.wages);
       const rrn = full && r.rrn_enc ? formatRrn(decryptRrn(String(r.rrn_enc))) : e.rrn_masked;
       const cells: Record<string, string | number> = {
-        "사업장": wpName.get(e.workplace_id) || "", "사번": e.emp_no, "성명": e.name, "주민등록번호": rrn, "생년월일": e.birth_date || "", "성별": e.gender,
+        "사업장": wpName.get(e.workplace_id) || "", "소속": e.affiliation, "사번": e.emp_no, "성명": e.name, "주민등록번호": rrn, "생년월일": e.birth_date || "", "성별": e.gender,
         "주소": e.address, "연락처": e.phone, "비상 연락처": e.emergency, "입사일": e.hire_date, "퇴사일": e.leave_date || "", "퇴사 사유": e.leave_reason,
         "부서": e.dept, "직위": e.position, "업무": e.job, "고용 형태": e.emp_type, "계약 시작": e.contract_start || "", "계약 종료": e.contract_end || "",
         "급여 형태": PAY_TYPE_LABEL[e.pay_type], "시급": w?.hourly_wage ?? 0, "월급": w?.monthly_wage ?? 0, "임금 적용 시작일": w?.effective_from || "",

@@ -6,12 +6,14 @@ export type Workplace = {
   payday: number; accident_rate: number; employ_extra_rate: number;
   fiscal_start: string; leave_basis: "hire" | "fiscal"; leave_round: "ceil_half" | "ceil_one" | "round_half" | "none";
   sort: number; active: boolean;
+  affiliations: string[];    // 소속 이름 목록(한 회사 안의 사업 단위). hr/006 미적용이면 빈 목록
 };
 
 export type Wage = { id: string; effective_from: string; hourly_wage: number; monthly_wage: number; note: string };
 
 export type Employee = {
   id: string; workplace_id: string; emp_no: string; name: string;
+  affiliation: string;       // 소속(사업장의 소속 목록 가운데 하나. "" = 정하지 않음)
   rrn_masked: string; has_rrn: boolean; birth_date: string | null; gender: "" | "남" | "여"; foreigner: boolean;
   address: string; phone: string; emergency: string;
   hire_date: string; leave_date: string | null; leave_reason: string;
@@ -39,6 +41,22 @@ export type Rate = {
 };
 
 export const EMP_TYPES = ["정규직", "계약직", "단시간", "일용직", "기타"] as const;
+
+// ── 소속 ────────────────────────────────────────────────────────────
+// 소속 목록을 적은 글자("파도소리, 엄마와 바다" · 줄바꿈도 된다) → 이름 목록. 빈 이름·같은 이름은 뺀다.
+export const AFFILIATION_MAX = 30;       // 한 사업장의 소속 수
+export const AFFILIATION_NAME_MAX = 40;  // 소속 이름 길이
+export function parseAffiliations(input: unknown): string[] {
+  const parts = Array.isArray(input) ? input.map((x) => String(x ?? "")) : String(input ?? "").split(/[,\n]/);
+  const out: string[] = [];
+  for (const p of parts) { const name = p.replace(/\s+/g, " ").trim(); if (name && !out.includes(name)) out.push(name); }
+  return out;
+}
+// 고를 수 있는 소속: 사업장의 목록 + (목록에는 없지만) 지금 값
+export function affiliationOptions(list: string[] | undefined, current = ""): string[] {
+  const base = list || [];
+  return current && !base.includes(current) ? [...base, current] : base;
+}
 export const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"] as const; // 1=월 … 7=일
 export const PAY_TYPE_LABEL: Record<Employee["pay_type"], string> = { hourly: "시급", monthly: "월급" };
 export const LEAVE_BASIS_LABEL: Record<"hire" | "fiscal", string> = { hire: "입사일 기준", fiscal: "회계연도 기준" };

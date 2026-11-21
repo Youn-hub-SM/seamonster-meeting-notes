@@ -5,18 +5,46 @@ import { encryptRrn, rrnHash } from "./hr-crypto";
 import { EMP_TYPES, isDate, maskRrn, parseRrn, type Employee, type Wage } from "./hr";
 
 // 화면으로 내보내는 칸. rrn_enc·rrn_hash 는 여기 없다 — 목록·상세 응답에 암호문조차 싣지 않는다.
-export const EMPLOYEE_COLS =
+const EMPLOYEE_COLS_BASE =
   "id,workplace_id,emp_no,name,rrn_masked,birth_date,gender,foreigner,address,phone,emergency,hire_date,leave_date,leave_reason," +
   "dept,position,job,emp_type,contract_start,contract_end,career,pay_type,work_days,work_start,work_end,break_min,daily_hours," +
   "dependents,children,tax_rate,ins_pension,ins_health,ins_employment,ins_basis,pension_base,health_base," +
   "bank,account_no,account_holder,leave_basis,memo,updated_at";
+export const EMPLOYEE_COLS = `${EMPLOYEE_COLS_BASE},affiliation`;
 
 type Row = Record<string, unknown>;
+
+// ── 소속 칸(hr/006)이 아직 없는 DB 에서도 멈추지 않게 ────────────────
+//  읽기: 소속 칸을 넣어 읽다가 '그 칸이 없다'는 오류면 소속 칸 없이 다시 읽는다(직원의 소속은 빈 값으로 보인다).
+//  쓰기: 소속이 빈 값이면 그 칸을 빼고 다시 쓰고, 값이 있으면 'DB 준비 전(hr/006)'으로 거절한다 — 넣은 소속이 조용히 사라지지 않게.
+export const HR_PENDING_006 = "DB 준비 전입니다. supabase/migrations/hr/006_affiliation.sql 을 적용하세요.";
+export type DbResult = { data: unknown; error: { message?: string; code?: string } | null };
+// '소속 칸이 없다'는 오류인가(읽기 = column … does not exist, 쓰기 = Could not find the … column … in the schema cache). 사업장의 affiliations 도 같이 잡는다.
+export function missingAffiliation(err: unknown): boolean {
+  const m = String((err as { message?: string } | null)?.message ?? "");
+  return /affiliation/i.test(m) && /(does not exist|schema cache|Could not find)/i.test(m);
+}
+// run(cols) 는 그 칸 목록으로 읽는 질의. extra = 뒤에 붙일 칸(rrn_hash 등).
+export async function readEmployees(run: (cols: string) => PromiseLike<DbResult>, extra = ""): Promise<DbResult> {
+  const tail = extra ? `,${extra}` : "";
+  const first = await run(EMPLOYEE_COLS + tail);
+  return first.error && missingAffiliation(first.error) ? await run(EMPLOYEE_COLS_BASE + tail) : first;
+}
+// run(row, cols) 는 그 줄을 쓰고 그 칸 목록으로 돌려받는 질의.
+export async function writeEmployee(row: Row, run: (row: Row, cols: string) => PromiseLike<DbResult>): Promise<DbResult> {
+  const first = await run(row, EMPLOYEE_COLS);
+  if (!first.error || !missingAffiliation(first.error)) return first;
+  if (String(row.affiliation ?? "").trim()) return { data: null, error: { code: "HR006", message: HR_PENDING_006 } };
+  const rest = { ...row };
+  delete rest.affiliation;
+  return await run(rest, EMPLOYEE_COLS_BASE);
+}
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
 
 export function toEmployee(r: Row, wages: Wage[]): Employee {
   return {
     id: String(r.id), workplace_id: String(r.workplace_id), emp_no: String(r.emp_no ?? ""), name: String(r.name ?? ""),
+    affiliation: String(r.affiliation ?? ""),
     rrn_masked: String(r.rrn_masked ?? ""), has_rrn: !!r.rrn_masked,
     birth_date: (r.birth_date as string) || null, gender: (r.gender as Employee["gender"]) || "", foreigner: !!r.foreigner,
     address: String(r.address ?? ""), phone: String(r.phone ?? ""), emergency: String(r.emergency ?? ""),
@@ -66,7 +94,7 @@ export type EmployeeInput = {
 };
 
 const TEXT_FIELDS: [string, number][] = [
-  ["emp_no", 30], ["name", 60], ["address", 300], ["phone", 40], ["emergency", 100], ["leave_reason", 300],
+  ["emp_no", 30], ["name", 60], ["affiliation", 40], ["address", 300], ["phone", 40], ["emergency", 100], ["leave_reason", 300],
   ["dept", 60], ["position", 60], ["job", 100], ["career", 4000], ["bank", 40], ["account_no", 60], ["account_holder", 60], ["memo", 4000],
 ];
 const DATE_FIELDS: [string, boolean, string][] = [   // [칸, 필수, 이름]

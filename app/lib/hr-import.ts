@@ -92,6 +92,7 @@ export type EmpCol = { label: string; key: string; kind: EmpKind; alias?: string
 // 내려받는 인사대장의 칸과 같은 목록(export 가 이 순서로 쓴다). key = 저장할 때의 칸 이름.
 export const EMP_XLSX_COLS: EmpCol[] = [
   { label: "사업장", key: "workplace", kind: "workplace" },
+  { label: "소속", key: "affiliation", kind: "text" },   // 사업장의 소속 목록 가운데 하나(파도소리 · 엄마와 바다 …)
   { label: "사번", key: "emp_no", kind: "text" },
   { label: "성명", key: "name", kind: "text", alias: ["이름"] },
   { label: "주민등록번호", key: "rrn", kind: "rrn", alias: ["주민번호"] },

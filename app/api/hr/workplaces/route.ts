@@ -1,12 +1,30 @@
 import { NextRequest } from "next/server";
 import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
+import { HR_PENDING_006, missingAffiliation, type DbResult } from "@/app/lib/hr-employees";
+import { AFFILIATION_MAX, AFFILIATION_NAME_MAX, parseAffiliations } from "@/app/lib/hr";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type Row = Record<string, unknown>;
 const UUID = /^[0-9a-f-]{36}$/i;
-const COLS = "id,name,biz_no,ceo,address,phone,five_plus,week_start,weekly_pay_month,auto_weekly,payday,accident_rate,employ_extra_rate,fiscal_start,leave_basis,leave_round,sort,active";
+const COLS_BASE = "id,name,biz_no,ceo,address,phone,five_plus,week_start,weekly_pay_month,auto_weekly,payday,accident_rate,employ_extra_rate,fiscal_start,leave_basis,leave_round,sort,active";
+const COLS = `${COLS_BASE},affiliations`;
+
+// 소속 칸(hr/006)이 아직 없는 DB 에서도 사업장 화면이 멈추지 않게 한다.
+//  읽기: 소속 칸 없이 다시 읽는다. 쓰기: 소속 목록이 비어 있으면 그 칸을 빼고 다시 쓰고, 이름이 들어 있으면 'DB 준비 전'으로 거절한다.
+async function read(run: (cols: string) => PromiseLike<DbResult>): Promise<DbResult> {
+  const first = await run(COLS);
+  return first.error && missingAffiliation(first.error) ? await run(COLS_BASE) : first;
+}
+async function write(row: Row, run: (row: Row, cols: string) => PromiseLike<DbResult>): Promise<DbResult> {
+  const first = await run(row, COLS);
+  if (!first.error || !missingAffiliation(first.error)) return first;
+  if (Array.isArray(row.affiliations) && row.affiliations.length > 0) return { data: null, error: { code: "HR006", message: HR_PENDING_006 } };
+  const rest = { ...row };
+  delete rest.affiliations;
+  return await run(rest, COLS_BASE);
+}
 
 function parse(body: Row, partial: boolean): { row: Row; errors: Record<string, string> } {
   const row: Row = {};
@@ -53,17 +71,27 @@ function parse(body: Row, partial: boolean): { row: Row; errors: Record<string, 
     const v = String(body.leave_round);
     row.leave_round = ["ceil_half", "ceil_one", "round_half", "none"].includes(v) ? v : "ceil_half";
   }
+  // 소속 목록: 쉼표·줄바꿈으로 나눠 적은 글자 또는 이름 배열
+  if (has("affiliations")) {
+    const list = parseAffiliations(body.affiliations);
+    if (list.length > AFFILIATION_MAX) errors.affiliations = `소속은 ${AFFILIATION_MAX}개까지`;
+    else if (list.some((n) => n.length > AFFILIATION_NAME_MAX)) errors.affiliations = `소속 이름은 ${AFFILIATION_NAME_MAX}자 이하`;
+    else row.affiliations = list;
+  }
   return { row, errors };
 }
 
-const toWorkplace = (r: Row) => ({ ...r, accident_rate: Number(r.accident_rate), employ_extra_rate: Number(r.employ_extra_rate) });
+const toWorkplace = (r: Row) => ({
+  ...r, accident_rate: Number(r.accident_rate), employ_extra_rate: Number(r.employ_extra_rate),
+  affiliations: Array.isArray(r.affiliations) ? (r.affiliations as unknown[]).map(String) : [],
+});
 
 // GET /api/hr/workplaces — 사업장 목록
 export async function GET(req: NextRequest) {
   const who = await requireHr(req);
   if (who.res) return who.res;
   try {
-    const { data, error } = await hrDb().from("workplaces").select(COLS).order("sort").order("created_at");
+    const { data, error } = await read((cols) => hrDb().from("workplaces").select(cols).order("sort").order("created_at"));
     if (error) throw error;
     return hrJson({ ok: true, workplaces: ((data || []) as unknown as Row[]).map(toWorkplace) });
   } catch (err) {
@@ -78,9 +106,10 @@ export async function POST(req: NextRequest) {
   try {
     const { row, errors } = parse((await req.json()) as Row, false);
     if (Object.keys(errors).length > 0) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: errors }, 400);
-    const { data, error } = await hrDb().from("workplaces").insert(row).select(COLS).single();
+    const { data, error } = await write(row, (r, cols) => hrDb().from("workplaces").insert(r).select(cols).single());
     if (error) {
-      if (/workplaces_name_key|duplicate key/.test(error.message)) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { name: "이미 있는 사업장 이름입니다" } }, 409);
+      if (error.code === "HR006") return hrJson({ ok: false, pending: true, error: HR_PENDING_006 }, 503);
+      if (/workplaces_name_key|duplicate key/.test(String(error.message))) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { name: "이미 있는 사업장 이름입니다" } }, 409);
       throw error;
     }
     const saved = data as unknown as Row;
@@ -102,9 +131,10 @@ export async function PATCH(req: NextRequest) {
     const { row, errors } = parse(body, true);
     if (Object.keys(errors).length > 0) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: errors }, 400);
     if (Object.keys(row).length === 0) return hrJson({ ok: false, error: "바꿀 내용이 없습니다." }, 400);
-    const { data, error } = await hrDb().from("workplaces").update({ ...row, updated_at: new Date().toISOString() }).eq("id", id).select(COLS).maybeSingle();
+    const { data, error } = await write(row, (r, cols) => hrDb().from("workplaces").update({ ...r, updated_at: new Date().toISOString() }).eq("id", id).select(cols).maybeSingle());
     if (error) {
-      if (/workplaces_name_key|duplicate key/.test(error.message)) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { name: "이미 있는 사업장 이름입니다" } }, 409);
+      if (error.code === "HR006") return hrJson({ ok: false, pending: true, error: HR_PENDING_006 }, 503);
+      if (/workplaces_name_key|duplicate key/.test(String(error.message))) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: { name: "이미 있는 사업장 이름입니다" } }, 409);
       throw error;
     }
     if (!data) return hrJson({ ok: false, error: "없는 사업장입니다." }, 404);

@@ -6,13 +6,13 @@
 import { useMemo, useState } from "react";
 import { useEscClose } from "@/app/lib/use-esc";
 import {
-  EMP_TYPES, WEEKDAYS, ageOn, currentWage, numText, parseRrn, todayKst, typeRrn,
+  EMP_TYPES, WEEKDAYS, affiliationOptions, ageOn, currentWage, numText, parseRrn, todayKst, typeRrn,
   type Employee, type Workplace,
 } from "@/app/lib/hr";
 import { HrApiError, hrApi } from "./api";
 
 type Form = {
-  workplace_id: string; emp_no: string; name: string; rrn: string;
+  workplace_id: string; affiliation: string; emp_no: string; name: string; rrn: string;
   address: string; phone: string; emergency: string;
   hire_date: string; leave_date: string; leave_reason: string;
   dept: string; position: string; job: string; emp_type: string;
@@ -30,7 +30,7 @@ function initial(e: Employee | null, workplaces: Workplace[]): Form {
   const w = e ? currentWage(e.wages) : null;
   return {
     workplace_id: e?.workplace_id || workplaces.find((x) => x.active)?.id || workplaces[0]?.id || "",
-    emp_no: e?.emp_no || "", name: e?.name || "", rrn: "",
+    affiliation: e?.affiliation || "", emp_no: e?.emp_no || "", name: e?.name || "", rrn: "",
     address: e?.address || "", phone: e?.phone || "", emergency: e?.emergency || "",
     hire_date: e?.hire_date || todayKst(), leave_date: e?.leave_date || "", leave_reason: e?.leave_reason || "",
     dept: e?.dept || "", position: e?.position || "", job: e?.job || "", emp_type: e?.emp_type || "정규직",
@@ -80,6 +80,9 @@ export default function EmployeeForm({
   const birth = rrnParsed?.ok ? rrnParsed.info.birth : employee?.birth_date || null;
   const age = ageOn(birth);
   const lowWage = f.pay_type === "hourly" && minWage != null && f.hourly_wage !== "" && Number(f.hourly_wage) > 0 && Number(f.hourly_wage) < minWage;
+  // 소속: 고른 사업장의 소속 목록(+ 목록에는 없지만 이 직원에게 들어 있는 값). 목록이 없는 사업장은 칸을 보이지 않는다
+  const affList = workplaces.find((w) => w.id === f.workplace_id)?.affiliations || [];
+  const affOptions = affiliationOptions(affList, f.affiliation);
 
   // 시각·휴게를 고치면 하루 시간을 따라 고친다(직접 적은 값은 그 뒤에 다시 고칠 수 있다)
   function setTime(k: "work_start" | "work_end" | "break_min", v: string) {
@@ -106,7 +109,7 @@ export default function EmployeeForm({
     if (Object.keys(errs).length > 0) { setFormError("입력을 확인하세요."); return; }
 
     const body: Record<string, unknown> = {
-      workplace_id: f.workplace_id, emp_no: f.emp_no, name: f.name,
+      workplace_id: f.workplace_id, affiliation: f.affiliation, emp_no: f.emp_no, name: f.name,
       address: f.address, phone: f.phone, emergency: f.emergency,
       hire_date: f.hire_date, leave_date: f.leave_date, leave_reason: f.leave_reason,
       dept: f.dept, position: f.position, job: f.job, emp_type: f.emp_type,
@@ -174,10 +177,21 @@ export default function EmployeeForm({
               {workplaces.length > 1 && (
                 <label className="b2b-field">
                   <span className="b2b-field-label">사업장<span className="req">*</span></span>
-                  <select className="b2b-input" value={f.workplace_id} onChange={(e) => set("workplace_id", e.target.value)} aria-invalid={inv("workplace_id")}>
+                  {/* 사업장을 바꾸면 소속은 비운다 — 소속 목록이 사업장마다 다르다 */}
+                  <select className="b2b-input" value={f.workplace_id} onChange={(e) => setF((p) => ({ ...p, workplace_id: e.target.value, affiliation: "" }))} aria-invalid={inv("workplace_id")}>
                     {workplaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </select>
                   {err("workplace_id")}
+                </label>
+              )}
+              {affOptions.length > 0 && (
+                <label className="b2b-field">
+                  <span className="b2b-field-label">소속</span>
+                  <select className="b2b-input" value={f.affiliation} onChange={(e) => set("affiliation", e.target.value)} aria-invalid={inv("affiliation")}>
+                    <option value="">정하지 않음</option>
+                    {affOptions.map((a) => <option key={a} value={a}>{a}{affList.includes(a) ? "" : " (목록에 없음)"}</option>)}
+                  </select>
+                  {err("affiliation")}
                 </label>
               )}
               {text("name", "성명", { req: true, max: 60 })}

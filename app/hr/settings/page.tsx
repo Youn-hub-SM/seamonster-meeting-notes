@@ -23,6 +23,7 @@ export default function HrSettingsPage() {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+  const hasAff = workplaces.some((w) => w.affiliations.length > 0);   // 소속을 쓰는 사업장이 있을 때만 그 열을 보인다
 
   return (
     <div className="b2b-container">
@@ -43,12 +44,13 @@ export default function HrSettingsPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table hr-table">
             <thead>
-              <tr><th>사업장</th><th>사업자등록번호</th><th>대표자</th><th>상시 근로자</th><th>주휴수당</th><th>지급일</th><th className="num">산재 요율</th><th>연차 기준</th><th>상태</th><th></th></tr>
+              <tr><th>사업장</th>{hasAff && <th>소속</th>}<th>사업자등록번호</th><th>대표자</th><th>상시 근로자</th><th>주휴수당</th><th>지급일</th><th className="num">산재 요율</th><th>연차 기준</th><th>상태</th><th></th></tr>
             </thead>
             <tbody>
               {workplaces.map((w) => (
                 <tr key={w.id}>
                   <td><strong>{w.name}</strong></td>
+                  {hasAff && <td>{w.affiliations.join(" · ")}</td>}
                   <td className="hr-mono">{w.biz_no}</td>
                   <td>{w.ceo}</td>
                   <td>{w.five_plus ? "5인 이상" : "5인 미만"}</td>
@@ -80,6 +82,7 @@ export default function HrSettingsPage() {
 function WorkplaceForm({ wp, onClose, onSaved }: { wp: Workplace | null; onClose: () => void; onSaved: (w: Workplace) => void }) {
   const [f, setF] = useState({
     name: wp?.name || "", biz_no: wp?.biz_no || "", ceo: wp?.ceo || "", address: wp?.address || "", phone: wp?.phone || "",
+    affiliations: (wp?.affiliations || []).join(", "),   // 소속 목록 — 쉼표로 나눠 적는다(서버가 이름 목록으로 바꾼다)
     five_plus: wp?.five_plus ?? true, auto_weekly: wp?.auto_weekly ?? true, active: wp?.active ?? true,
     week_start: String(wp?.week_start ?? 1), weekly_pay_month: wp?.weekly_pay_month || "end",
     payday: String(wp?.payday ?? 10), accident_rate: wp ? rateText(wp.accident_rate) : "", employ_extra_rate: wp ? rateText(wp.employ_extra_rate) : "0.25",
@@ -104,7 +107,7 @@ function WorkplaceForm({ wp, onClose, onSaved }: { wp: Workplace | null; onClose
   }
   const err = (k: string) => (errors[k] ? <span className="b2b-field-error">{errors[k]}</span> : null);
   const inv = (k: string) => (errors[k] ? ("true" as const) : undefined);
-  const text = (k: "name" | "biz_no" | "ceo" | "address" | "phone" | "payday" | "accident_rate" | "employ_extra_rate" | "fiscal_start", label: string, o?: { req?: boolean; cls?: string; ph?: string; num?: boolean }) => (
+  const text = (k: "name" | "biz_no" | "ceo" | "address" | "phone" | "affiliations" | "payday" | "accident_rate" | "employ_extra_rate" | "fiscal_start", label: string, o?: { req?: boolean; cls?: string; ph?: string; num?: boolean }) => (
     <label className={`b2b-field ${o?.cls || ""}`}>
       <span className="b2b-field-label">{label}{o?.req && <span className="req">*</span>}</span>
       <input className={`b2b-input ${o?.num ? "num" : ""}`} value={f[k]} placeholder={o?.ph} inputMode={o?.num ? "decimal" : undefined}
@@ -130,6 +133,7 @@ function WorkplaceForm({ wp, onClose, onSaved }: { wp: Workplace | null; onClose
               {text("ceo", "대표자")}
               {text("phone", "전화")}
               {text("address", "주소", { cls: "hr-span2" })}
+              {text("affiliations", "소속(쉼표로 나눠 적기)", { cls: "hr-wide", ph: "파도소리, 엄마와 바다" })}
             </section>
             <section className="hr-form-sec">
               <h3>급여</h3>

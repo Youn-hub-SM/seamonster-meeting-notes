@@ -179,7 +179,7 @@ export default function HrDocsPage() {
                   <tbody>
                     <tr><th>성명</th><td>{e.name}</td><th>{idLabel}</th><td>{idText}</td></tr>
                     <tr><th>주소</th><td colSpan={3}>{e.address}</td></tr>
-                    <tr><th>소속</th><td>{[wp.name, e.dept].filter(Boolean).join(" ")}</td><th>직위</th><td>{e.position}</td></tr>
+                    <tr><th>소속</th><td>{[wp.name, e.affiliation, e.dept].filter(Boolean).join(" ")}</td><th>직위</th><td>{e.position}</td></tr>
                     {kind === "employment" && (
                       <tr><th>입사일</th><td>{dateKo(e.hire_date)}</td><th>재직 기간</th><td>{tenureText(e.hire_date, until)}</td></tr>
                     )}

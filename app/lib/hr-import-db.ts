@@ -8,7 +8,7 @@
 import ExcelJS from "exceljs";
 import { hrAudit, hrDb } from "./hr-db";
 import { dataKeyReady, rrnHash } from "./hr-crypto";
-import { EMPLOYEE_COLS, applyRrn, parseEmployeeInput, wagesOf, type EmployeeInput } from "./hr-employees";
+import { applyRrn, missingAffiliation, parseEmployeeInput, readEmployees, wagesOf, writeEmployee, type DbResult, type EmployeeInput } from "./hr-employees";
 import { currentWage, numText, type Wage } from "./hr";
 import { fetchLogs, fetchRoster } from "./hr-work-db";
 import { monthRange, normalizeLog, type RosterEmployee, type WorkLog } from "./hr-work";
@@ -110,7 +110,7 @@ function fieldErrors(errors: Record<string, string>, already: string[], skip: st
 async function allEmployees(): Promise<Old[]> {
   const out: Old[] = [];
   for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await hrDb().from("employees").select(`${EMPLOYEE_COLS},rrn_hash`).order("hire_date").order("id").range(offset, offset + 999);
+    const { data, error } = await readEmployees((cols) => hrDb().from("employees").select(cols).order("hire_date").order("id").range(offset, offset + 999), "rrn_hash");
     if (error) throw error;
     const rows = (data || []) as unknown as Row[];
     for (const r of rows) out.push({ ...r, id: String(r.id), workplace_id: String(r.workplace_id), name: String(r.name ?? ""), emp_no: String(r.emp_no ?? ""), hire_date: String(r.hire_date ?? ""), rrn_hash: (r.rrn_hash as string) || null });
@@ -127,9 +127,12 @@ export async function planEmployees(sheets: Sheet[], defaultWorkplaceId: string)
   if (sheet.rows.length === 0) throw new ImportError("머리 줄 아래에 직원이 한 줄도 없습니다.");
   if (sheet.rows.length > MAX_EMPLOYEES) throw new ImportError(`한 번에 ${numText(MAX_EMPLOYEES)}명까지 올릴 수 있습니다.`);
 
-  const wpRes = await hrDb().from("workplaces").select("id,name").order("sort").order("created_at");
+  // 소속 목록은 '목록에 없는 이름' 경고에만 쓴다 — 소속 칸(hr/006)이 아직 없으면 목록 없이 읽는다
+  let wpRes: DbResult = await hrDb().from("workplaces").select("id,name,affiliations").order("sort").order("created_at");
+  if (wpRes.error && missingAffiliation(wpRes.error)) wpRes = await hrDb().from("workplaces").select("id,name").order("sort").order("created_at");
   if (wpRes.error) throw wpRes.error;
-  const workplaces = (wpRes.data || []) as { id: string; name: string }[];
+  const workplaces = (wpRes.data || []) as { id: string; name: string; affiliations?: string[] }[];
+  const affOf = new Map(workplaces.map((w) => [w.id, Array.isArray(w.affiliations) ? w.affiliations.map(String) : []]));
   const wpByName = new Map(workplaces.map((w) => [squash(w.name), w.id]));
   const wpName = new Map(workplaces.map((w) => [w.id, w.name]));
   const fallbackWp = workplaces.some((w) => w.id === defaultWorkplaceId) ? defaultWorkplaceId : workplaces.length === 1 ? workplaces[0].id : "";
@@ -150,6 +153,11 @@ export async function planEmployees(sheets: Sheet[], defaultWorkplaceId: string)
       wpId = wpByName.get(squash(v.workplace)) || "";
       if (!wpId) errors.push(`사업장: 등록되지 않은 이름입니다(${String(v.workplace).slice(0, 30)})`);
     } else if (!(wpId = fallbackWp)) errors.push("사업장: 비어 있습니다");
+
+    // 소속: 사업장의 소속 목록에 없는 이름이면 넣기는 하되 알려 준다(오타로 소속이 하나 더 생기는 것을 눈에 띄게)
+    if (typeof v.affiliation === "string" && wpId && !(affOf.get(wpId) || []).includes(v.affiliation)) {
+      warns.push(`소속: 사업장의 소속 목록에 없는 이름입니다(${v.affiliation.slice(0, 30)})`);
+    }
 
     const digits = typeof v.rrn === "string" ? v.rrn : "";
     if (digits && !keyReady) errors.push("주민등록번호: 암호화 키(HR_DATA_KEY)가 서버에 없어 저장할 수 없습니다");
@@ -265,7 +273,7 @@ export async function applyEmployees(plan: EmpPlan, actor: string, ip: string, f
       if (p.action === "create") {
         const row: Row = { ...p.row, created_by: actor, updated_by: actor };
         applyRrn(row, p.rrn);
-        const ins = await hrDb().from("employees").insert(row).select("id").single();
+        const ins = await writeEmployee(row, (r) => hrDb().from("employees").insert(r).select("id").single());
         if (ins.error) throw ins.error;
         const id = String((ins.data as Row).id);
         const w = await hrDb().from("wages").insert({ employee_id: id, ...p.wage, created_by: actor });
@@ -276,7 +284,8 @@ export async function applyEmployees(plan: EmpPlan, actor: string, ip: string, f
         const row: Row = { ...p.row };
         applyRrn(row, p.rrn);
         if (Object.keys(row).length > 0) {
-          const { error } = await hrDb().from("employees").update({ ...row, updated_by: actor, updated_at: new Date().toISOString() }).eq("id", p.id);
+          const id = p.id;
+          const { error } = await writeEmployee(row, (r) => hrDb().from("employees").update({ ...r, updated_by: actor, updated_at: new Date().toISOString() }).eq("id", id));
           if (error) throw error;
         }
         if (p.wage) {
