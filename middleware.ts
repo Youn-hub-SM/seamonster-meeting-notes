@@ -44,7 +44,9 @@ export async function middleware(req: NextRequest) {
   //  파도소리 로그인으로 보낸다(로그인 API /api/b2b/auth 는 파도소리 로그인 화면이 쓰므로 연다).
   const factoryHosts = (process.env.FACTORY_HOST || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
   const onFactoryHost = factoryHosts.includes(host);
-  if (onFactoryHost && (pathname === "/b2b/login" || !isFactoryPath(pathname))) {
+  //  급여·연차 창(/hr·/api/hr)은 파도소리 주소에서도 연다(2026-11-21 대표: 전용 도메인을 더 붙일 수 없어 pdsr.kr/hr 로).
+  //  아래 hr 분기가 hr_auth 로 따로 잠그고, 그 창에는 업무도우미 이름·메뉴·로고·바깥 링크가 없다.
+  if (onFactoryHost && !isHrPath(pathname) && (pathname === "/b2b/login" || !isFactoryPath(pathname))) {
     const url = req.nextUrl.clone();
     url.pathname = pathname === "/b2b/login" ? "/factory/login" : "/factory";
     url.search = "";
