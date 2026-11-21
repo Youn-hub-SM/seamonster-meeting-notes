@@ -79,6 +79,20 @@
 @media (max-width: 768px) { .hr-filters .hr-search { width: 100%; margin-left: 0; } }
 .hr-rule { margin: 0 0 var(--sm-space-3); font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
 .hr-table td, .hr-table th { white-space: nowrap; }
+
+/* ── 표 모양 (2026-11-21 대표: "연한 선으로 필드를 나누고 필드 아래에 중앙 정렬로 숫자를") ──────────
+   급여 창의 목록·요약 표(.hr-table)만 이렇게 그린다. 업무도우미 표의 기준(숫자 값은 오른쪽·머리는 왼쪽 —
+   docs/design-system.md)은 그대로다. 칸마다 입력칸이 있는 표(.hr-work-table·.hr-pay-table)는 건드리지 않는다.
+   · 표 둘레에 테두리, 머리 줄에 옅은 바탕
+   · 칸 사이에 연한 세로선, 줄 사이에 연한 가로선
+   · 숫자 칸(.num)은 머리도 값도 칸 가운데. 글자 칸은 왼쪽 그대로 */
+.b2b-table-wrap:has(> .hr-table) { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); }
+.b2b-table.hr-table th, .b2b-table.hr-table td { border-bottom-color: var(--sm-border-light); }
+.b2b-table.hr-table th { background: var(--sm-bg-subtle); border-bottom-color: var(--sm-border); }
+.b2b-table.hr-table th + th, .b2b-table.hr-table td + td { border-left: 1px solid var(--sm-border-light); }
+.b2b-table.hr-table > tbody > tr:last-child > td { border-bottom: none; }
+.b2b-table.hr-table th.num, .b2b-table.hr-table td.num { text-align: center; }
+
 .hr-pill-off { background: var(--sm-bg-subtle); color: var(--sm-text-mid); border: 1px solid var(--sm-border); }
 .hr-pill-ok { background: var(--sm-success-bg); color: var(--sm-success); border: 1px solid var(--sm-success-border); }
 .hr-pill-bad { background: var(--sm-danger-bg); color: var(--sm-danger); border: 1px solid var(--sm-danger-border); }
@@ -221,6 +235,7 @@
 .hr-stats-table th, .hr-stats-table td { padding: 8px 10px; font-variant-numeric: tabular-nums; }
 .hr-stats-table th:first-child, .hr-stats-table td:first-child { position: sticky; left: 0; background: var(--sm-white); color: var(--sm-text-mid); }
 .hr-stats-table tr.hr-pay-sum > td:first-child { background: var(--sm-bg-subtle); color: var(--sm-black); }
+.b2b-table.hr-stats-table th:first-child { background: var(--sm-bg-subtle); }   /* 붙여 둔 첫 칸의 머리도 머리 줄 바탕 */
 
 /* ── 사용 가이드 ─────────────────────────────────────────────────── */
 .hr-main .b2b-container.hr-guide { max-width: 860px; }
