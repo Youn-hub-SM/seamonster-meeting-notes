@@ -142,6 +142,22 @@
 .hr-leave-box .b2b-table tr, .hr-leave-box .b2b-table tr:hover { cursor: default; }
 .hr-leave-dim > td { color: var(--sm-text-mid); }
 
+/* ── 사용 가이드 ─────────────────────────────────────────────────── */
+.hr-main .b2b-container.hr-guide { max-width: 860px; }
+.hr-guide-search { width: 100%; }
+.hr-guide-count { margin: var(--sm-space-2) 0 0; font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-light); }
+.hr-guide-group { margin-top: var(--sm-space-5); }
+.hr-guide-group > h2 { margin: 0 0 var(--sm-space-2); font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-heading); color: var(--sm-text-mid); }
+.hr-guide-card { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); }
+.hr-guide-card details + details { border-top: 1px solid var(--sm-border-light); }
+.hr-guide-card summary { padding: var(--sm-space-3) var(--sm-space-4); cursor: pointer; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); }
+.hr-guide-card summary strong { font-weight: 600; color: var(--sm-black); }
+.hr-guide-card summary span { margin-left: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.hr-guide-body { padding: 0 var(--sm-space-4) var(--sm-space-4) var(--sm-space-6); }
+.hr-guide-body ol { margin: 0; padding-left: 18px; font-size: var(--sm-fs-base); line-height: 1.9; color: var(--sm-black); }
+.hr-guide-body ul { margin: var(--sm-space-2) 0 0; padding-left: 18px; font-size: var(--sm-fs-xs); line-height: 1.8; color: var(--sm-text-mid); }
+.hr-guide-body .sm-link { display: inline-block; margin-top: var(--sm-space-2); font-size: var(--sm-fs-xs); }
+
 /* 한 화면 안의 둘째 구역(요율 화면의 간이세액표, 연차 화면의 이력) */
 .hr-sec { margin-top: var(--sm-space-6); }
 .hr-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-3); margin-bottom: var(--sm-space-3); }
@@ -224,6 +240,15 @@
   .hr-slip .hr-print-table { font-size: 9pt; margin-bottom: 10px; }
   .hr-slip .hr-print-table th, .hr-slip .hr-print-table td { padding: 4px 6px; }
   .hr-slip-net { display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 10px; border: 1pt solid #000; font-size: 12pt; font-weight: 600; }
+  /* 사용 가이드 — 항목이 쪽 사이에서 잘리지 않게 */
+  .hr-guide-card { border-color: #333; border-radius: 0; }
+  .hr-guide-card details { break-inside: avoid; }
+  .hr-guide-card summary { padding: 6px 8px; font-size: 10pt; list-style: none; }
+  .hr-guide-card summary::-webkit-details-marker { display: none; }
+  .hr-guide-body { padding: 0 8px 8px 16px; }
+  .hr-guide-body ol { font-size: 9.5pt; line-height: 1.6; }
+  .hr-guide-body ul { font-size: 8.5pt; line-height: 1.5; color: #333; }
+  .hr-guide-group { margin-top: 12px; }
   .hr-card-sec { break-inside: avoid; border-color: #333; border-radius: 0; margin-bottom: 10px; }
   .hr-card-sec > h2 { border-color: #333; border-radius: 0; background: #eee; color: #000; font-size: 9pt; padding: 4px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .hr-dl { padding: 2px 0; }

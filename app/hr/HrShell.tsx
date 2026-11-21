@@ -19,6 +19,7 @@ const NAV = [
   { href: "/hr/leave", label: "연차", icon: "ticket" as const, match: (p: string) => p.startsWith("/hr/leave") },
   { href: "/hr/rates", label: "요율", icon: "bars" as const, match: (p: string) => p.startsWith("/hr/rates") },
   { href: "/hr/settings", label: "사업장", icon: "gear" as const, match: (p: string) => p.startsWith("/hr/settings") },
+  { href: "/hr/guide", label: "사용 가이드", icon: "book" as const, match: (p: string) => p.startsWith("/hr/guide") },
 ];
 
 export default function HrShell({ children }: { children: React.ReactNode }) {
