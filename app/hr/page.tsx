@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/hr";
 import { HrApiError, errText, hrApi, hrDownload } from "./api";
 import EmployeeForm from "./EmployeeForm";
+import ExcelImport from "./ExcelImport";
 
 type Tab = "active" | "left" | "all";
 const TAB_LABEL: Record<Tab, string> = { active: "재직", left: "퇴사", all: "전체" };
@@ -30,6 +31,8 @@ export default function HrEmployeesPage() {
   const [wp, setWp] = useState("");
   const [q, setQ] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);              // 엑셀 올리기 창
+  const [importWp, setImportWp] = useState("");                     // 사업장 칸이 빈 줄에 쓸 사업장
   const [out, setOut] = useState<null | "print" | "excel">(null);   // 내보내기 창
   const [printRrn, setPrintRrn] = useState<Record<string, string> | null>(null); // 인쇄할 때만 잠깐 들고 있는 전체 번호
 
@@ -104,6 +107,7 @@ export default function HrEmployeesPage() {
       <header className="b2b-page-head hr-noprint">
         <div><h1 className="b2b-page-title">인사대장</h1></div>
         <div className="b2b-page-actions">
+          <button type="button" className="b2b-btn-secondary" onClick={() => { setImportWp(wp || workplaces.find((w) => w.active)?.id || ""); setImportOpen(true); }} disabled={loading || workplaces.length === 0}>엑셀 올리기</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => setOut("excel")} disabled={loading || rows.length === 0}>엑셀 내려받기</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => setOut("print")} disabled={loading || rows.length === 0}>인사대장 인쇄</button>
           <button type="button" className="b2b-btn-primary" onClick={() => setFormOpen(true)} disabled={loading || workplaces.length === 0}>직원 등록</button>
@@ -217,6 +221,25 @@ export default function HrEmployeesPage() {
             setEmployees((p) => [...p, e]);
             if (note) toast.error(note); else toast.success(`${e.name} 직원을 등록했습니다`);
           }} />
+      )}
+      {importOpen && (
+        <ExcelImport title="인사대장 엑셀 올리기" endpoint="/api/hr/employees/import" extra={{ workplace_id: importWp }} unit="명" applyWord="등록"
+          templateLabel="양식 내려받기" onTemplate={() => hrDownload("/api/hr/employees/import", { template: true }, "employees-template.xlsx")}
+          onClose={() => setImportOpen(false)}
+          onDone={(r) => {
+            load();
+            const n = r.counts.create + r.counts.update - r.failed.length;
+            if (r.failed.length > 0) toast.error(`${r.failed.length}명을 넣지 못했습니다`); else toast.success(`직원 ${n}명을 넣었습니다`);
+          }}>
+          {multiWp && (
+            <label className="b2b-field">
+              <span className="b2b-field-label">사업장 칸이 빈 줄의 사업장</span>
+              <select className="b2b-input" value={importWp} onChange={(e) => setImportWp(e.target.value)}>
+                {workplaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </label>
+          )}
+        </ExcelImport>
       )}
       {out && <OutDialog kind={out} count={rows.length} canFull={keyReady} onClose={() => setOut(null)} onGo={(full) => (out === "print" ? doPrint(full) : doExcel(full))} />}
     </div>

@@ -4,6 +4,7 @@ import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/h
 import { EMPLOYEE_COLS, toEmployee, wagesOf } from "@/app/lib/hr-employees";
 import { decryptRrn } from "@/app/lib/hr-crypto";
 import { PAY_TYPE_LABEL, currentWage, formatRrn, isActiveOn, todayKst, workDaysText } from "@/app/lib/hr";
+import { EMP_XLSX_LABELS, INS_BASIS_TEXT, LEAVE_BASIS_TEXT } from "@/app/lib/hr-import";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,9 +41,8 @@ export async function POST(req: NextRequest) {
       if (!logged) return hrJson({ ok: false, error: "내보내기 이력을 남기지 못해 주민등록번호 전체는 넣을 수 없습니다." }, 500);
     }
 
-    const HEAD = ["사업장", "사번", "성명", "주민등록번호", "생년월일", "성별", "주소", "연락처", "비상 연락처", "입사일", "퇴사일", "퇴사 사유",
-      "부서", "직위", "업무", "고용 형태", "계약 시작", "계약 종료", "급여 형태", "시급", "월급", "소정근로 요일", "출근", "퇴근", "휴게(분)", "하루 시간",
-      "공제대상가족", "8~20세 자녀", "원천징수(%)", "국민연금", "건강보험", "고용보험", "기준소득월액", "보수월액", "은행", "계좌번호", "예금주", "이력", "메모"];
+    // 칸은 올리는 양식과 같다(app/lib/hr-import.ts) — 받은 파일을 고쳐 [엑셀 올리기]로 그대로 올릴 수 있다
+    const HEAD = EMP_XLSX_LABELS;
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("인사대장");
     ws.addRow(HEAD);
@@ -53,11 +53,18 @@ export async function POST(req: NextRequest) {
       const e = toEmployee(r, wages.get(String(r.id)) || []);
       const w = currentWage(e.wages);
       const rrn = full && r.rrn_enc ? formatRrn(decryptRrn(String(r.rrn_enc))) : e.rrn_masked;
-      ws.addRow([wpName.get(e.workplace_id) || "", e.emp_no, e.name, rrn, e.birth_date || "", e.gender, e.address, e.phone, e.emergency,
-        e.hire_date, e.leave_date || "", e.leave_reason, e.dept, e.position, e.job, e.emp_type, e.contract_start || "", e.contract_end || "",
-        PAY_TYPE_LABEL[e.pay_type], w?.hourly_wage ?? 0, w?.monthly_wage ?? 0, workDaysText(e.work_days), e.work_start, e.work_end, e.break_min, e.daily_hours,
-        e.dependents, e.children, e.tax_rate, yn(e.ins_pension), yn(e.ins_health), yn(e.ins_employment), e.pension_base, e.health_base,
-        e.bank, e.account_no, e.account_holder, e.career, e.memo]);
+      const cells: Record<string, string | number> = {
+        "사업장": wpName.get(e.workplace_id) || "", "사번": e.emp_no, "성명": e.name, "주민등록번호": rrn, "생년월일": e.birth_date || "", "성별": e.gender,
+        "주소": e.address, "연락처": e.phone, "비상 연락처": e.emergency, "입사일": e.hire_date, "퇴사일": e.leave_date || "", "퇴사 사유": e.leave_reason,
+        "부서": e.dept, "직위": e.position, "업무": e.job, "고용 형태": e.emp_type, "계약 시작": e.contract_start || "", "계약 종료": e.contract_end || "",
+        "급여 형태": PAY_TYPE_LABEL[e.pay_type], "시급": w?.hourly_wage ?? 0, "월급": w?.monthly_wage ?? 0, "임금 적용 시작일": w?.effective_from || "",
+        "소정근로 요일": workDaysText(e.work_days), "출근": e.work_start, "퇴근": e.work_end, "휴게(분)": e.break_min, "하루 시간": e.daily_hours,
+        "공제대상가족": e.dependents, "8~20세 자녀": e.children, "원천징수(%)": e.tax_rate,
+        "국민연금": yn(e.ins_pension), "건강보험": yn(e.ins_health), "고용보험": yn(e.ins_employment),
+        "보험 기준": INS_BASIS_TEXT[e.ins_basis], "기준소득월액": e.pension_base, "보수월액": e.health_base,
+        "은행": e.bank, "계좌번호": e.account_no, "예금주": e.account_holder, "연차 기준": LEAVE_BASIS_TEXT[e.leave_basis], "이력": e.career, "메모": e.memo,
+      };
+      ws.addRow(HEAD.map((l) => cells[l] ?? ""));
     }
     ws.columns.forEach((c, i) => { c.width = ["주소", "이력", "메모", "퇴사 사유"].includes(HEAD[i]) ? 30 : HEAD[i] === "주민등록번호" ? 18 : 13; });
     ws.views = [{ state: "frozen", ySplit: 1 }];

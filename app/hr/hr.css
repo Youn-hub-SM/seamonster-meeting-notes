@@ -81,6 +81,7 @@
 .hr-table td, .hr-table th { white-space: nowrap; }
 .hr-pill-off { background: var(--sm-bg-subtle); color: var(--sm-text-mid); border: 1px solid var(--sm-border); }
 .hr-pill-ok { background: var(--sm-success-bg); color: var(--sm-success); border: 1px solid var(--sm-success-border); }
+.hr-pill-bad { background: var(--sm-danger-bg); color: var(--sm-danger); border: 1px solid var(--sm-danger-border); }
 .hr-mono { font-family: var(--sm-mono); font-variant-numeric: tabular-nums; }
 
 /* ── 근무대장 ────────────────────────────────────────────────────── */
@@ -190,6 +191,21 @@
 /* 인사기록카드의 직원 확인 링크 */
 .hr-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2) var(--sm-space-3); padding: var(--sm-space-3) var(--sm-space-4); }
 .hr-link-url { flex: 1 1 280px; min-width: 0; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); overflow-wrap: anywhere; }
+
+/* ── 엑셀 올리기 창(인사대장·근무대장 공용) ──────────────────────── */
+.hr-import-pick { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2); margin-bottom: var(--sm-space-3); }
+.hr-import-file { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); overflow-wrap: anywhere; }
+.hr-import-counts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2) var(--sm-space-4); margin: var(--sm-space-3) 0 var(--sm-space-2); font-size: var(--sm-fs-base); }
+.hr-import-only { display: inline-flex; align-items: center; gap: var(--sm-space-2); margin-left: auto; cursor: pointer; }
+.hr-import-list { margin: var(--sm-space-1) 0 0; padding-left: var(--sm-space-4); }
+.hr-import-list.hr-rule { margin-bottom: var(--sm-space-2); }
+/* 모달 본문(flex) 안의 표는 줄어들지 않게 두고, 표 안에서 세로로 민다 */
+.hr-import-table { flex-shrink: 0; max-height: 360px; overflow: auto; }
+.hr-import-table tr, .hr-import-table tr:hover { cursor: default; }
+/* 위치·직원·처리 칸은 내용만큼만, 나머지 폭은 '내용' 칸이 쓴다 */
+.hr-import-table th, .hr-import-table td { width: 1%; white-space: nowrap; }
+.hr-import-table th:last-child, .hr-import-table td.hr-import-note { width: auto; white-space: normal; }
+.hr-import-note { font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); }
 
 /* ── 통계 ────────────────────────────────────────────────────────── */
 .hr-stats-sec { margin-top: var(--sm-space-6); }

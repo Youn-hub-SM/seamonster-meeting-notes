@@ -12,6 +12,7 @@ import {
   type MonthSummary, type RosterEmployee, type RosterLog, type RosterWorkplace,
 } from "@/app/lib/hr-work";
 import { HrApiError, errText, hrApi, hrDownload } from "../api";
+import ExcelImport from "../ExcelImport";
 
 export default function HrWorkPage() {
   return (
@@ -33,6 +34,7 @@ function WorkList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [wp, setWp] = useState("");
+  const [importOpen, setImportOpen] = useState(false);   // 엑셀 올리기 창
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -72,6 +74,7 @@ function WorkList() {
       <header className="b2b-page-head">
         <div><h1 className="b2b-page-title">근무대장</h1></div>
         <div className="b2b-page-actions">
+          <button type="button" className="b2b-btn-secondary" onClick={() => setImportOpen(true)} disabled={loading || employees.length === 0}>엑셀 올리기</button>
           <button type="button" className="b2b-btn-secondary" onClick={excel} disabled={loading || rows.length === 0}>엑셀 내려받기</button>
         </div>
       </header>
@@ -127,6 +130,16 @@ function WorkList() {
             </table>
           </div>
         </>
+      )}
+
+      {importOpen && (
+        <ExcelImport title={`근무대장 엑셀 올리기 — ${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월`} endpoint="/api/hr/work-logs/import" extra={{ month }} unit="일" applyWord="넣기"
+          templateLabel="이 달 양식 내려받기" onTemplate={() => hrDownload("/api/hr/work-logs/export", { month }, `work-${month}.xlsx`)}
+          onClose={() => setImportOpen(false)}
+          onDone={(r) => {
+            load();
+            if (r.failed.length > 0) toast.error(`${r.failed.length}명의 근무대장을 넣지 못했습니다`); else toast.success(`근무 ${r.counts.create + r.counts.update}일을 넣었습니다`);
+          }} />
       )}
     </div>
   );
