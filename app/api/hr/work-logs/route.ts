@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { HR_PENDING_002, clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { fetchLogs, fetchRoster, fetchWorkplaces } from "@/app/lib/hr-work-db";
 import { isMonth, monthRange, normalizeLog, type WorkLog } from "@/app/lib/hr-work";
+import { confirmedWorkplaces, refusal } from "@/app/lib/hr-pay-db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,8 +21,9 @@ export async function GET(req: NextRequest) {
   try {
     const [workplaces, employees] = await Promise.all([fetchWorkplaces(), fetchRoster(month, employee || undefined)]);
     if (employee && employees.length === 0) return hrJson({ ok: false, error: "없는 직원입니다." }, 404);
-    const logs = await fetchLogs(month, employees.map((e) => e.id));
-    return hrJson({ ok: true, month, workplaces, employees, logs });
+    // locked = 그 달 급여가 확정된 사업장 — 그 사업장 직원의 근무대장은 고칠 수 없다(hr/003)
+    const [logs, locked] = await Promise.all([fetchLogs(month, employees.map((e) => e.id)), confirmedWorkplaces(month)]);
+    return hrJson({ ok: true, month, workplaces, employees, logs, locked });
   } catch (err) {
     return hrError(err, "근무대장을 불러오지 못했습니다.", HR_PENDING_002);
   }
@@ -43,6 +45,10 @@ export async function PUT(req: NextRequest) {
 
     const [employee] = await fetchRoster(month, employeeId);
     if (!employee) return hrJson({ ok: false, error: "없는 직원입니다." }, 404);
+    // 급여가 확정된 달은 고치지 않는다(DB 함수도 같은 것을 한 번 더 본다)
+    if ((await confirmedWorkplaces(month)).includes(employee.workplace_id)) {
+      return hrJson({ ok: false, error: "급여가 확정된 달입니다. 근무대장을 고치려면 급여 확정을 취소하세요." }, 409);
+    }
 
     const { from, to } = monthRange(month);
     const seen = new Set<string>();
@@ -67,6 +73,6 @@ export async function PUT(req: NextRequest) {
     const logs = await fetchLogs(month, [employeeId]);
     return hrJson({ ok: true, saved: Number(data) || 0, logs });
   } catch (err) {
-    return hrError(err, "근무대장을 저장하지 못했습니다.", HR_PENDING_002);
+    return refusal(err) || hrError(err, "근무대장을 저장하지 못했습니다.", HR_PENDING_002);
   }
 }

@@ -64,6 +64,7 @@ function WorkSheet({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [locked, setLocked] = useState(false);        // 이 달 급여가 확정됨 — 근무대장을 고칠 수 없다
 
   const adopt = useCallback((logs: RosterLog[]) => {
     const d: Record<string, Draft> = {};
@@ -74,9 +75,10 @@ function WorkSheet({ id }: { id: string }) {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const j = await hrApi<{ employees: RosterEmployee[]; workplaces: RosterWorkplace[]; logs: RosterLog[] }>(`/api/hr/work-logs?month=${month}&employee=${id}`);
+      const j = await hrApi<{ employees: RosterEmployee[]; workplaces: RosterWorkplace[]; logs: RosterLog[]; locked?: string[] }>(`/api/hr/work-logs?month=${month}&employee=${id}`);
       const e = j.employees[0] || null;
       setEmployee(e); setWorkplace(j.workplaces.find((w) => w.id === e?.workplace_id) || null);
+      setLocked(!!e && (j.locked || []).includes(e.workplace_id));
       adopt(j.logs);
     } catch (err) {
       if (!(err instanceof HrApiError && err.status === 401)) setError(errText(err, "근무대장을 불러오지 못했습니다."));
@@ -224,10 +226,10 @@ function WorkSheet({ id }: { id: string }) {
           <span className="sm-muted">{workplace.name}{employee.dept ? ` · ${employee.dept}` : ""}{employee.position ? ` ${employee.position}` : ""}</span>
         </div>
         <div className="b2b-page-actions">
-          <button type="button" className="b2b-btn-secondary" onClick={fillDefault} disabled={busy}>평소대로 채우기</button>
+          <button type="button" className="b2b-btn-secondary" onClick={fillDefault} disabled={busy || locked}>평소대로 채우기</button>
           <button type="button" className="b2b-btn-secondary" onClick={excel} disabled={busy}>엑셀 내려받기</button>
           <button type="button" className="b2b-btn-secondary" onClick={print} disabled={busy}>근무대장 인쇄</button>
-          <button type="button" className="b2b-btn-primary" onClick={save} disabled={busy || !dirty}>{busy ? "저장 중..." : "변경 저장"}</button>
+          <button type="button" className="b2b-btn-primary" onClick={save} disabled={busy || !dirty || locked}>{busy ? "저장 중..." : "변경 저장"}</button>
         </div>
       </header>
 
@@ -239,6 +241,7 @@ function WorkSheet({ id }: { id: string }) {
       </div>
 
       {formError && <div className="b2b-error hr-noprint" role="alert">{formError}</div>}
+      {locked && <div className="sm-warn hr-noprint">이 달 급여가 확정됐습니다. 근무대장을 고치려면 급여 화면에서 확정을 취소하세요.</div>}
 
       <div className="hr-tiles hr-noprint">
         {tiles.map(([label, value, hint]) => (

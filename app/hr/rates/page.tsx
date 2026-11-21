@@ -8,6 +8,7 @@ import { useConfirm, useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
 import { numText, rateOn, rateText, todayKst, type Rate } from "@/app/lib/hr";
 import { HrApiError, errText, hrApi } from "../api";
+import TaxTables from "./TaxTables";
 
 type Field = { k: keyof Rate; label: string; kind: "pct" | "won" };
 const GROUPS: { title: string; fields: Field[] }[] = [
@@ -128,6 +129,8 @@ export default function HrRatesPage() {
           </div>
         </>
       )}
+
+      {!loading && !error && <TaxTables />}
 
       {edit && (
         <RateForm rate={edit.rate} base={edit.base} onClose={() => setEdit(null)}

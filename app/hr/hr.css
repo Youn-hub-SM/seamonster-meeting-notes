@@ -116,6 +116,38 @@
 .hr-week-row > td:last-child { color: var(--sm-black); font-weight: 600; text-align: right; }
 .hr-week-row > td.is-none { color: var(--sm-text-mid); font-weight: 400; }
 
+/* ── 급여 ────────────────────────────────────────────────────────── */
+.hr-pay-date { display: inline-flex; align-items: center; gap: var(--sm-space-2); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+.hr-pay-date .b2b-input { width: 160px; }
+.hr-pay-edit { display: flex; flex-direction: column; gap: var(--sm-space-4); }
+.hr-pay-edit .hr-rule { margin: 0; }
+/* 항목별 금액 표 — 칸마다 입력칸이 있어 줄 여백을 줄인다(밀집 표) */
+.hr-pay-table th, .hr-pay-table td { padding: 6px 8px; vertical-align: middle; }
+.hr-pay-table td:first-child { white-space: nowrap; }
+.hr-pay-table .b2b-input { padding: 6px 8px; min-height: 0; height: 34px; width: 132px; text-align: right; font-variant-numeric: tabular-nums; }
+.hr-pay-table .b2b-input.hr-pay-qty { width: 52px; margin: 0 2px; }
+.hr-pay-calc { font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); white-space: normal; }
+.hr-pay-sum > td { font-weight: 600; background: var(--sm-bg-subtle); }
+.hr-pay-net {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: var(--sm-space-3) var(--sm-space-4); border: 1px solid var(--sm-border); border-radius: var(--sm-radius);
+  font-size: var(--sm-fs-xl); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+/* ── 연차 ────────────────────────────────────────────────────────── */
+/* 펼친 줄(발생 건·사용 내역) — 누르는 줄이 아니다 */
+.b2b-table.is-clickable tr.hr-leave-detail, .b2b-table.is-clickable tr.hr-leave-detail:hover { cursor: default; background: var(--sm-bg-subtle); }
+.hr-leave-detail > td { padding: var(--sm-space-4); white-space: normal; }
+.hr-leave-box { display: flex; flex-direction: column; }
+.hr-leave-box .b2b-table-wrap { background: var(--sm-white); }
+.hr-leave-box .b2b-table tr, .hr-leave-box .b2b-table tr:hover { cursor: default; }
+.hr-leave-dim > td { color: var(--sm-text-mid); }
+
+/* 한 화면 안의 둘째 구역(요율 화면의 간이세액표, 연차 화면의 이력) */
+.hr-sec { margin-top: var(--sm-space-6); }
+.hr-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-3); margin-bottom: var(--sm-space-3); }
+.hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
+.hr-sec .sm-success { margin-bottom: var(--sm-space-3); }
+
 /* ── 입력 창(넓은 모달) ──────────────────────────────────────────── */
 .b2b-modal.hr-modal-wide { max-width: 880px; }
 .b2b-modal.hr-modal-mid { max-width: 680px; }
@@ -179,6 +211,19 @@
   .hr-print-table tr { break-inside: avoid; }
   .hr-print-table .hr-print-week td { background: #f4f4f4; font-weight: 600; white-space: pre-wrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .hr-print-sum { margin-top: 8px; }
+  .hr-print-table td.num, .hr-print-table th.num { text-align: right; white-space: nowrap; }
+  /* 급여대장(가로) — 칸이 많아 글자를 더 줄인다 */
+  .hr-pay-ledger { font-size: 6.5pt; }
+  .hr-pay-ledger th, .hr-pay-ledger td { padding: 2px 3px; }
+  .hr-print-sum.hr-pay-ledger { width: auto; min-width: 50%; }
+  /* 급여명세서(세로) — 한 사람 한 장 */
+  .hr-slip { break-after: page; }
+  .hr-slip:last-child { break-after: auto; }
+  .hr-slip h1 { margin: 0 0 4px; font-size: 18pt; font-weight: 600; text-align: center; letter-spacing: 0.3em; }
+  .hr-slip-sub { margin-bottom: 10px; text-align: center; font-size: 9pt; }
+  .hr-slip .hr-print-table { font-size: 9pt; margin-bottom: 10px; }
+  .hr-slip .hr-print-table th, .hr-slip .hr-print-table td { padding: 4px 6px; }
+  .hr-slip-net { display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 10px; border: 1pt solid #000; font-size: 12pt; font-weight: 600; }
   .hr-card-sec { break-inside: avoid; border-color: #333; border-radius: 0; margin-bottom: 10px; }
   .hr-card-sec > h2 { border-color: #333; border-radius: 0; background: #eee; color: #000; font-size: 9pt; padding: 4px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .hr-dl { padding: 2px 0; }
