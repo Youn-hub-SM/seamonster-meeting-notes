@@ -96,7 +96,6 @@ function WorkList() {
         <div className="b2b-empty">{wp ? "조건에 맞는 직원이 없습니다." : "이 달에 재직한 직원이 없습니다."}</div>
       ) : (
         <>
-          <p className="hr-rule">시간 단위. 주휴는 그 달에 넣는 주만 더한 값이고, 입력 전은 소정근로일인데 기록이 없는 날입니다.</p>
           <div className="b2b-table-wrap">
             <table className="b2b-table is-clickable hr-table">
               <thead>
