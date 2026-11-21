@@ -142,6 +142,21 @@
 .hr-leave-box .b2b-table tr, .hr-leave-box .b2b-table tr:hover { cursor: default; }
 .hr-leave-dim > td { color: var(--sm-text-mid); }
 
+/* ── 통계 ────────────────────────────────────────────────────────── */
+.hr-stats-sec { margin-top: var(--sm-space-6); }
+.hr-stats-sec:first-of-type { margin-top: var(--sm-space-4); }
+.hr-stats-sec > h2 { margin: 0 0 var(--sm-space-2); font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
+.hr-stats-card { margin-bottom: var(--sm-space-3); }
+.hr-stats-card .sm-chart-legend { margin-top: var(--sm-space-2); }
+.hr-stats-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sm-space-3); align-items: start; margin-bottom: var(--sm-space-3); }
+.hr-stats-grid.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: var(--sm-space-3); }
+.hr-stats-grid > .b2b-card { margin-bottom: 0; }
+@media (max-width: 900px) { .hr-stats-grid, .hr-stats-grid.is-three { grid-template-columns: minmax(0, 1fr); } }
+/* 달이 열(12칸)인 표 — 첫 칸(항목 이름)은 왼쪽에 붙여 둔다 */
+.hr-stats-table th, .hr-stats-table td { padding: 8px 10px; font-variant-numeric: tabular-nums; }
+.hr-stats-table th:first-child, .hr-stats-table td:first-child { position: sticky; left: 0; background: var(--sm-white); color: var(--sm-text-mid); }
+.hr-stats-table tr.hr-pay-sum > td:first-child { background: var(--sm-bg-subtle); color: var(--sm-black); }
+
 /* ── 사용 가이드 ─────────────────────────────────────────────────── */
 .hr-main .b2b-container.hr-guide { max-width: 860px; }
 .hr-guide-search { width: 100%; }
