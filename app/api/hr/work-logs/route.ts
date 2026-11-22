@@ -3,7 +3,7 @@ import { HR_PENDING_002, clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } f
 import { fetchLogs, fetchRoster, fetchWorkplaces } from "@/app/lib/hr-work-db";
 import { isMonth, monthRange, normalizeLog, type WorkLog } from "@/app/lib/hr-work";
 import { confirmedWorkplaces, refusal } from "@/app/lib/hr-pay-db";
-import { holidayNames } from "@/app/lib/hr-holidays-db";
+import { dayOffsFor } from "@/app/lib/hr-holidays-db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,9 +23,14 @@ export async function GET(req: NextRequest) {
     const [workplaces, employees] = await Promise.all([fetchWorkplaces(), fetchRoster(month, employee || undefined)]);
     if (employee && employees.length === 0) return hrJson({ ok: false, error: "없는 직원입니다." }, 404);
     // locked = 그 달 급여가 확정된 사업장 — 그 사업장 직원의 근무대장은 고칠 수 없다(hr/003)
-    // holidays = 그 달의 쉬는 날(날짜 → 이름, hr/007). [평소대로 채우기]가 이 날을 유급 휴일로 채운다
+    // holidays = 그 직원에게 걸리는 그 달의 쉬는 날(날짜 → 이름·구분, hr/007·008). [평소대로 채우기]가 이 날을 유급 휴일·무급 휴무로 채운다.
+    //  쉬는 날은 사업장·소속마다 다를 수 있어 직원 한 명을 열 때만 준다(목록에서는 쓰지 않는다).
     const { from, to } = monthRange(month);
-    const [logs, locked, holidays] = await Promise.all([fetchLogs(month, employees.map((e) => e.id)), confirmedWorkplaces(month), holidayNames(from, to)]);
+    const one = employee ? employees[0] : null;
+    const [logs, locked, holidays] = await Promise.all([
+      fetchLogs(month, employees.map((e) => e.id)), confirmedWorkplaces(month),
+      one ? dayOffsFor(from, to, { id: one.id, workplace_id: one.workplace_id, affiliation: one.affiliation || "" }) : Promise.resolve({}),
+    ]);
     return hrJson({ ok: true, month, workplaces, employees, logs, locked, holidays });
   } catch (err) {
     return hrError(err, "근무대장을 불러오지 못했습니다.", HR_PENDING_002);

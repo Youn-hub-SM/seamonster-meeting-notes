@@ -3,11 +3,13 @@
 // 연차 — 직원마다 한 줄(발생·사용·잔여·곧 소멸). 줄을 누르면 발생 건과 사용 내역이 펼쳐진다.
 //  화면을 열 때 오늘까지 생겼어야 할 자동 발생 건이 들어온다(서버, 한 번만). 사용은 근무대장의 연차 줄이다 —
 //  [사용 등록]은 근무대장에 그 줄을 넣고, 급여는 그 줄을 유급 시간으로 계산한다.
+//  '사용 내역' 탭은 한 달 동안 쓴 연차를 모든 직원에 걸쳐 날짜 순으로 보여 준다(같은 자료 — 서버를 따로 부르지 않는다).
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
-import { LEAVE_BASIS_LABEL, isActiveOn, isDate } from "@/app/lib/hr";
+import { LEAVE_BASIS_LABEL, WEEKDAYS, isActiveOn, isDate, todayKst } from "@/app/lib/hr";
+import { isMonth, shiftMonth, weekdayOf } from "@/app/lib/hr-work";
 import { GRANT_KIND_LABEL, dayText, leaveBasisOf, partTimeFactor, summarizeLeave, type GrantView, type LeaveEmployee, type LeaveGrant, type LeaveSummary, type LeaveUse, type LeaveWorkplace } from "@/app/lib/hr-leave";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";   // 업무도우미와 같이 쓰는 검색 고르기(화면 부품일 뿐 — 자료에는 닿지 않는다)
 import { HrApiError, errText, hrApi } from "../api";
@@ -16,9 +18,9 @@ type Data = {
   today: string; workplaces: LeaveWorkplace[]; employees: LeaveEmployee[]; grants: LeaveGrant[]; uses: LeaveUse[];
   compare: Record<string, { hire: number; fiscal: number; short: number }>; added: number;
 };
-type Tab = "active" | "left";
+type Tab = "active" | "left" | "uses";
 type History = { id: number; at: string; actor: string; action: string; target_name: string; detail: Record<string, unknown> };
-const TAB_LABEL: Record<Tab, string> = { active: "재직", left: "퇴사" };
+const TAB_LABEL: Record<Tab, string> = { active: "재직", left: "퇴사", uses: "사용 내역" };
 const STATE_LABEL: Record<GrantView["state"], string> = { valid: "유효", expired: "기간 끝남", future: "시작 전", voided: "없던 것으로 함", minus: "빼는 건" };
 const PART_LABEL: Record<string, string> = { "1": "연차", "0.5": "반차", "0.25": "반반차" };
 const ACTION_LABEL: Record<string, string> = {
@@ -35,6 +37,7 @@ export default function HrLeavePage() {
   const [tab, setTab] = useState<Tab>("active");
   const [wp, setWp] = useState("");
   const [q, setQ] = useState("");
+  const [month, setMonth] = useState(() => todayKst().slice(0, 7));   // '사용 내역' 탭이 보는 달
   const [open, setOpen] = useState<string | null>(null);
   const [grantFor, setGrantFor] = useState<{ employee: string } | null>(null);
   const [useFor, setUseFor] = useState<{ employee: string } | null>(null);
@@ -79,11 +82,22 @@ export default function HrLeavePage() {
       return !k || [e.name, e.emp_no, e.dept, e.position].some((v) => v.toLowerCase().includes(k));
     });
   }, [d, tab, wp, q]);
+  // 사용 내역(그 달) — 날짜 순. 사업장·검색으로 좁힌다
+  const empOf = useMemo(() => new Map((d?.employees || []).map((e) => [e.id, e])), [d]);
+  const monthUses = useMemo(() => (d?.uses || []).filter((u) => u.work_date.slice(0, 7) === month && empOf.has(u.employee_id)), [d, month, empOf]);
+  const useRows = useMemo(() => {
+    const k = q.trim().toLowerCase();
+    return monthUses.map((u) => ({ u, e: empOf.get(u.employee_id)! }))
+      .filter(({ e }) => (!wp || e.workplace_id === wp) && (!k || [e.name, e.emp_no, e.dept, e.position].some((v) => v.toLowerCase().includes(k))))
+      .sort((a, b) => a.u.work_date.localeCompare(b.u.work_date) || a.e.name.localeCompare(b.e.name, "ko"));
+  }, [monthUses, empOf, wp, q]);
+  const useDays = useMemo(() => useRows.reduce((s, r) => s + r.u.days, 0), [useRows]);
+
   const counts = useMemo(() => {
-    const c = { active: 0, left: 0 };
+    const c = { active: 0, left: 0, uses: monthUses.length };
     for (const e of d?.employees || []) c[isActiveOn(e, d!.today) ? "active" : "left"]++;
     return c;
-  }, [d]);
+  }, [d, monthUses]);
   const multiWp = (d?.workplaces.length || 0) > 1;
 
   async function cancelUse(e: LeaveEmployee, u: LeaveUse) {
@@ -141,11 +155,51 @@ export default function HrLeavePage() {
                 {d.workplaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             )}
+            {tab === "uses" && (
+              <>
+                <button type="button" className="b2b-btn-secondary" onClick={() => setMonth(shiftMonth(month, -1))}>이전 달</button>
+                <input type="month" className="b2b-input hr-month" value={month} aria-label="달" onChange={(e) => { if (isMonth(e.target.value)) setMonth(e.target.value); }} />
+                <button type="button" className="b2b-btn-secondary" onClick={() => setMonth(shiftMonth(month, 1))}>다음 달</button>
+              </>
+            )}
             <input className="b2b-input hr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="성명·사번·부서 검색" />
           </div>
-          <p className="hr-rule">일 단위. 발생·사용·잔여는 지금 쓸 수 있는 발생 건 기준이고, 곧 소멸은 60일 안에 끝나는 건의 남은 일수입니다.</p>
+          {tab !== "uses" && <p className="hr-rule">일 단위. 발생·사용·잔여는 지금 쓸 수 있는 발생 건 기준이고, 곧 소멸은 60일 안에 끝나는 건의 남은 일수입니다.</p>}
 
-          {rows.length === 0 ? (
+          {tab === "uses" ? (
+            useRows.length === 0 ? (
+              <div className="b2b-empty">{monthUses.length > 0 ? "조건에 맞는 사용 내역이 없습니다." : `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월에 쓴 연차가 없습니다.`}</div>
+            ) : (
+              <div className="b2b-table-wrap">
+                <table className="b2b-table hr-table">
+                  <thead>
+                    <tr>
+                      <th>날짜</th><th>요일</th>{multiWp && <th>사업장</th>}<th>사번</th><th>성명</th><th>부서</th><th>종류</th><th className="num">일수</th><th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {useRows.map(({ u, e }) => (
+                      <tr key={`${u.employee_id}|${u.work_date}`}>
+                        <td>{u.work_date}</td>
+                        <td>{WEEKDAYS[weekdayOf(u.work_date) - 1]}</td>
+                        {multiWp && <td>{wpOf.get(e.workplace_id)?.name || ""}</td>}
+                        <td className="hr-mono">{e.emp_no}</td>
+                        <td><strong>{e.name}</strong></td>
+                        <td>{e.dept}</td>
+                        <td>{PART_LABEL[String(u.days)] || ""}{u.kind === "work" ? " (근무한 날)" : ""}</td>
+                        <td className="num">{dayText(u.days)}</td>
+                        <td className="actions"><button type="button" className="b2b-link-btn" onClick={() => cancelUse(e, u)}>사용 취소</button></td>
+                      </tr>
+                    ))}
+                    <tr className="hr-pay-sum">
+                      <td colSpan={multiWp ? 7 : 6}>합계 {useRows.length}건</td>
+                      <td className="num">{dayText(useDays)}</td><td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : rows.length === 0 ? (
             <div className="b2b-empty">{q.trim() || wp ? "조건에 맞는 직원이 없습니다." : tab === "left" ? "최근 1년 안에 퇴사한 직원이 없습니다." : "재직 중인 직원이 없습니다."}</div>
           ) : (
             <div className="b2b-table-wrap">

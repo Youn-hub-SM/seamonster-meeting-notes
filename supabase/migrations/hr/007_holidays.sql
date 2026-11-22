@@ -17,6 +17,7 @@
 --
 -- 이 번호열은 hr 스키마 밖을 건드리지 않는다. 적용: Supabase SQL Editor 에 이 파일 하나를 붙여넣고 Run. 멱등 — 재실행 안전
 -- (이미 있는 날짜는 건드리지 않는다. 화면에서 지운 처음 값은 다시 실행하면 되살아난다). hr/006 다음.
+-- 단, hr/008 을 적용한 뒤에는 다시 실행하지 않는다 — 아래 on conflict (holiday_date) 가 기대는 유일 제약을 008 이 없앤다.
 
 create table if not exists hr.holidays (
   holiday_date  date primary key,
