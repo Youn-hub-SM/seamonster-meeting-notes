@@ -32,6 +32,7 @@ function StatsMain() {
   const qEnd = params.get("end") || "";
   const end = isMonth(qEnd) ? qEnd : todayKst().slice(0, 7);
   const qWp = params.get("workplace") || "";
+  const qAff = params.get("affiliation") || "";
 
   const [b, setB] = useState<StatsBundle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,17 +41,19 @@ function StatsMain() {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      setB(await hrApi<StatsBundle>(`/api/hr/stats?end=${end}${qWp ? `&workplace=${qWp}` : ""}`));
+      setB(await hrApi<StatsBundle>(`/api/hr/stats?end=${end}${qWp ? `&workplace=${qWp}` : ""}${qAff ? `&affiliation=${encodeURIComponent(qAff)}` : ""}`));
     } catch (err) {
       if (!(err instanceof HrApiError && err.status === 401)) setError(errText(err, "통계를 불러오지 못했습니다."));
     }
     setLoading(false);
-  }, [end, qWp]);
+  }, [end, qWp, qAff]);
   useEffect(() => { load(); }, [load]);
 
-  const go = (m: string, w?: string) => {
+  // 사업장을 바꾸면 소속은 푼다(소속 이름이 사업장마다 다르다)
+  const go = (m: string, w?: string, a?: string) => {
     const wid = w ?? qWp;
-    router.push(`/hr/stats?end=${m}${wid ? `&workplace=${wid}` : ""}`);
+    const aff = a ?? (w === undefined ? qAff : "");
+    router.push(`/hr/stats?end=${m}${wid ? `&workplace=${wid}` : ""}${aff ? `&affiliation=${encodeURIComponent(aff)}` : ""}`);
   };
 
   const v = useMemo(() => {
@@ -100,6 +103,12 @@ function StatsMain() {
             {b.workplaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         )}
+        {b && b.affiliations.length > 0 && (
+          <select className="b2b-input" value={b.affiliation} onChange={(e) => go(end, undefined, e.target.value)} aria-label="소속">
+            <option value="">모든 소속</option>
+            {b.affiliations.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
       </div>
 
       {error && <div className="b2b-error" role="alert">{error}</div>}
@@ -137,6 +146,32 @@ function StatsMain() {
                     <ChartLegend items={v.costSeries.map((s, i) => [s.key, PIE_COLORS[i % PIE_COLORS.length]])} />
                   </div>
                 )}
+                {/* 소속별 인건비 — 기간 안의 확정한 달을 더한 것. 소속을 쓰지 않거나 소속 하나를 골랐으면 나오지 않는다 */}
+                {b.costByAff && b.costByAff.length > 0 && (() => {
+                  const all = b.costByAff.reduce((t, a) => t + a.pay_total + a.employer, 0);
+                  return (
+                    <div className="b2b-card hr-stats-card">
+                      <div className="b2b-card-head"><span className="b2b-card-title">소속별 인건비 · 확정한 {v.confirmed.length}개 달 합계</span></div>
+                      <div className="b2b-table-wrap">
+                        <table className="b2b-table hr-table">
+                          <thead><tr><th>소속</th><th className="num">인원</th><th className="num">지급 합계</th><th className="num">회사 부담</th><th className="num">인건비</th><th className="num">비중</th></tr></thead>
+                          <tbody>
+                            {b.costByAff.map((a) => (
+                              <tr key={a.name || "-"}>
+                                <td>{a.name || <span className="sm-faint">소속 없음</span>}</td>
+                                <td className="num">{a.people}명</td>
+                                <td className="num">{won(a.pay_total)}</td>
+                                <td className="num">{won(a.employer)}</td>
+                                <td className="num"><strong>{won(a.pay_total + a.employer)}</strong></td>
+                                <td className="num">{all > 0 ? `${Math.round(((a.pay_total + a.employer) / all) * 1000) / 10}%` : ""}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {v.cost.some((c) => c.confirmed || c.draft) && (
                   <div className="b2b-table-wrap">
                     <table className="b2b-table hr-table hr-stats-table">

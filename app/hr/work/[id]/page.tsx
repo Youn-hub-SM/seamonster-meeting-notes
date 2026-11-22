@@ -13,6 +13,7 @@ import {
   shiftMonth, summarizeMonth, weekdayOf,
   type RosterEmployee, type RosterLog, type RosterWorkplace, type WorkKind, type WorkLog,
 } from "@/app/lib/hr-work";
+import { isPaidHoliday } from "@/app/lib/hr-holidays";
 import { HrApiError, errText, hrApi, hrDownload } from "../../api";
 
 // 화면에서 고치는 한 줄(입력칸 값 그대로 — 글자)
@@ -65,6 +66,7 @@ function WorkSheet({ id }: { id: string }) {
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);        // 이 달 급여가 확정됨 — 근무대장을 고칠 수 없다
+  const [holidays, setHolidays] = useState<Record<string, string>>({}); // 이 달의 쉬는 날(날짜 → 이름) — [요율] 화면의 공휴일 목록
 
   const adopt = useCallback((logs: RosterLog[]) => {
     const d: Record<string, Draft> = {};
@@ -75,9 +77,10 @@ function WorkSheet({ id }: { id: string }) {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const j = await hrApi<{ employees: RosterEmployee[]; workplaces: RosterWorkplace[]; logs: RosterLog[]; locked?: string[] }>(`/api/hr/work-logs?month=${month}&employee=${id}`);
+      const j = await hrApi<{ employees: RosterEmployee[]; workplaces: RosterWorkplace[]; logs: RosterLog[]; locked?: string[]; holidays?: Record<string, string> }>(`/api/hr/work-logs?month=${month}&employee=${id}`);
       const e = j.employees[0] || null;
       setEmployee(e); setWorkplace(j.workplaces.find((w) => w.id === e?.workplace_id) || null);
+      setHolidays(j.holidays || {});
       setLocked(!!e && (j.locked || []).includes(e.workplace_id));
       adopt(j.logs);
     } catch (err) {
@@ -144,7 +147,11 @@ function WorkSheet({ id }: { id: string }) {
     if (targets.length === 0) { toast.success("채울 빈 날이 없습니다"); return; }
     setDraft((p) => {
       const next = { ...p };
-      for (const d of targets) if (!next[d]?.kind) next[d] = fromLog(defaultLog(employee, d));
+      // 공휴일(그 사업장에서 유급으로 쉬는 날)은 '근무' 대신 '유급 휴일'로 채운다
+      for (const d of targets) {
+        if (next[d]?.kind) continue;
+        next[d] = holidays[d] && isPaidHoliday(d, workplace?.five_plus ?? true) ? { ...EMPTY, kind: "paid_holiday" } : fromLog(defaultLog(employee, d));
+      }
       return next;
     });
   }
@@ -274,7 +281,7 @@ function WorkSheet({ id }: { id: string }) {
               const week = weekByEnd.get(d);
               return [
                 <tr key={d} className={`${sched ? "" : "hr-work-off"} ${inJob ? "" : "hr-work-out"}`}>
-                  <td className="sm-nowrap">{md(d)} <span className="sm-muted">{WEEKDAYS[weekdayOf(d) - 1]}</span></td>
+                  <td className="sm-nowrap">{md(d)} <span className="sm-muted">{WEEKDAYS[weekdayOf(d) - 1]}</span>{holidays[d] && <span className="b2b-status-pill hr-pill-off">{holidays[d]}</span>}</td>
                   {!inJob ? <td colSpan={9} className="sm-faint">{d < employee.hire_date ? "입사 전" : "퇴사 뒤"}</td> : (
                     <>
                       <td>

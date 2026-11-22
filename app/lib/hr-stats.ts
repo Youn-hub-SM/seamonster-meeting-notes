@@ -12,7 +12,7 @@ import { isActiveOn } from "./hr";
 import { monthRange, round2, shiftMonth, summarizeMonth, type WorkEmployee, type WorkLog, type WorkPlace } from "./hr-work";
 import { summarizeLeave, type LeaveGrant, type LeaveUse } from "./hr-leave";
 
-export type StatsEmployee = WorkEmployee & { id: string; workplace_id: string; emp_no: string; name: string; emp_type: string; pay_type: "hourly" | "monthly" };
+export type StatsEmployee = WorkEmployee & { id: string; workplace_id: string; emp_no: string; name: string; emp_type: string; pay_type: "hourly" | "monthly"; affiliation: string };
 
 // 끝 달을 포함한 n개월(오래된 달부터)
 export function monthsEnding(end: string, n = 12): string[] {
@@ -28,9 +28,24 @@ export type CostAgg = {
 export type CostMonth = { month: string; confirmed: CostAgg | null; draft: CostAgg | null };
 export type CostPayroll = { id: string; month: string; status: "draft" | "confirmed" };
 export type CostLine = {
-  payroll_id: string; pay_total: number; deduct_total: number; net_pay: number; employer_total: number;
+  payroll_id: string; employee_id: string; pay_total: number; deduct_total: number; net_pay: number; employer_total: number;
   items: { code: string; kind: string; amount: number }[];
 };
+// 소속별 인건비 — 기간 안의 **확정한 달만** 더한 것. 소속은 지금 인사대장의 값(그때의 소속이 아니다). name "" = 소속을 정하지 않은 직원
+export type AffCost = { name: string; people: number; pay_total: number; employer: number };
+export function costByAffiliation(payrolls: CostPayroll[], lines: CostLine[], months: string[], affOf: Map<string, string>): AffCost[] {
+  const ok = new Set(payrolls.filter((p) => p.status === "confirmed" && months.includes(p.month)).map((p) => p.id));
+  const by = new Map<string, AffCost & { ids: Set<string> }>();
+  for (const l of lines) {
+    if (!ok.has(l.payroll_id)) continue;
+    const name = affOf.get(l.employee_id) || "";
+    let a = by.get(name);
+    if (!a) by.set(name, a = { name, people: 0, pay_total: 0, employer: 0, ids: new Set() });
+    a.ids.add(l.employee_id); a.pay_total += l.pay_total; a.employer += l.employer_total;
+  }
+  return [...by.values()].map((a) => ({ name: a.name, people: a.ids.size, pay_total: a.pay_total, employer: a.employer }))
+    .sort((x, y) => (y.pay_total + y.employer) - (x.pay_total + x.employer));
+}
 const emptyAgg = (): CostAgg => ({ people: 0, pay_total: 0, deduct_total: 0, net_pay: 0, employer: 0, base: 0, weekly: 0, premium: 0, paid_leave: 0, extra: 0 });
 
 export function costStats(payrolls: CostPayroll[], lines: CostLine[], months: string[]): CostMonth[] {
@@ -161,6 +176,9 @@ export type StatsBundle = {
   end: string; months: string[]; today: string;
   workplace_id: string;                       // "" = 모든 사업장
   workplaces: { id: string; name: string }[];
+  affiliation: string;                        // "" = 모든 소속
+  affiliations: string[];                     // 고를 수 있는 소속(그 기간 직원에게 들어 있는 이름)
+  costByAff: AffCost[] | null;                // 소속별 인건비 — 소속을 쓰지 않거나 소속 하나를 골랐으면 null
   cost: CostMonth[] | null;                   // null = 급여 표가 아직 없다(hr/003 미적용)
   hours: { byMonth: HoursMonth[]; byPerson: HoursPerson[] };
   people: { byMonth: PeopleMonth[]; mix: PeopleMix };

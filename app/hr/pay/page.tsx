@@ -55,6 +55,7 @@ function PayMain() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [printMode, setPrintMode] = useState<string | null>(null); // "ledger" | "slips" | "slip:<직원 id>"
+  const [aff, setAff] = useState("");                               // 소속으로 좁혀 보기("" = 모든 소속)
 
   const adopt = useCallback((j: PayBundle) => {
     const wp = j.workplaces.find((w) => w.id === j.workplace_id);
@@ -95,11 +96,17 @@ function PayMain() {
       return { id: e.id, snap: snapshotOf(e), memo: inp.memo || "", result: computePay({ e, wp, logs: logsOf.get(e.id) || [], month: b.month, payDate, rates: b.rates, tax, items: activeItems, inputs: inp }) };
     });
   }, [b, wp, confirmed, payDate, inputs, tax, activeItems]);
-  const totals = useMemo(() => sumResults(rows.map((r) => r.result)), [rows]);
-  const employer = useMemo(() => rows.reduce((t, r) => ({
+  // 소속으로 좁혀 보기 — 화면·합계·인쇄·엑셀만 좁힌다. 저장·확정은 늘 그 사업장 전원(rows)에 한다.
+  const affOf = useMemo(() => b?.affiliations || {}, [b]);
+  const affNames = useMemo(() => [...new Set(rows.map((r) => affOf[r.id] || "").filter(Boolean))].sort((x, y) => x.localeCompare(y, "ko")), [rows, affOf]);
+  const affOn = affNames.includes(aff) ? aff : "";
+  const view = useMemo(() => (affOn ? rows.filter((r) => (affOf[r.id] || "") === affOn) : rows), [rows, affOf, affOn]);
+  const totals = useMemo(() => sumResults(view.map((r) => r.result)), [view]);
+  const allTotals = useMemo(() => sumResults(rows.map((r) => r.result)), [rows]);
+  const employer = useMemo(() => view.reduce((t, r) => ({
     pension: t.pension + r.result.employer.pension, health: t.health + r.result.employer.health, ltc: t.ltc + r.result.employer.ltc,
     employment: t.employment + r.result.employer.employment, accident: t.accident + r.result.employer.accident,
-  }), { pension: 0, health: 0, ltc: 0, employment: 0, accident: 0 }), [rows]);
+  }), { pension: 0, health: 0, ltc: 0, employment: 0, accident: 0 }), [view]);
   const warnCount = rows.reduce((t, r) => t + r.result.warnings.length, 0);
 
   // 고친 것이 있는가 / 저장한 적이 없는가 / 저장한 뒤 근무대장·임금·요율이 바뀌어 금액이 달라졌는가
@@ -146,7 +153,7 @@ function PayMain() {
     if (confirmIt) {
       const ok = await confirm({
         title: `${monthTitle(b.month)} 급여 확정`,
-        body: `${rows.length}명, 실수령 합계 ${won(totals.net_pay)}원. 확정하면 이 달의 급여와 근무대장을 고칠 수 없습니다.${warnCount ? ` 확인할 것이 ${warnCount}건 남아 있습니다.` : ""}`,
+        body: `${affOn ? "소속과 상관없이 이 사업장 전원 " : ""}${rows.length}명, 실수령 합계 ${won(allTotals.net_pay)}원. 확정하면 이 달의 급여와 근무대장을 고칠 수 없습니다.${warnCount ? ` 확인할 것이 ${warnCount}건 남아 있습니다.` : ""}`,
         action: "급여 확정",
       });
       if (!ok) return;
@@ -174,7 +181,7 @@ function PayMain() {
   async function excel() {
     if (!b) return;
     if (needSave) { toast.error("변경을 저장한 뒤 내려받으세요"); return; }
-    try { await hrDownload("/api/hr/payroll/export", { workplace_id: b.workplace_id, month: b.month }, `payroll-${b.month}.xlsx`); }
+    try { await hrDownload("/api/hr/payroll/export", { workplace_id: b.workplace_id, month: b.month, affiliation: affOn || undefined }, `payroll-${b.month}.xlsx`); }
     catch (err) { toast.error(errText(err, "급여대장을 내보내지 못했습니다.")); }
   }
   function print(mode: string) {
@@ -186,8 +193,9 @@ function PayMain() {
   const patch = (id: string, fn: (x: LineInputs) => LineInputs) => setInputs((p) => ({ ...p, [id]: fn(p[id] || emptyInputs()) }));
 
   const editRow = editing ? rows.find((r) => r.id === editing) || null : null;
-  const slipRows = printMode === "slips" ? rows : printMode?.startsWith("slip:") ? rows.filter((r) => r.id === printMode.slice(5)) : [];
+  const slipRows = printMode === "slips" ? view : printMode?.startsWith("slip:") ? rows.filter((r) => r.id === printMode.slice(5)) : [];
   const multiWp = (b?.workplaces.length || 0) > 1;
+  const showAff = affNames.length > 0 && !affOn;   // 소속 열: 소속을 쓰는 사업장에서, 하나를 고르지 않았을 때
 
   return (
     <div className="b2b-container">
@@ -220,6 +228,12 @@ function PayMain() {
             {b.workplaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         )}
+        {affNames.length > 0 && (
+          <select className="b2b-input" value={affOn} onChange={(e) => setAff(e.target.value)} aria-label="소속">
+            <option value="">모든 소속</option>
+            {affNames.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
         {b && wp && (
           <label className="hr-pay-date">
             <span>지급일</span>
@@ -247,7 +261,7 @@ function PayMain() {
       ) : (
         <>
           <div className="hr-tiles hr-noprint">
-            {([["인원", `${rows.length}명`], ["지급 합계", won(totals.pay_total)], ["공제 합계", won(totals.deduct_total)], ["실수령 합계", won(totals.net_pay)], ["회사 부담 4대보험", won(totals.employer)]] as const).map(([label, value]) => (
+            {([["인원", `${view.length}명`], ["지급 합계", won(totals.pay_total)], ["공제 합계", won(totals.deduct_total)], ["실수령 합계", won(totals.net_pay)], ["회사 부담 4대보험", won(totals.employer)]] as const).map(([label, value]) => (
               <div key={label} className="b2b-stat-card">
                 <div className="b2b-stat-card-label">{label}</div>
                 <div className="b2b-stat-card-value">{value}</div>
@@ -259,13 +273,15 @@ function PayMain() {
             <table className="b2b-table is-clickable hr-table">
               <thead>
                 <tr>
+                  {showAff && <th>소속</th>}
                   <th>사번</th><th>성명</th><th>임금</th><th className="num">근무 일수</th><th className="num">근무 시간</th><th className="num">연장</th><th className="num">야간</th><th className="num">휴일 근무</th>
                   <th className="num">지급 합계</th><th className="num">공제 합계</th><th className="num">실수령액</th><th>확인할 것</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ id, snap, result: r }) => (
+                {view.map(({ id, snap, result: r }) => (
                   <tr key={id} onClick={() => setEditing(id)} tabIndex={0} role="button" onKeyDown={(ev) => { if (ev.key === "Enter") setEditing(id); }}>
+                    {showAff && <td>{affOf[id] || ""}</td>}
                     <td className="hr-mono">{snap.emp_no}</td>
                     <td><strong>{snap.name}</strong>{r.items.some((i) => i.edited) && <span className="b2b-status-pill hr-pill-off" style={{ marginLeft: 8 }}>고침</span>}</td>
                     <td>{wageLabel(r)}</td>
@@ -281,7 +297,7 @@ function PayMain() {
                   </tr>
                 ))}
                 <tr className="hr-pay-sum">
-                  <td colSpan={8}>합계 {rows.length}명</td>
+                  <td colSpan={showAff ? 9 : 8}>합계 {view.length}명</td>
                   <td className="num">{won(totals.pay_total)}</td><td className="num">{won(totals.deduct_total)}</td><td className="num">{won(totals.net_pay)}</td><td></td>
                 </tr>
               </tbody>
@@ -301,7 +317,7 @@ function PayMain() {
         <div className="hr-print-only">
           <div className="hr-print-head">
             <h1>급여대장 {monthTitle(b.month)}</h1>
-            <span>{wp.name} · 지급일 {confirmed ? b.payroll?.pay_date : payDate} · {rows.length}명 · {confirmed ? "확정" : "작성 중"}</span>
+            <span>{wp.name}{affOn ? ` · ${affOn}` : ""} · 지급일 {confirmed ? b.payroll?.pay_date : payDate} · {view.length}명 · {confirmed ? "확정" : "작성 중"}</span>
           </div>
           <table className="hr-print-table hr-pay-ledger">
             <thead>
@@ -313,7 +329,7 @@ function PayMain() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ id, snap, result: r }) => (
+              {view.map(({ id, snap, result: r }) => (
                 <tr key={id}>
                   <td>{snap.emp_no}</td><td>{snap.name}</td><td>{snap.birth_date || ""}</td><td>{snap.hire_date || ""}</td><td>{snap.job || ""}</td><td>{wageLabel(r)}</td>
                   <td className="num">{r.basis.workDays}</td><td className="num">{hoursText(r.basis.worked)}</td><td className="num">{hoursText(r.basis.overtime)}</td><td className="num">{hoursText(r.basis.night)}</td><td className="num">{hoursText(r.basis.holiday)}</td>
@@ -324,11 +340,11 @@ function PayMain() {
                 </tr>
               ))}
               <tr className="hr-print-week">
-                <td colSpan={11}>합계 {rows.length}명</td>
+                <td colSpan={11}>합계 {view.length}명</td>
                 {SYSTEM_PAY.map((c) => <td key={c} className="num">{won(totals.byCode[c] || 0)}</td>)}
-                <td className="num">{won(rows.reduce((t, r) => t + extraSum(r.result, "pay"), 0))}</td><td className="num">{won(totals.pay_total)}</td>
+                <td className="num">{won(view.reduce((t, r) => t + extraSum(r.result, "pay"), 0))}</td><td className="num">{won(totals.pay_total)}</td>
                 {SYSTEM_DEDUCT.map((c) => <td key={c} className="num">{won(totals.byCode[c] || 0)}</td>)}
-                <td className="num">{won(rows.reduce((t, r) => t + extraSum(r.result, "deduct"), 0))}</td><td className="num">{won(totals.deduct_total)}</td><td className="num">{won(totals.net_pay)}</td>
+                <td className="num">{won(view.reduce((t, r) => t + extraSum(r.result, "deduct"), 0))}</td><td className="num">{won(totals.deduct_total)}</td><td className="num">{won(totals.net_pay)}</td>
               </tr>
             </tbody>
           </table>

@@ -4,6 +4,8 @@ import { isDate, todayKst } from "@/app/lib/hr";
 import { addDays, normalizeLog, weekdayOf, type WorkLog } from "@/app/lib/hr-work";
 import { GRANT_COLS, HR_PENDING_004, ensureAutoGrants, fetchGrants, fetchLeaveEmployees, fetchLeaveLogs, fetchLeaveWorkplaces, fetchLogsBetween, leaverCompare, toGrant } from "@/app/lib/hr-leave-db";
 import { refusal } from "@/app/lib/hr-pay-db";
+import { holidayNames } from "@/app/lib/hr-holidays-db";
+import { isPaidHoliday } from "@/app/lib/hr-holidays";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -83,11 +85,14 @@ export async function POST(req: NextRequest) {
       if (![1, 0.5, 0.25].includes(part)) errors.part = "종류를 고르세요";
       if (Object.keys(errors).length > 0) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: errors }, 400);
 
-      const logs = await fetchLogsBetween(e.id, from, to);
+      // 공휴일(그 사업장에서 유급으로 쉬는 날)에는 연차를 넣지 않는다 — 쉬는 날에 연차가 깎이지 않게
+      const [logs, holidays, workplaces] = await Promise.all([fetchLogsBetween(e.id, from, to), holidayNames(from, to), fetchLeaveWorkplaces()]);
+      const fivePlus = workplaces.find((w) => w.id === e.workplace_id)?.five_plus ?? true;
       const done: string[] = [], skipped: { date: string; reason: string }[] = [];
       for (let d = from; d <= to; d = addDays(d, 1)) {
         if (!e.work_days.includes(weekdayOf(d))) continue;                       // 소정근로일이 아닌 날은 연차를 쓰지 않는다
         if (d < e.hire_date || (e.leave_date && d > e.leave_date)) { skipped.push({ date: d, reason: "재직 기간이 아님" }); continue; }
+        if (holidays[d] && isPaidHoliday(d, fivePlus)) { skipped.push({ date: d, reason: `공휴일(${holidays[d]})` }); continue; }
         const cur = logs.get(d);
         let row: WorkLog | null = null;
         if (!cur || cur.kind === "leave") {

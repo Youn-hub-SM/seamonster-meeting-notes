@@ -4,7 +4,7 @@ import { hrDb, hrJson } from "./hr-db";
 import { wagesOf } from "./hr-employees";
 import { isDate, type Rate } from "./hr";
 import { isMonth, monthRange, type RosterLog } from "./hr-work";
-import { fetchLogs } from "./hr-work-db";
+import { fetchAffiliationOf, fetchLogs } from "./hr-work-db";
 import {
   ITEM_TAX_KINDS, computePay, defaultPayDate, initialInputs, normalizeInputs, snapshotOf,
   type ItemTaxKind, type LineInputs, type PayBundle, type PayEmployee, type PayItemDef, type PayResult, type PayWorkplace, type PayrollHead, type SavedLine, type TaxTable,
@@ -137,9 +137,10 @@ export async function loadBundle(month: string, wantWorkplace: string): Promise<
   if (!isMonth(month)) return { error: "달을 고르세요.", status: 400 };
   const workplaces = await fetchPayWorkplaces();
   const wp = workplaces.find((w) => w.id === wantWorkplace) || workplaces.find((w) => w.active) || workplaces[0];
-  const empty: PayBundle = { month, workplace_id: wp?.id || "", workplaces, payroll: null, lines: [], employees: [], logs: [], rates: [], tax: null, items: [], fixed: {} };
+  const empty: PayBundle = { month, workplace_id: wp?.id || "", workplaces, payroll: null, lines: [], employees: [], logs: [], rates: [], tax: null, items: [], fixed: {}, affiliations: {} };
   if (!wp) return empty;
-  const [saved, items] = await Promise.all([fetchPayroll(wp.id, month), fetchPayItems()]);
+  const [saved, items, affiliations] = await Promise.all([fetchPayroll(wp.id, month), fetchPayItems(), fetchAffiliationOf(wp.id)]);
+  empty.affiliations = affiliations;
   if (saved?.head.status === "confirmed") return { ...empty, payroll: saved.head, lines: saved.lines, items };
   const payDate = saved?.head.pay_date || defaultPayDate(month, wp.payday);
   const [employees, rates, tax] = await Promise.all([fetchPayEmployees(month, wp.id), fetchRates(), fetchTaxTable(payDate)]);

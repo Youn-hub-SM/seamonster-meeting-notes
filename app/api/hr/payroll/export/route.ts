@@ -4,6 +4,7 @@ import { hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { HR_PENDING_003, UUID_RE, fetchPayWorkplaces, fetchPayroll } from "@/app/lib/hr-pay-db";
 import { SYSTEM_DEDUCT, SYSTEM_LABEL, SYSTEM_PAY, itemAmount, type PayResult } from "@/app/lib/hr-pay";
 import { isMonth } from "@/app/lib/hr-work";
+import { fetchAffiliationOf } from "@/app/lib/hr-work-db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,14 +15,17 @@ export async function POST(req: NextRequest) {
   const who = await requireHr(req);
   if (who.res) return who.res;
   try {
-    const body = (await req.json()) as { workplace_id?: string; month?: string };
+    const body = (await req.json()) as { workplace_id?: string; month?: string; affiliation?: string };
     const workplaceId = String(body.workplace_id ?? ""), month = String(body.month ?? "");
+    const affiliation = String(body.affiliation ?? "").trim();   // 화면에서 소속을 골랐으면 그 소속 직원만
     if (!UUID_RE.test(workplaceId)) return hrJson({ ok: false, error: "없는 사업장입니다." }, 404);
     if (!isMonth(month)) return hrJson({ ok: false, error: "달을 고르세요." }, 400);
-    const [workplaces, saved] = await Promise.all([fetchPayWorkplaces(), fetchPayroll(workplaceId, month)]);
+    const [workplaces, saved, affOf] = await Promise.all([fetchPayWorkplaces(), fetchPayroll(workplaceId, month), affiliation ? fetchAffiliationOf(workplaceId) : Promise.resolve({} as Record<string, string>)]);
     const wp = workplaces.find((w) => w.id === workplaceId);
-    const lines = (saved?.lines || []).filter((l) => l.result);
-    if (!wp || !saved || lines.length === 0) return hrJson({ ok: false, error: "저장된 급여가 없습니다. 먼저 저장하세요." }, 404);
+    const all = (saved?.lines || []).filter((l) => l.result);
+    if (!wp || !saved || all.length === 0) return hrJson({ ok: false, error: "저장된 급여가 없습니다. 먼저 저장하세요." }, 404);
+    const lines = affiliation ? all.filter((l) => (affOf[l.employee_id] || "") === affiliation) : all;
+    if (lines.length === 0) return hrJson({ ok: false, error: "그 소속의 급여가 없습니다." }, 404);
 
     // 직접 넣는 항목은 그 달에 금액이 있는 것만 열로 둔다(이름은 저장된 줄의 것 — 뒤에 항목 이름을 바꿔도 그때 이름 그대로)
     const extra = (kind: "pay" | "deduct") => {
@@ -43,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("급여대장");
-    ws.addRow([`급여대장 ${month}`, "", wp.name, "", `지급일 ${saved.head.pay_date}`, "", saved.head.status === "confirmed" ? "확정" : "작성 중"]);
+    ws.addRow([`급여대장 ${month}`, "", affiliation ? `${wp.name} ${affiliation}` : wp.name, "", `지급일 ${saved.head.pay_date}`, "", saved.head.status === "confirmed" ? "확정" : "작성 중"]);
     ws.getRow(1).font = { bold: true };
     ws.addRow(head);
     ws.getRow(2).font = { bold: true };

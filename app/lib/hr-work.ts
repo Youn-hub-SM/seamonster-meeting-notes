@@ -43,6 +43,7 @@ export type WorkPlace = { five_plus: boolean; week_start: number; weekly_pay_mon
 export type RosterEmployee = WorkEmployee & {
   id: string; workplace_id: string; emp_no: string; name: string; dept: string; position: string;
   pay_type: "hourly" | "monthly"; work_start: string; work_end: string; break_min: number;
+  affiliation?: string;   // 소속(목록에서 소속별로 볼 때만 쓴다 — 계산에는 쓰지 않는다). hr/006 미적용이면 빈 값
 };
 export type RosterWorkplace = WorkPlace & { id: string; name: string };
 export type RosterLog = WorkLog & { employee_id: string };

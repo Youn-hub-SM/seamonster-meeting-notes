@@ -119,6 +119,7 @@
 .hr-work-table .hr-w-memo { width: 100%; min-width: 160px; }
 .hr-work-table .b2b-input:disabled { background: var(--sm-bg-subtle); color: var(--sm-text-light); }
 .hr-work-table .b2b-input[readonly] { background: var(--sm-bg-subtle); }
+.hr-work-table td:first-child .b2b-status-pill { margin-left: var(--sm-space-2); }   /* 날짜 옆의 공휴일 이름 */
 /* 소정근로일이 아닌 날·재직 기간 밖 */
 .hr-work-off > td:first-child { color: var(--sm-text-light); }
 .hr-work-off > td { background: var(--sm-bg-subtle); }
@@ -257,6 +258,7 @@
 .hr-sec { margin-top: var(--sm-space-6); }
 .hr-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-3); margin-bottom: var(--sm-space-3); }
 .hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
+.hr-sec-head .hr-holiday-nav { margin-bottom: 0; }   /* 공휴일 구역 머리의 해 이동·버튼 줄 */
 .hr-sec .sm-success { margin-bottom: var(--sm-space-3); }
 
 /* ── 입력 창(넓은 모달) ──────────────────────────────────────────── */

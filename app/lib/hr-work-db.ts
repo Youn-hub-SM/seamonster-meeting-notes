@@ -1,6 +1,7 @@
 // 근무대장 — 서버 전용 조회. 화면에서 import 하지 말 것.
 
 import { hrDb } from "./hr-db";
+import { missingAffiliation, type DbResult } from "./hr-employees";
 import { addDays, monthRange, type RosterEmployee, type RosterLog, type RosterWorkplace, type WorkKind } from "./hr-work";
 
 type Row = Record<string, unknown>;
@@ -17,6 +18,7 @@ export function toRosterEmployee(r: Row): RosterEmployee {
     hire_date: String(r.hire_date ?? ""), leave_date: (r.leave_date as string) || null,
     work_days: Array.isArray(r.work_days) ? (r.work_days as unknown[]).map(Number) : [],
     work_start: String(r.work_start ?? ""), work_end: String(r.work_end ?? ""), break_min: num(r.break_min), daily_hours: num(r.daily_hours),
+    affiliation: String(r.affiliation ?? ""),
   };
 }
 function toRosterLog(r: Row): RosterLog {
@@ -39,12 +41,29 @@ export async function fetchWorkplaces(): Promise<RosterWorkplace[]> {
 // 그 달에 하루라도 재직한 직원(employeeId 를 주면 그 한 명 — 재직 여부와 상관없이)
 export async function fetchRoster(month: string, employeeId?: string): Promise<RosterEmployee[]> {
   const { from, to } = monthRange(month);
-  let q = hrDb().from("employees").select(EMP_COLS).order("hire_date").order("name");
-  if (employeeId) q = q.eq("id", employeeId);
-  else q = q.lte("hire_date", to).or(`leave_date.is.null,leave_date.gte.${from}`);
-  const { data, error } = await q;
-  if (error) throw error;
-  return ((data || []) as unknown as Row[]).map(toRosterEmployee);
+  const run = (cols: string) => {
+    const q = hrDb().from("employees").select(cols).order("hire_date").order("name");
+    return employeeId ? q.eq("id", employeeId) : q.lte("hire_date", to).or(`leave_date.is.null,leave_date.gte.${from}`);
+  };
+  // 소속 칸(hr/006)이 아직 없는 DB 에서는 그 칸 없이 다시 읽는다(소속은 빈 값)
+  let res: DbResult = await run(`${EMP_COLS},affiliation`);
+  if (res.error && missingAffiliation(res.error)) res = await run(EMP_COLS);
+  if (res.error) throw res.error;
+  return ((res.data || []) as unknown as Row[]).map(toRosterEmployee);
+}
+
+// 사업장 직원들의 소속(직원 id → 소속 이름). 소속별로 좁혀 볼 때만 쓴다. 소속 칸이 없으면 빈 지도.
+export async function fetchAffiliationOf(workplaceId?: string): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (let offset = 0; ; offset += 1000) {
+    const q = hrDb().from("employees").select("id,affiliation").order("id").range(offset, offset + 999);
+    const { data, error } = await (workplaceId ? q.eq("workplace_id", workplaceId) : q);
+    if (error) { if (missingAffiliation(error)) return {}; throw error; }
+    const rows = (data || []) as unknown as Row[];
+    for (const r of rows) out[String(r.id)] = String(r.affiliation ?? "");
+    if (rows.length < 1000) break;
+  }
+  return out;
 }
 
 // 그 달과 겹치는 주를 모두 덮게 앞뒤 6일을 더 읽는다(주의 첫 요일이 사업장마다 달라도 충분하다).

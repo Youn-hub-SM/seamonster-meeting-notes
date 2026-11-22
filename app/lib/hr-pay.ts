@@ -117,6 +117,7 @@ export type PayBundle = {
   tax: TaxTable | null;                     // 지급일에 유효한 간이세액표
   items: PayItemDef[];
   fixed: Record<string, Record<string, { amount: number; qty: number }>>;   // 직원 → 항목 → 고정 금액
+  affiliations: Record<string, string>;     // 직원 → 소속(지금 인사대장의 값 — 소속별로 좁혀 볼 때만 쓴다. 금액에는 닿지 않는다)
 };
 
 // ── 숫자 ────────────────────────────────────────────────────────────
