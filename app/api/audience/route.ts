@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { logAudience } from "@/app/lib/b2b-activity";
-import { normalizeCond, isEmptyCond, condSummary, condLines, findAudience, loadContacts, listChannels, listProducts, listOrderNames, maskName, maskPhone, MAX_AUDIENCE } from "@/app/lib/audience";
+import { normalizeCond, condError, includeGroups, condSummary, condLines, findAudience, loadContacts, listChannels, listProducts, listOrderNames, maskName, maskPhone, MAX_AUDIENCE } from "@/app/lib/audience";
 import { loadTallyExclusion, dropResponders, type TallyStat } from "@/app/lib/audience-tally";
 import { getTallyApiKey, listTallyForms } from "@/app/lib/voc-tally";
 import { isSubCond, normalizeSubCond, isEmptySubCond, subSummary, subLines, findSubAudience, withContacts, listSubProducts, type SubCond } from "@/app/lib/audience-sub";
@@ -54,13 +54,7 @@ const subCondError = (c: SubCond): string | null => {
   if (c.minRound && c.maxRound && c.minRound > c.maxRound) return "회차의 최소가 최대보다 큽니다.";
   return null;
 };
-const buyCondError = (c: AudienceCond): string | null => {
-  if (isEmptyCond(c)) return "조건을 하나 이상 입력하세요.";
-  if (c.from && c.to && c.from > c.to) return "구매 기간의 시작일이 종료일보다 뒤입니다.";
-  if (c.lastFrom && c.lastTo && c.lastFrom > c.lastTo) return "마지막 구매일의 시작일이 종료일보다 뒤입니다.";
-  if (c.minOrders && c.maxOrders && c.minOrders > c.maxOrders) return "주문 횟수의 최소가 최대보다 큽니다.";
-  return null;
-};
+const buyCondError = (c: AudienceCond): string | null => condError(c); // 묶음마다 검사한다
 const HISTORY_TYPES = ["sales.audience_search", "sales.audience_export"];
 // 엑셀 '추출 정보'의 [제외] 줄에 붙이는 말
 const tallyNote = (t: TallyStat | null): string => (t ? ` · 탈리 응답자 ${t.removed.toLocaleString("ko-KR")}명(응답 ${t.responses.toLocaleString("ko-KR")}건${t.noPhone ? `, 그중 전화번호 없는 응답 ${t.noPhone.toLocaleString("ko-KR")}건은 빼지 못함` : ""})` : "");
@@ -264,20 +258,25 @@ export async function POST(req: NextRequest) {
       const contacts = await loadContacts(sb, found.rows.map((r) => r.customer_key));
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("오디언스");
+      // 조건 묶음이 여러 개면 조건마다 주문 횟수·구매 금액 칸을 둔다(그 조건에 맞지 않은 고객은 빈칸 — '또는'일 때)
+      const nGroups = includeGroups(cond).length, multi = nGroups > 1;
       ws.columns = [
-        { header: "이름", key: "name", width: 14 }, { header: "전화번호", key: "phone", width: 16 }, { header: "주문 횟수", key: "orders", width: 10 },
-        { header: "누적 구매 금액", key: "amount", width: 16 }, { header: "첫 구매일", key: "first", width: 12 }, { header: "마지막 구매일", key: "last", width: 12 },
+        { header: "이름", key: "name", width: 14 }, { header: "전화번호", key: "phone", width: 16 },
+        ...(multi
+          ? Array.from({ length: nGroups }).flatMap((_, k) => [{ header: `조건 ${k + 1} 주문 횟수`, key: `o${k + 1}`, width: 16 }, { header: `조건 ${k + 1} 구매 금액`, key: `m${k + 1}`, width: 16 }])
+          : [{ header: "주문 횟수", key: "orders", width: 10 }, { header: "누적 구매 금액", key: "amount", width: 16 }]),
+        { header: "첫 구매일", key: "first", width: 12 }, { header: "마지막 구매일", key: "last", width: 12 },
         // 아래 네 칸 = 조건(구매 기간·채널·상품)에 맞은 주문의 것 — 이 고객이 왜 뽑혔는지
         { header: "상품명", key: "items", width: 36 }, { header: "상품코드", key: "codes", width: 24 }, { header: "주문 상품명", key: "order_names", width: 48 }, { header: "채널", key: "channels", width: 16 },
       ];
       ws.getRow(1).font = { bold: true };
       ws.getColumn("phone").numFmt = "@"; // 글자로 — 맨 앞 0 이 사라지지 않게
-      ws.getColumn("amount").numFmt = "#,##0";
+      for (const key of multi ? Array.from({ length: nGroups }, (_, k) => `m${k + 1}`) : ["amount"]) ws.getColumn(key).numFmt = "#,##0";
       let n = 0;
       for (const r of found.rows) {
         const c = contacts.get(r.customer_key);
         if (!c?.phone) continue;
-        ws.addRow({ name: c.name, phone: c.phone, orders: r.orders, amount: r.amount, first: r.first_date, last: r.last_date, items: r.items, codes: r.codes, order_names: r.order_names, channels: r.channels });
+        ws.addRow({ name: c.name, phone: c.phone, ...(multi ? Object.fromEntries(r.groups.flatMap((g, k) => [[`o${k + 1}`, g ? g.orders : ""], [`m${k + 1}`, g ? g.amount : ""]])) : { orders: r.orders, amount: r.amount }), first: r.first_date, last: r.last_date, items: r.items, codes: r.codes, order_names: r.order_names, channels: r.channels });
         n++;
       }
       const info = wb.addWorksheet("추출 정보");
@@ -287,8 +286,8 @@ export async function POST(req: NextRequest) {
         [], ["적용한 조건", ""], ...condLines(cond),
         [], ["칸 설명", ""],
         ["상품명·상품코드·주문 상품명·채널", "조건(구매 기간·채널·상품)에 맞은 주문에서 가져온 값. 상품 조건이 없으면 그 기간·채널에 산 상품 전부"],
-        ["주문 횟수·누적 구매 금액", `${cond.channels?.length ? `고른 채널(${cond.channels.join(", ")})` : "모든 채널"}${cond.from || cond.to ? `, 구매 기간(${cond.from || "처음"} ~ ${cond.to || "오늘"}) 안` : ", 전체 기간"}${cond.skus?.length || cond.names?.length || cond.products ? "에서 고른 상품이 든 주문만 센 값. 금액은 그 상품 줄의 금액만" : "의 주문만 센 값"}`],
-        ["첫/마지막 구매일", `${cond.channels?.length ? `고른 채널(${cond.channels.join(", ")})` : "모든 채널"}의 전체 기간 기준(구매 기간과 상관없음)`],
+        ["주문 횟수·누적 구매 금액", `조건 묶음에 넣은 채널·구매 기간·상품에 모두 맞는 주문만 센 값(넣지 않은 조건은 전체). 상품을 골랐으면 금액은 그 상품 줄의 금액만${multi ? ". 조건마다 따로 세며, 그 조건에 맞지 않은 고객은 빈칸" : ""}`],
+        ["첫/마지막 구매일", `조건 묶음에 넣은 채널의 전체 기간 기준(구매 기간·상품과 상관없음)${multi ? ". 맞은 조건들 가운데 가장 이른 날·가장 늦은 날" : ""}`],
       ]);
       info.getColumn(1).font = { bold: true };
       info.getColumn(2).alignment = { wrapText: true, vertical: "top" };
@@ -308,7 +307,7 @@ export async function POST(req: NextRequest) {
     // 검색 — 인원과 미리보기 10명(가려서)
     const head = found.rows.slice(0, 10);
     const contacts = await loadContacts(sb, head.map((r) => r.customer_key));
-    const preview = head.map((r) => { const c = contacts.get(r.customer_key); return { name: maskName(c?.name || ""), phone: maskPhone(c?.phone || ""), orders: r.orders, amount: r.amount, first_date: r.first_date, last_date: r.last_date, items: r.items, codes: r.codes, channels: r.channels }; });
+    const preview = head.map((r) => { const c = contacts.get(r.customer_key); return { name: maskName(c?.name || ""), phone: maskPhone(c?.phone || ""), orders: r.orders, amount: r.amount, groups: r.groups, first_date: r.first_date, last_date: r.last_date, items: r.items, codes: r.codes, channels: r.channels }; });
     await logAudience("search", summary, found.rows.length, name, cond as Record<string, unknown>);
     return NextResponse.json({ ok: true, count: found.rows.length, excluded: found.excluded, capped: found.capped, max: MAX_AUDIENCE, summary, preview, tally });
   } catch (err) {

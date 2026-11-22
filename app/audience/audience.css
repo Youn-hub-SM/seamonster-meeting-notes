@@ -18,6 +18,19 @@
 .aud-chip-code { font-family: var(--sm-mono); font-weight: 400; color: var(--sm-text-mid); }
 .aud-actions { display: flex; gap: var(--sm-space-3); align-items: center; flex-wrap: wrap; }
 
+/* 조건 묶음 — 카드 하나가 조건 하나. 머리에 넣은 조건을 한 줄로 읽어 준다. 묶음 사이는 그리고/또는 표시로 잇는다. */
+.aud-match { display: flex; align-items: center; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-4); }
+.aud-group { border: 1px solid var(--sm-border); border-radius: 8px; padding: var(--sm-space-4); background: var(--sm-white); }
+.aud-group.is-exclude { border-left: 3px solid var(--sm-black); background: var(--sm-bg-subtle); }
+.aud-group-head { display: flex; align-items: baseline; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-4); padding-bottom: var(--sm-space-3); border-bottom: 1px solid var(--sm-border); }
+.aud-group-badge { background: var(--sm-black); color: var(--sm-white); flex: 0 0 auto; }
+.aud-group-sentence { flex: 1 1 240px; min-width: 0; font-size: var(--sm-fs-base); font-weight: 500; line-height: var(--sm-lh-body); overflow-wrap: anywhere; }
+.aud-group-remove { margin-left: auto; flex: 0 0 auto; }
+.aud-join { display: flex; justify-content: center; padding: var(--sm-space-2) 0; }
+.aud-join-pill { background: var(--sm-bg-subtle); color: var(--sm-text-mid); border: 1px solid var(--sm-border); }
+.aud-add { display: flex; gap: var(--sm-space-2); flex-wrap: wrap; margin-top: var(--sm-space-4); }
+.aud-tail { margin-top: var(--sm-space-5); }
+
 /* 결과 — 인원이 이 화면의 숫자 */
 .aud-result-head { display: flex; align-items: baseline; gap: var(--sm-space-3); flex-wrap: wrap; margin-bottom: var(--sm-space-3); }
 .aud-count { font-size: var(--sm-fs-2xl); font-weight: 600; line-height: var(--sm-lh-kpi); font-variant-numeric: tabular-nums; }
