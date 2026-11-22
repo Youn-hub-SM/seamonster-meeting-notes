@@ -248,7 +248,6 @@
 .hr-guide-card details + details { border-top: 1px solid var(--sm-border-light); }
 .hr-guide-card summary { padding: var(--sm-space-3) var(--sm-space-4); cursor: pointer; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); }
 .hr-guide-card summary strong { font-weight: 600; color: var(--sm-black); }
-.hr-guide-card summary span { margin-left: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .hr-guide-body { padding: 0 var(--sm-space-4) var(--sm-space-4) var(--sm-space-6); }
 .hr-guide-body ol { margin: 0; padding-left: 18px; font-size: var(--sm-fs-base); line-height: 1.9; color: var(--sm-black); }
 .hr-guide-body ul { margin: var(--sm-space-2) 0 0; padding-left: 18px; font-size: var(--sm-fs-xs); line-height: 1.8; color: var(--sm-text-mid); }

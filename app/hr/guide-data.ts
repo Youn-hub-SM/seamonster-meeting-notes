@@ -5,7 +5,7 @@
 
 export type HrGuideEntry = {
   label: string;        // 하려는 일
-  what: string;         // 한 줄 설명
+  what: string;         // 한 줄 설명 — 화면에는 보이지 않는다(2026-11-23 대표: 제목 옆 문구 삭제). 검색에만 걸린다
   steps: string[];      // 순서
   tips?: string[];      // 주의할 것
   href?: string;        // 화면 열기
