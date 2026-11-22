@@ -287,7 +287,7 @@ export async function POST(req: NextRequest) {
         [], ["적용한 조건", ""], ...condLines(cond),
         [], ["칸 설명", ""],
         ["상품명·상품코드·주문 상품명·채널", "조건(구매 기간·채널·상품)에 맞은 주문에서 가져온 값. 상품 조건이 없으면 그 기간·채널에 산 상품 전부"],
-        ["주문 횟수·누적 구매 금액", `${cond.channels?.length ? `고른 채널(${cond.channels.join(", ")})` : "모든 채널"}${cond.from || cond.to ? `, 구매 기간(${cond.from || "처음"} ~ ${cond.to || "오늘"}) 안` : ", 전체 기간"}의 주문만 센 값`],
+        ["주문 횟수·누적 구매 금액", `${cond.channels?.length ? `고른 채널(${cond.channels.join(", ")})` : "모든 채널"}${cond.from || cond.to ? `, 구매 기간(${cond.from || "처음"} ~ ${cond.to || "오늘"}) 안` : ", 전체 기간"}${cond.skus?.length || cond.names?.length || cond.products ? "에서 고른 상품이 든 주문만 센 값. 금액은 그 상품 줄의 금액만" : "의 주문만 센 값"}`],
         ["첫/마지막 구매일", `${cond.channels?.length ? `고른 채널(${cond.channels.join(", ")})` : "모든 채널"}의 전체 기간 기준(구매 기간과 상관없음)`],
       ]);
       info.getColumn(1).font = { bold: true };
