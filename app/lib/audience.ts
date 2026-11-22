@@ -113,7 +113,9 @@ export function condLines(c: AudienceCond): [string, string][] {
 }
 
 // ① 조건에 맞는 고객 — 전화번호 없이 키와 집계만.
-//  hit = 구매 기간·채널·상품에 맞는 주문이 하나라도 있는 고객. 주문 횟수·누적 금액·마지막 구매일은 그 고객의 전체 주문으로 센다.
+//  hit = 구매 기간·채널·상품에 맞는 주문이 하나라도 있는 고객. 주문 횟수·누적 금액·첫/마지막 구매일은 그 고객의 주문으로 센다 —
+//  채널을 골랐으면 그 채널의 주문만(2026-11-22 대표: "카페24 10회 이상"은 카페24에서 10회 — 다른 채널까지 합치면 안 된다), 고르지 않았으면 전체 주문.
+//  구매 기간·상품은 여기에 걸지 않는다(그 기간에 산 고객의 '그 채널 전체' 횟수).
 export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise<AudienceFound> {
   const w: string[] = ["o.customer_key <> ''"];
   if (c.from) w.push(`o.order_date >= ${lit(c.from)}`);
@@ -147,7 +149,7 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
     a as (
       select o.customer_key, count(distinct o.order_unit)::int as orders, coalesce(sum(o.subtotal_amount), 0)::bigint as amount,
              min(o.order_date)::text as first_date, max(o.order_date)::text as last_date
-      from sales_orders o join hit using (customer_key) group by o.customer_key
+      from sales_orders o join hit using (customer_key)${c.channels?.length ? ` where o.channel in (${c.channels.map(lit).join(",")})` : ""} group by o.customer_key
     )
     select a.customer_key, a.orders, a.amount, a.first_date, a.last_date, h.items, h.codes, h.order_names, h.channels, (s.customer_key is not null) as reachable
     from a join hit h on h.customer_key = a.customer_key left join sales_customer_summary s on s.customer_key = a.customer_key
