@@ -113,9 +113,12 @@ export function condLines(c: AudienceCond): [string, string][] {
 }
 
 // ① 조건에 맞는 고객 — 전화번호 없이 키와 집계만.
-//  hit = 구매 기간·채널·상품에 맞는 주문이 하나라도 있는 고객. 주문 횟수·누적 금액·첫/마지막 구매일은 그 고객의 주문으로 센다 —
-//  채널을 골랐으면 그 채널의 주문만(2026-11-22 대표: "카페24 10회 이상"은 카페24에서 10회 — 다른 채널까지 합치면 안 된다), 고르지 않았으면 전체 주문.
-//  구매 기간·상품은 여기에 걸지 않는다(그 기간에 산 고객의 '그 채널 전체' 횟수).
+//  hit = 구매 기간·채널·상품에 맞는 주문이 하나라도 있는 고객.
+//  ■ 세는 범위(2026-11-22 대표 더블체크 — "카페24 10회 이상"은 카페24에서 10회, "기간도 그 기간 안에서 세야 함")
+//    주문 횟수·누적 구매 금액 = 고른 채널 + 구매 기간 안의 주문만. 채널·기간을 넣지 않은 쪽은 제한 없음(둘 다 없으면 전체 주문).
+//    첫/마지막 구매일           = 고른 채널의 주문 전체(구매 기간은 걸지 않는다) — '작년에 샀고 그 뒤로 안 산 고객'처럼
+//                                 구매 기간과 마지막 구매일을 함께 쓰는 조건이 뜻을 잃지 않게.
+//    상품 조건은 세는 범위에 걸지 않는다(그 상품을 산 고객의, 범위 안 모든 주문).
 export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise<AudienceFound> {
   const w: string[] = ["o.customer_key <> ''"];
   if (c.from) w.push(`o.order_date >= ${lit(c.from)}`);
@@ -133,6 +136,9 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
   if (c.minAmount) h.push(`a.amount >= ${c.minAmount}`);
   if (c.lastFrom) h.push(`a.last_date >= ${lit(c.lastFrom)}`);
   if (c.lastTo) h.push(`a.last_date <= ${lit(c.lastTo)}`);
+  // 주문 횟수·금액을 세는 기간 — 구매 기간을 넣었을 때만
+  const inPeriod = [c.from ? `o.order_date >= ${lit(c.from)}` : "", c.to ? `o.order_date <= ${lit(c.to)}` : ""].filter(Boolean).join(" and ");
+  const period = inPeriod ? ` filter (where ${inPeriod})` : "";
   const q = `
     with m as (
       select o.customer_key, o.product_name, o.channel, upper(o.sku_code) as code,
@@ -147,7 +153,7 @@ export async function findAudience(sb: SupabaseClient, c: AudienceCond): Promise
       from m group by customer_key
     ),
     a as (
-      select o.customer_key, count(distinct o.order_unit)::int as orders, coalesce(sum(o.subtotal_amount), 0)::bigint as amount,
+      select o.customer_key, (count(distinct o.order_unit)${period})::int as orders, coalesce(sum(o.subtotal_amount)${period}, 0)::bigint as amount,
              min(o.order_date)::text as first_date, max(o.order_date)::text as last_date
       from sales_orders o join hit using (customer_key)${c.channels?.length ? ` where o.channel in (${c.channels.map(lit).join(",")})` : ""} group by o.customer_key
     )
