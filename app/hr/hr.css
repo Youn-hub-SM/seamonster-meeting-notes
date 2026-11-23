@@ -259,6 +259,26 @@
 .hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
 .hr-sec-head .hr-holiday-nav { margin-bottom: 0; }   /* 공휴일 구역 머리의 해 이동·버튼 줄 */
 
+/* 세콤 기록 넣기(근무대장) — 보정 표, 이름 짝, 기준, 근무대장 확정 줄, 미리 적기 창 */
+.hr-punch-opt { display: inline-flex; align-items: center; gap: var(--sm-space-1); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+.hr-punch-settings { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2) var(--sm-space-5); margin: var(--sm-space-3) 0; font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+.hr-punch-settings label { display: inline-flex; align-items: center; gap: var(--sm-space-2); }
+.hr-punch-settings .b2b-input { width: 64px; }
+.hr-punch-actions { display: flex; flex-wrap: wrap; gap: var(--sm-space-2); }
+.hr-punch-table .hr-w-kind { width: 124px; }
+.hr-punch-table .hr-w-time { width: 118px; }
+.hr-punch-table .hr-w-num { width: 64px; }
+.hr-punch-table select.b2b-input { min-width: 180px; }
+.hr-punch-table select.b2b-input.hr-w-kind { min-width: 0; }
+.hr-punch-table tr.hr-punch-open > td:first-child { box-shadow: inset 3px 0 0 var(--sm-danger); }
+.hr-punch-note { display: block; margin-top: 2px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.hr-punch-raw { display: block; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
+.hr-punch-noteform { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sm-space-3); align-items: end; margin-bottom: var(--sm-space-4); }
+.hr-punch-noteform .hr-punch-memo { grid-column: span 4; }
+@media (max-width: 768px) { .hr-punch-noteform { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hr-punch-noteform .hr-punch-memo { grid-column: span 2; } }
+.hr-close-list { display: flex; flex-direction: column; gap: var(--sm-space-2); margin: 0 0 var(--sm-space-3); padding: 0; list-style: none; }
+.hr-close-list > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2) var(--sm-space-3); }
+
 /* 첫 화면(대시보드) — 오늘의 근무 현황 · 세무 일정 · 해야 할 일. 타일은 .hr-tiles, 줄은 누르면 그 화면으로 가는 목록 */
 .hr-home-sec { margin-top: var(--sm-space-6); }
 .hr-home-sec > h2 { margin: 0 0 var(--sm-space-2); font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }

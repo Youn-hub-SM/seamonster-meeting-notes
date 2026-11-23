@@ -1,11 +1,15 @@
 import { NextRequest } from "next/server";
 import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { HR_PENDING_003, UUID_RE, buildPayroll, loadBundle, refusal } from "@/app/lib/hr-pay-db";
-import { sumResults } from "@/app/lib/hr-pay";
+import { sumResults, type PayBundle } from "@/app/lib/hr-pay";
+import { NEED_CLOSING, workClosedFor } from "@/app/lib/hr-punch-db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+// 그 달 그 사업장의 근무대장을 확정했는가. null = 확정 기능이 없다(hr/010 전) — 화면은 지금까지처럼 저장하게 둔다.
+const closedOf = (b: PayBundle): Promise<boolean | null> => (b.workplace_id ? workClosedFor(b.workplace_id, b.month) : Promise.resolve(null));
 
 // GET /api/hr/payroll?month=YYYY-MM[&workplace=<id>] — 그 달 그 사업장의 월 급여.
 //  작성 중이면 직원·근무대장·임금·요율·세액표·항목과 저장된 입력을 준다(화면이 hr-pay.ts 로 계산해 보여 준다).
@@ -18,7 +22,7 @@ export async function GET(req: NextRequest) {
   try {
     const b = await loadBundle(month, UUID_RE.test(workplace) ? workplace : "");
     if ("error" in b) return hrJson({ ok: false, error: b.error }, b.status);
-    return hrJson({ ok: true, ...b });
+    return hrJson({ ok: true, ...b, work_closed: await closedOf(b) });
   } catch (err) {
     return hrError(err, "급여를 불러오지 못했습니다.", HR_PENDING_003);
   }
@@ -36,6 +40,8 @@ export async function PUT(req: NextRequest) {
     const built = await buildPayroll({ workplaceId: String(body.workplace_id ?? ""), month: String(body.month ?? ""), payDate: String(body.pay_date ?? ""), sent });
     if (!built.ok) return hrJson({ ok: false, error: built.error }, built.status);
     const confirm = body.confirm === true;
+    // 근무대장을 확정한 달만 급여를 저장·확정한다(2026-11-23 대표). 확정 기능이 없으면(hr/010 전) 지금까지처럼.
+    if ((await workClosedFor(built.wp.id, String(body.month))) === false) return hrJson({ ok: false, error: NEED_CLOSING }, 409);
 
     const { data, error } = await hrDb().rpc("save_payroll", {
       p_workplace: built.wp.id, p_month: body.month, p_pay_date: body.pay_date, p_lines: built.lines, p_fixed: built.fixed, p_confirm: confirm, p_actor: who.name,
@@ -48,7 +54,7 @@ export async function PUT(req: NextRequest) {
     });
     const b = await loadBundle(String(body.month), built.wp.id);
     if ("error" in b) return hrJson({ ok: false, error: b.error }, b.status);
-    return hrJson({ ok: true, ...b });
+    return hrJson({ ok: true, ...b, work_closed: await closedOf(b) });
   } catch (err) {
     return refusal(err) || hrError(err, "급여를 저장하지 못했습니다.", HR_PENDING_003);
   }
@@ -72,7 +78,7 @@ export async function POST(req: NextRequest) {
     await hrAudit({ actor: who.name, action: "payroll_unconfirm", ip: clientIp(req), targetType: "payroll", targetId: id, targetName: h.month });
     const b = await loadBundle(h.month, h.workplace_id);
     if ("error" in b) return hrJson({ ok: false, error: b.error }, b.status);
-    return hrJson({ ok: true, ...b });
+    return hrJson({ ok: true, ...b, work_closed: await closedOf(b) });
   } catch (err) {
     return refusal(err) || hrError(err, "확정을 취소하지 못했습니다.", HR_PENDING_003);
   }

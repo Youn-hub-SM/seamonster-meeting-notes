@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { clientIp, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { ImportError, applyPayroll, loadSheets, payrollReport, planPayroll, uploadProblem } from "@/app/lib/hr-import-db";
+import { NEED_CLOSING, workClosedFor } from "@/app/lib/hr-punch-db";
 import { HR_PENDING_003, UUID_RE, refusal } from "@/app/lib/hr-pay-db";
 import { isMonth } from "@/app/lib/hr-work";
 
@@ -26,6 +27,8 @@ export async function POST(req: NextRequest) {
     const problem = uploadProblem(name, b64);
     if (problem) return hrJson({ ok: false, error: problem }, 400);
 
+    // 근무대장을 확정한 달만 급여를 저장한다(확정 기능이 없으면 — hr/010 전 — 지금까지처럼)
+    if ((await workClosedFor(workplaceId, month)) === false) return hrJson({ ok: false, error: NEED_CLOSING }, 409);
     const plan = await planPayroll(await loadSheets(b64), workplaceId, month);
     if (body.apply !== true) return hrJson({ ok: true, month, ...payrollReport(plan) });
     const done = await applyPayroll(plan, who.name, clientIp(req), name);

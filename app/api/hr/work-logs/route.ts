@@ -4,6 +4,7 @@ import { fetchLogs, fetchRoster, fetchWorkplaces } from "@/app/lib/hr-work-db";
 import { isMonth, monthRange, normalizeLog, type WorkLog } from "@/app/lib/hr-work";
 import { confirmedWorkplaces, refusal } from "@/app/lib/hr-pay-db";
 import { dayOffsFor } from "@/app/lib/hr-holidays-db";
+import { fetchClosings, fetchPunches } from "@/app/lib/hr-punch-db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,11 +28,15 @@ export async function GET(req: NextRequest) {
     //  쉬는 날은 사업장·소속마다 다를 수 있어 직원 한 명을 열 때만 준다(목록에서는 쓰지 않는다).
     const { from, to } = monthRange(month);
     const one = employee ? employees[0] : null;
-    const [logs, locked, holidays] = await Promise.all([
+    // closing = 근무대장 확정(hr/010). closed = 그 달을 확정한 사업장(고칠 수 없다), closing_ready = 확정 기능이 있는가.
+    // punches = 세콤 원본(찍힌 그대로) — 직원 한 명을 열 때만 준다.
+    const [logs, locked, holidays, closing, punches] = await Promise.all([
       fetchLogs(month, employees.map((e) => e.id)), confirmedWorkplaces(month),
       one ? dayOffsFor(from, to, { id: one.id, workplace_id: one.workplace_id, affiliation: one.affiliation || "" }) : Promise.resolve({}),
+      fetchClosings(month),
+      one ? fetchPunches(one.id, from, to) : Promise.resolve({}),
     ]);
-    return hrJson({ ok: true, month, workplaces, employees, logs, locked, holidays });
+    return hrJson({ ok: true, month, workplaces, employees, logs, locked, holidays, closed: closing.closed, closing_ready: closing.ready, punches });
   } catch (err) {
     return hrError(err, "근무대장을 불러오지 못했습니다.", HR_PENDING_002);
   }
@@ -56,6 +61,10 @@ export async function PUT(req: NextRequest) {
     // 급여가 확정된 달은 고치지 않는다(DB 함수도 같은 것을 한 번 더 본다)
     if ((await confirmedWorkplaces(month)).includes(employee.workplace_id)) {
       return hrJson({ ok: false, error: "급여가 확정된 달입니다. 근무대장을 고치려면 급여 확정을 취소하세요." }, 409);
+    }
+    // 근무대장을 확정한 달도 고치지 않는다(DB 방아쇠도 같은 것을 한 번 더 본다 — hr/010)
+    if ((await fetchClosings(month)).closed.some((c) => c.workplace_id === employee.workplace_id)) {
+      return hrJson({ ok: false, error: "근무대장이 확정된 달입니다. 고치려면 [근무대장 확정 취소]를 누르세요." }, 409);
     }
 
     const { from, to } = monthRange(month);

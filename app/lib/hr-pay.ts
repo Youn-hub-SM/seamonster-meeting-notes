@@ -118,6 +118,7 @@ export type PayBundle = {
   items: PayItemDef[];
   fixed: Record<string, Record<string, { amount: number; qty: number }>>;   // 직원 → 항목 → 고정 금액
   affiliations: Record<string, string>;     // 직원 → 소속(지금 인사대장의 값 — 소속별로 좁혀 볼 때만 쓴다. 금액에는 닿지 않는다)
+  work_closed?: boolean | null;             // 그 달 근무대장을 확정했는가. false 면 급여를 저장·확정할 수 없다. null = 확정 기능이 없다(hr/010 전)
 };
 
 // ── 숫자 ────────────────────────────────────────────────────────────

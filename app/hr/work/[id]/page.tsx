@@ -73,6 +73,8 @@ function WorkSheet({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);        // 이 달 급여가 확정됨 — 근무대장을 고칠 수 없다
   const [holidays, setHolidays] = useState<Record<string, DayOff>>({}); // 이 직원에게 걸리는 이 달의 쉬는 날(날짜 → 이름·구분) — [요율] 화면의 공휴일·휴무일 목록
+  const [closed, setClosed] = useState(false);        // 이 달 근무대장이 확정됨 — 고칠 수 없다(확정 취소 뒤 고친다)
+  const [punches, setPunches] = useState<Record<string, { in: string | null; out: string | null }>>({}); // 세콤 원본(찍힌 그대로) — 보정한 값과 견주어 본다
 
   const adopt = useCallback((logs: RosterLog[]) => {
     const d: Record<string, Draft> = {};
@@ -83,11 +85,17 @@ function WorkSheet({ id }: { id: string }) {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const j = await hrApi<{ employees: RosterEmployee[]; workplaces: RosterWorkplace[]; logs: RosterLog[]; locked?: string[]; holidays?: Record<string, DayOff> }>(`/api/hr/work-logs?month=${month}&employee=${id}`);
+      const j = await hrApi<{
+        employees: RosterEmployee[]; workplaces: RosterWorkplace[]; logs: RosterLog[]; locked?: string[]; holidays?: Record<string, DayOff>;
+        closed?: { workplace_id: string }[]; punches?: Record<string, { in: string | null; out: string | null }>;
+      }>(`/api/hr/work-logs?month=${month}&employee=${id}`);
       const e = j.employees[0] || null;
       setEmployee(e); setWorkplace(j.workplaces.find((w) => w.id === e?.workplace_id) || null);
       setHolidays(j.holidays || {});
-      setLocked(!!e && (j.locked || []).includes(e.workplace_id));
+      setPunches(j.punches || {});
+      const isClosed = !!e && (j.closed || []).some((c) => c.workplace_id === e.workplace_id);
+      setClosed(isClosed);
+      setLocked(!!e && ((j.locked || []).includes(e.workplace_id) || isClosed));
       adopt(j.logs);
     } catch (err) {
       if (!(err instanceof HrApiError && err.status === 401)) setError(errText(err, "근무대장을 불러오지 못했습니다."));
@@ -255,7 +263,7 @@ function WorkSheet({ id }: { id: string }) {
       </div>
 
       {formError && <div className="b2b-error hr-noprint" role="alert">{formError}</div>}
-      {locked && <div className="sm-warn hr-noprint">이 달 급여가 확정됐습니다. 근무대장을 고치려면 급여 화면에서 확정을 취소하세요.</div>}
+      {locked && <div className="sm-warn hr-noprint">{closed ? "이 달 근무대장이 확정됐습니다. 고치려면 근무대장 목록에서 확정을 취소하세요." : "이 달 급여가 확정됐습니다. 근무대장을 고치려면 급여 화면에서 확정을 취소하세요."}</div>}
 
       <div className="hr-tiles hr-noprint">
         {tiles.map(([label, value, hint]) => (
@@ -288,7 +296,8 @@ function WorkSheet({ id }: { id: string }) {
               const week = weekByEnd.get(d);
               return [
                 <tr key={d} className={`${sched ? "" : "hr-work-off"} ${inJob ? "" : "hr-work-out"}`}>
-                  <td className="sm-nowrap">{md(d)} <span className="sm-muted">{WEEKDAYS[weekdayOf(d) - 1]}</span>{holidays[d] && <span className="b2b-status-pill hr-pill-off">{holidays[d].name}</span>}</td>
+                  <td className="sm-nowrap">{md(d)} <span className="sm-muted">{WEEKDAYS[weekdayOf(d) - 1]}</span>{holidays[d] && <span className="b2b-status-pill hr-pill-off">{holidays[d].name}</span>}
+                    {punches[d] && <span className="hr-punch-raw">세콤 {punches[d].in || punches[d].out ? `${punches[d].in || "--:--"}~${punches[d].out || "--:--"}` : "안 찍힘"}</span>}</td>
                   {!inJob ? <td colSpan={9} className="sm-faint">{d < employee.hire_date ? "입사 전" : "퇴사 뒤"}</td> : (
                     <>
                       <td>

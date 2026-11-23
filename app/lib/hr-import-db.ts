@@ -6,6 +6,7 @@
 //  평문은 이 요청을 처리하는 동안 메모리에만 있다(응답·이력·로그에 싣지 않는다).
 
 import ExcelJS from "exceljs";
+import { readPlainXlsx } from "./hr-xlsx-plain";
 import { hrAudit, hrDb } from "./hr-db";
 import { dataKeyReady, rrnHash } from "./hr-crypto";
 import { applyRrn, missingAffiliation, parseEmployeeInput, readEmployees, wagesOf, writeEmployee, type DbResult, type EmployeeInput } from "./hr-employees";
@@ -39,10 +40,20 @@ function plain(v: unknown): Cell {
 // base64 .xlsx → 시트들. 읽지 못하면 던진다(문장 그대로 화면에 보인다).
 export async function loadSheets(b64: string): Promise<Sheet[]> {
   const wb = new ExcelJS.Workbook();
+  const buf = Buffer.from(b64, "base64");
   try {
-    await wb.xlsx.load(Buffer.from(b64, "base64") as unknown as ArrayBuffer);
+    await wb.xlsx.load(buf as unknown as ArrayBuffer);
   } catch {
-    throw new ImportError("엑셀 파일(.xlsx)을 읽지 못했습니다.");
+    // ExcelJS 가 읽지 못하는 .xlsx(세콤 출근 기록처럼 태그에 접두사가 붙은 파일)는 값만 읽는 둘째 길로
+    try {
+      return readPlainXlsx(buf).map((s) => {
+        if (s.grid.length > MAX_ROWS) throw new ImportError(`줄이 너무 많습니다(시트 한 장에 ${numText(MAX_ROWS)}줄까지).`);
+        return { name: s.name, grid: s.grid.map((row) => row.slice(0, MAX_COLS)) };
+      });
+    } catch (err) {
+      if (err instanceof ImportError) throw err;
+      throw new ImportError("엑셀 파일(.xlsx)을 읽지 못했습니다.");
+    }
   }
   const out: Sheet[] = [];
   wb.eachSheet((ws) => {

@@ -121,6 +121,8 @@ function PayMain() {
     return rows.length !== b.lines.length || rows.some((r) => { const s = savedOf.get(r.id); return !s || s.net_pay !== r.result.net_pay || s.pay_total !== r.result.pay_total || s.deduct_total !== r.result.deduct_total; });
   }, [b, confirmed, edited, rows]);
   const needSave = edited || unsaved || stale;
+  // 근무대장을 확정하지 않은 달은 급여를 저장·확정하지 못한다(hr/010. 기능이 없으면 work_closed 가 null 이라 지금까지처럼 된다)
+  const gate = !!b && !confirmed && b.work_closed === false;
 
   useEffect(() => {
     if (!edited) return;
@@ -215,15 +217,15 @@ function PayMain() {
         <div className="b2b-page-actions">
           <Link href="/hr/pay/items" prefetch={false} className="b2b-btn-secondary">급여 항목</Link>
           <button type="button" className="b2b-btn-secondary" onClick={excel} disabled={busy || rows.length === 0}>엑셀 내려받기</button>
-          {!confirmed && <button type="button" className="b2b-btn-secondary" onClick={openImport} disabled={busy || rows.length === 0}>엑셀 올리기</button>}
+          {!confirmed && <button type="button" className="b2b-btn-secondary" onClick={openImport} disabled={busy || gate || rows.length === 0}>엑셀 올리기</button>}
           <button type="button" className="b2b-btn-secondary" onClick={() => print("ledger")} disabled={busy || rows.length === 0}>급여대장 인쇄</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => print("slips")} disabled={busy || rows.length === 0}>명세서 인쇄</button>
           {confirmed ? (
             <button type="button" className="b2b-btn-secondary" onClick={unconfirm} disabled={busy}>확정 취소</button>
           ) : (
             <>
-              <button type="button" className="b2b-btn-secondary" onClick={() => save(false)} disabled={busy || !needSave || rows.length === 0}>{busy ? "저장 중..." : "변경 저장"}</button>
-              <button type="button" className="b2b-btn-primary" onClick={() => save(true)} disabled={busy || rows.length === 0}>급여 확정</button>
+              <button type="button" className="b2b-btn-secondary" onClick={() => save(false)} disabled={busy || gate || !needSave || rows.length === 0}>{busy ? "저장 중..." : "변경 저장"}</button>
+              <button type="button" className="b2b-btn-primary" onClick={() => save(true)} disabled={busy || gate || rows.length === 0}>급여 확정</button>
             </>
           )}
         </div>
@@ -256,6 +258,9 @@ function PayMain() {
       </div>
 
       {error && <div className="b2b-error hr-noprint" role="alert">{error}</div>}
+      {gate && !loading && !error && rows.length > 0 && (
+        <div className="sm-warn hr-noprint">이 달 근무대장을 확정한 뒤 급여를 저장할 수 있습니다. <Link href={`/hr/work?month=${b.month}`} prefetch={false} className="sm-link">근무대장</Link></div>
+      )}
       {!loading && !error && b && !confirmed && rows.length > 0 && !tax && (
         <div className="sm-warn hr-noprint">지급일에 쓸 간이세액표가 없습니다. 요율 화면에서 올리기 전에는 소득세가 자동으로 나오지 않습니다.</div>
       )}
@@ -327,7 +332,7 @@ function PayMain() {
       {editRow && b && (
         <LineEditor row={editRow} month={b.month} items={activeItems} readOnly={!!confirmed}
           input={confirmed ? { ...emptyInputs(), memo: editRow.memo } : inputs[editRow.id] || emptyInputs()}
-          canSave={needSave} saving={busy} onSave={() => save(false)}
+          canSave={needSave && !gate} saving={busy} onSave={() => save(false)}
           onPatch={(fn) => patch(editRow.id, fn)} onClose={() => setEditing(null)} onPrint={() => print(`slip:${editRow.id}`)} />
       )}
 
