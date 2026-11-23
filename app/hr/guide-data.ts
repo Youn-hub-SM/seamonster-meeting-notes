@@ -62,6 +62,24 @@ export const HR_GUIDE: HrGuideGroup[] = [
         keywords: ["로그인", "비밀번호", "주소", "잠김"],
       },
       {
+        label: "첫 화면 보기",
+        what: "오늘의 근무 현황·세무 일정·해야 할 일을 한 화면에서 본다",
+        href: "/hr",
+        steps: [
+          "[홈]을 누른다",
+          "'해야 할 일'의 줄을 누른다",
+          "열린 화면에서 그 일을 한다",
+        ],
+        tips: [
+          "근무 예정은 오늘이 소정근로 요일이고 쉬는 날·연차·결근이 아닌 직원 수다. 출근 기록은 근무대장에 올려야 보인다",
+          "원천세 금액은 확정한 급여의 소득세와 지방소득세를 더한 것이다. 확정 전 급여는 건수만 보인다",
+          "기한이 토·일·공휴일이면 다음 영업일로 보인다",
+          "'지금'은 기한이 지났거나 7일 안인 일이다",
+          "지난달 급여를 확정하면 급여·근무대장 줄이 사라진다",
+        ],
+        keywords: ["홈", "대시보드", "오늘", "세무 일정", "할 일", "원천세 기한"],
+      },
+      {
         label: "사업장 등록",
         what: "회사마다 한 줄. 가산수당·주휴·연차 기준을 여기서 정한다",
         href: "/hr/settings",
@@ -136,7 +154,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "직원 등록",
         what: "인사대장에 한 사람을 넣는다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "[인사대장]에서 [직원 등록]을 누른다",
           "소속이 있는 사업장이면 소속을 고른다",
@@ -217,7 +235,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "직원 정보 보기·고치기",
         what: "인사기록카드",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "[인사대장]에서 직원 줄을 누른다",
           "[정보 수정]을 누른다",
@@ -229,7 +247,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "시급·월급 올리기",
         what: "올린 날부터만 새 금액으로 계산된다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "직원 줄을 누르고 [정보 수정]을 누른다",
           "시급(또는 월급)에 새 금액을 넣는다",
@@ -245,7 +263,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "퇴사 처리",
         what: "지우지 않고 퇴사일을 넣는다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "직원 줄을 누르고 [정보 수정]을 누른다",
           "퇴사일과 퇴사 사유를 넣는다",
@@ -257,7 +275,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "주민등록번호 보기",
         what: "평소에는 뒷자리가 가려져 있다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "직원 줄을 누른다",
           "[번호 보기]를 누른다",
@@ -269,7 +287,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "인사대장 인쇄·엑셀",
         what: "지금 화면에 보이는 직원만 나온다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "재직 / 퇴사 / 전체와 사업장을 고른다",
           "[인사대장 인쇄] 또는 [엑셀 내려받기]를 누른다",
@@ -281,7 +299,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "인사대장 엑셀로 올리기",
         what: "여러 직원을 한 번에 등록하거나 고친다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "[인사대장]에서 [엑셀 올리기]를 누른다",
           "[양식 내려받기]를 누른다",
@@ -800,7 +818,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "직원에게 링크 주기",
         what: "직원이 자기 급여명세서·연차·근태를 휴대폰으로 본다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "[인사대장]에서 직원 줄을 누른다",
           "맨 아래 '직원 확인 링크'에서 [링크 만들기]를 누른다",
@@ -819,7 +837,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "링크 다시 만들기·끊기",
         what: "주소가 다른 사람에게 넘어갔거나 더 보여 주지 않을 때",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "[인사대장]에서 직원 줄을 누른다",
           "새 주소로 바꾸려면 [링크 다시 만들기]를 누른다",
@@ -832,7 +850,7 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "직원이 주민등록번호를 틀려 잠겼을 때",
         what: "5번 틀리면 15분, 20번 틀리면 링크가 잠긴다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: [
           "5번 틀렸으면 15분 뒤에 다시 넣게 한다",
           "계속 틀리면 [인사대장]에서 그 직원의 주민등록번호가 맞게 들어 있는지 [번호 보기]로 확인한다",
@@ -889,13 +907,13 @@ export const HR_GUIDE: HrGuideGroup[] = [
       {
         label: "기준소득월액·보수월액이 비어 있습니다",
         what: "국민연금·건강보험이 0으로 나온다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: ["[인사대장]에서 그 직원의 [정보 수정]을 누른다", "'세금·4대보험'에 공단 고지 금액을 넣고 [변경 저장]을 누른다"],
       },
       {
         label: "최저임금보다 낮습니다",
         what: "시급이 그 달의 최저임금에 못 미친다",
-        href: "/hr",
+        href: "/hr/employees",
         steps: ["[인사대장]에서 그 직원의 시급과 임금 적용 시작일을 확인한다"],
       },
       {

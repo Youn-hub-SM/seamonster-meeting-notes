@@ -259,6 +259,24 @@
 .hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
 .hr-sec-head .hr-holiday-nav { margin-bottom: 0; }   /* 공휴일 구역 머리의 해 이동·버튼 줄 */
 
+/* 첫 화면(대시보드) — 오늘의 근무 현황 · 세무 일정 · 해야 할 일. 타일은 .hr-tiles, 줄은 누르면 그 화면으로 가는 목록 */
+.hr-home-sec { margin-top: var(--sm-space-6); }
+.hr-home-sec > h2 { margin: 0 0 var(--sm-space-2); font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
+.hr-home-sub { margin: var(--sm-space-3) 0 0; font-size: var(--sm-fs-base); font-weight: 500; color: var(--sm-text-mid); }
+.hr-home-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--sm-space-6); align-items: start; }
+@media (max-width: 900px) { .hr-home-grid { grid-template-columns: minmax(0, 1fr); } }
+.hr-home-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--sm-border); }
+.hr-home-list > li { border-bottom: 1px solid var(--sm-border-light); }
+.hr-home-row { display: grid; grid-template-columns: 132px minmax(0, 1fr) auto; gap: var(--sm-space-3); align-items: center; padding: var(--sm-space-3) var(--sm-space-2); color: inherit; text-decoration: none; }
+.hr-home-row.is-plain { grid-template-columns: minmax(0, 1fr) auto; }
+.hr-home-row:hover { background: var(--sm-bg-subtle); }
+.hr-home-when { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sm-space-1); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
+.hr-home-what { min-width: 0; }
+.hr-home-what > strong { display: block; font-weight: 500; }
+.hr-home-what > span { display: block; margin-top: 2px; font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.hr-home-side { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .hr-home-row { grid-template-columns: 96px minmax(0, 1fr) auto; gap: var(--sm-space-2); } }
+
 /* 근로계약서(증명서 화면의 넷째 서류) — 조항 목록과 양쪽 서명란. 한 장에 들어가게 글자를 증명서보다 작게 둔다 */
 .hr-doc.hr-contract { font-size: var(--sm-fs-base); line-height: 1.65; }
 .hr-doc.hr-contract h1 { margin: var(--sm-space-3) 0 var(--sm-space-5); }

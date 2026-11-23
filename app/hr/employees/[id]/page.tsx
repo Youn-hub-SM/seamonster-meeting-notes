@@ -66,7 +66,7 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
   if (error || !e) {
     return (
       <div className="b2b-container">
-        <Link href="/hr" className="sm-link hr-back">인사대장</Link>
+        <Link href="/hr/employees" className="sm-link hr-back">인사대장</Link>
         <div className="b2b-error" role="alert">{error || "없는 직원입니다."}</div>
       </div>
     );
@@ -90,7 +90,7 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
       {/* 인사기록카드 인쇄는 A4 세로 — 이 화면에 있을 때만 적용된다 */}
       <style>{`@media print { @page { size: A4 portrait; margin: 14mm; } }`}</style>
 
-      <Link href="/hr" className="sm-link hr-back hr-noprint">인사대장</Link>
+      <Link href="/hr/employees" className="sm-link hr-back hr-noprint">인사대장</Link>
       <header className="b2b-page-head">
         <div className="hr-card-title">
           <h1 className="b2b-page-title">{e.name}</h1>

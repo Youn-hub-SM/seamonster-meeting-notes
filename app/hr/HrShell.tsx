@@ -13,7 +13,8 @@ import "./hr.css";
 const TITLE = "급여·연차";
 
 const NAV = [
-  { href: "/hr", label: "인사대장", icon: "user" as const, match: (p: string) => p === "/hr" || p.startsWith("/hr/employees") },
+  { href: "/hr", label: "홈", icon: "home" as const, match: (p: string) => p === "/hr" },
+  { href: "/hr/employees", label: "인사대장", icon: "user" as const, match: (p: string) => p.startsWith("/hr/employees") },
   { href: "/hr/work", label: "근무대장", icon: "note" as const, match: (p: string) => p.startsWith("/hr/work") },
   { href: "/hr/pay", label: "급여", icon: "receipt" as const, match: (p: string) => p.startsWith("/hr/pay") },
   { href: "/hr/tax", label: "원천세", icon: "tag" as const, match: (p: string) => p.startsWith("/hr/tax") },
