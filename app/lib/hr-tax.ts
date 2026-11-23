@@ -27,8 +27,9 @@ export function dueOf(payMonth: string): string {
   return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-10`;
 }
 
-// 급여 머리와 줄 → 급여마다 한 줄(지급일 순, 같은 날은 귀속월 순)
-export function taxRows(heads: TaxHead[], lines: TaxLine[]): TaxRow[] {
+// 급여 머리와 줄 → 급여마다 한 줄(지급일 순, 같은 날은 귀속월 순, 그것도 같으면 사업장 순 — wpOrder 는 사업장 id 를 화면에 놓는 순서로)
+export function taxRows(heads: TaxHead[], lines: TaxLine[], wpOrder: string[] = []): TaxRow[] {
+  const wpAt = (id: string) => { const i = wpOrder.indexOf(id); return i < 0 ? wpOrder.length : i; };
   const by = new Map<string, TaxLine[]>();
   for (const l of lines) by.set(l.payroll_id, [...(by.get(l.payroll_id) || []), l]);
   return heads.map((h) => {
@@ -40,7 +41,7 @@ export function taxRows(heads: TaxHead[], lines: TaxLine[]): TaxRow[] {
       people: ls.filter((l) => l.pay_total > 0).length,
       pay_total: sum("pay_total"), exempt_total: sum("exempt_total"), taxable_total: sum("taxable_total"), income_tax: sum("income_tax"), local_tax: sum("local_tax"),
     };
-  }).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.month.localeCompare(b.month) || a.workplace_id.localeCompare(b.workplace_id));
+  }).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.month.localeCompare(b.month) || wpAt(a.workplace_id) - wpAt(b.workplace_id) || a.workplace_id.localeCompare(b.workplace_id));
 }
 
 // 합계 — 확정한 급여만. 인원은 급여마다 센 수를 더한 것(연인원)이다.

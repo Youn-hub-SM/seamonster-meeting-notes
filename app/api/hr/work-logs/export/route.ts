@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       ws.getRow(row).font = { bold: true };
       ws.getRow(row).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
     };
-    const SUM_HEAD = ["사업장", "사번", "성명", "근무 일수", "근무 시간", "연장", "야간", "휴일 근무", "주휴", "유급 휴일", "연차(일)", "결근", "입력 전"];
+    const SUM_HEAD = ["사업장", "성명", "근무 일수", "근무 시간", "연장", "야간", "휴일 근무", "주휴", "유급 휴일", "연차(일)", "결근", "입력 전"];
     const sumSheet = employeeId ? null : wb.addWorksheet("요약");
     if (sumSheet) { sumSheet.addRow([`근무대장 ${month}`]); sumSheet.addRow(SUM_HEAD); head(sumSheet, 2); }
 
@@ -44,14 +44,14 @@ export async function POST(req: NextRequest) {
       const mine = logs.filter((l) => l.employee_id === e.id);
       const s = summarizeMonth(e, wp, mine, month);
       const byDate = new Map(mine.map((l) => [l.work_date, l]));
-      sumSheet?.addRow([wp.name, e.emp_no, e.name, s.workDays, s.worked, s.overtime, s.night, s.holidayBase + s.holidayOver, s.weeklyHours, s.paidHolidayHours, s.leaveDays, s.absentDays, s.missingDays]);
+      sumSheet?.addRow([wp.name, e.name, s.workDays, s.worked, s.overtime, s.night, s.holidayBase + s.holidayOver, s.weeklyHours, s.paidHolidayHours, s.leaveDays, s.absentDays, s.missingDays]);
 
       // 시트 이름: 31자 이하·중복 금지·금지 문자 제거
       let title = (e.name || "직원").replace(/[\\/?*[\]:]/g, " ").slice(0, 24) || "직원";
       for (let i = 2; used.has(title); i++) title = `${title.slice(0, 24)} ${i}`;
       used.add(title);
       const ws = wb.addWorksheet(title);
-      ws.addRow([`근무대장 ${month}`, "", wp.name, e.name, e.emp_no ? `사번 ${e.emp_no}` : "", e.dept, e.position]);
+      ws.addRow([`근무대장 ${month}`, "", wp.name, e.name, "", e.dept, e.position]);
       ws.getRow(1).font = { bold: true };
       ws.addRow(["날짜", "요일", "종류", "출근", "퇴근", "휴게(분)", "근무 시간", "야간", "연장", "연차", "비고"]);
       head(ws, 2);
@@ -71,10 +71,10 @@ export async function POST(req: NextRequest) {
       ws.addRow([month, "", s.workDays, s.worked, s.overtime, s.night, s.holidayBase, s.holidayOver, s.weeklyHours, s.paidHolidayHours, s.leaveDays, s.absentDays, s.unpaidDays, s.missingDays]);
       ws.columns.forEach((c, i) => { c.width = i === 0 ? 24 : i === 10 ? 28 : 12; });
     }
-    sumSheet?.columns.forEach((c, i) => { c.width = i === 0 || i === 2 ? 16 : 11; });
+    sumSheet?.columns.forEach((c, i) => { c.width = i === 0 || i === 1 ? 16 : 11; });
 
     const buf = await wb.xlsx.writeBuffer();
-    const name = employeeId ? `work-${month}-${employees[0].emp_no || "one"}.xlsx` : `work-${month}.xlsx`;
+    const name = employeeId ? `work-${month}-one.xlsx` : `work-${month}.xlsx`;
     return new NextResponse(buf as ArrayBuffer, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

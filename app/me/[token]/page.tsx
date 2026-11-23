@@ -62,7 +62,7 @@ export default function MePage({ params }: { params: Promise<{ token: string }> 
         <div>
           <div className="me-co">{d.me.workplace}</div>
           <h1 className="me-title">{d.me.name} 님</h1>
-          <div className="me-sub">{[d.me.dept, d.me.position].filter(Boolean).join(" ")}{d.me.emp_no ? ` · 사번 ${d.me.emp_no}` : ""}</div>
+          <div className="me-sub">{[d.me.dept, d.me.position].filter(Boolean).join(" ")}</div>
         </div>
         <button type="button" className="b2b-btn-secondary" onClick={leave}>나가기</button>
       </header>

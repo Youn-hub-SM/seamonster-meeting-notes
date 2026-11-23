@@ -18,7 +18,7 @@ async function fetchEmployees(from: string, to: string, workplaceId: string): Pr
   const COLS = "id,workplace_id,emp_no,name,emp_type,pay_type,hire_date,leave_date,work_days,daily_hours";
   const run = (cols: string) => {
     const q = hrDb().from("employees").select(cols)
-      .lte("hire_date", to).or(`leave_date.is.null,leave_date.gte.${from}`).order("emp_no").order("hire_date").order("name").limit(5000);
+      .lte("hire_date", to).or(`leave_date.is.null,leave_date.gte.${from}`).order("hire_date").order("name").limit(5000);
     return workplaceId ? q.eq("workplace_id", workplaceId) : q;
   };
   // 소속 칸(hr/006)이 아직 없는 DB 에서는 그 칸 없이 다시 읽는다(소속별 통계는 나오지 않는다)

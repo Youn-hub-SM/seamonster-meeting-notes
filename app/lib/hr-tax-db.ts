@@ -36,5 +36,6 @@ export async function loadTax(year: number): Promise<TaxBundle> {
       if (rows.length < PAGE) break;
     }
   }
-  return { year, workplaces: ((wps.data || []) as unknown as Row[]).map((w) => ({ id: String(w.id), name: String(w.name ?? "") })), rows: taxRows(hs, lines) };
+  const workplaces = ((wps.data || []) as unknown as Row[]).map((w) => ({ id: String(w.id), name: String(w.name ?? "") }));
+  return { year, workplaces, rows: taxRows(hs, lines, workplaces.map((w) => w.id)) };
 }

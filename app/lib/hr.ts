@@ -85,6 +85,10 @@ export function ageOn(birth: string | null, on: string = todayKst()): number | n
 export function isActiveOn(e: { hire_date: string; leave_date: string | null }, on: string = todayKst()): boolean {
   return e.hire_date <= on && (!e.leave_date || e.leave_date >= on);
 }
+// 퇴사했는가(기준일에) — 인사대장·증명서의 재직/퇴사 나눔에 쓴다. 입사일이 아직 오지 않은 직원(입사 예정)은 퇴사자가 아니다
+export function hasLeftOn(e: { leave_date: string | null }, on: string = todayKst()): boolean {
+  return !!e.leave_date && e.leave_date < on;
+}
 // 근속 기간 "3년 2개월"
 export function tenureText(hire: string, until: string = todayKst()): string {
   if (!isDate(hire) || !isDate(until) || until < hire) return "";

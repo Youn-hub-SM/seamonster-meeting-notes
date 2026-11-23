@@ -259,6 +259,30 @@
 .hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
 .hr-sec-head .hr-holiday-nav { margin-bottom: 0; }   /* 공휴일 구역 머리의 해 이동·버튼 줄 */
 
+/* 근로계약서(증명서 화면의 넷째 서류) — 조항 목록과 양쪽 서명란. 한 장에 들어가게 글자를 증명서보다 작게 둔다 */
+.hr-doc.hr-contract { font-size: var(--sm-fs-base); line-height: 1.65; }
+.hr-doc.hr-contract h1 { margin: var(--sm-space-3) 0 var(--sm-space-5); }
+.hr-contract-lead { margin: 0 0 var(--sm-space-3); }
+.hr-contract-list { margin: 0; padding-left: 1.6em; }
+.hr-contract-list > li { margin-bottom: var(--sm-space-2); }
+.hr-contract-list > li > strong { font-weight: 600; margin-right: var(--sm-space-2); }
+.hr-contract-list > li > strong::after { content: ":"; }
+.hr-contract-list ul { margin: 2px 0 0; padding-left: 1.2em; list-style: "- "; }
+.hr-contract-checks { display: inline-flex; flex-wrap: wrap; gap: var(--sm-space-1) var(--sm-space-4); }
+.hr-contract-checks > span { display: inline-flex; align-items: center; gap: var(--sm-space-1); }
+.hr-contract-checks i { display: inline-block; width: 0.9em; height: 0.9em; border: 1px solid var(--sm-black); }
+.hr-contract-checks i.is-on { background: var(--sm-black); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.hr-doc.hr-contract .hr-doc-date { margin-top: var(--sm-space-5); }
+.hr-contract-sign { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sm-space-5); margin-top: auto; padding-top: var(--sm-space-5); }
+.hr-contract-sign > div { display: flex; flex-direction: column; gap: var(--sm-space-1); }
+.hr-contract-sign b { font-weight: 600; }
+.hr-contract-sign .hr-doc-seal { margin-left: var(--sm-space-3); }
+@media print {
+  .hr-doc.hr-contract { font-size: 10.5pt; line-height: 1.55; }
+  .hr-doc.hr-contract h1 { margin: 4mm 0 8mm; font-size: 22pt; }
+  .hr-contract-list > li { margin-bottom: 2.2mm; }
+}
+
 /* 퇴직금 — 직원 고르기와 마지막 근무일, 구간 임금 칸 */
 .hr-sev-pick { flex: 1 1 320px; max-width: 460px; }
 .hr-sev-last { display: inline-flex; align-items: center; gap: var(--sm-space-2); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }

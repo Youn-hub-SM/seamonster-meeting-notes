@@ -146,7 +146,7 @@ export async function planEmployees(sheets: Sheet[], defaultWorkplaceId: string)
   for (const r of sheet.rows) {
     const v = r.values;
     const errors = [...r.errors], warns: string[] = [], notes: string[] = [];
-    const name = String(v.name ?? "").trim(), empNo = String(v.emp_no ?? "").trim();
+    const name = String(v.name ?? "").trim();
     const hire = typeof v.hire_date === "string" ? v.hire_date : "";
 
     let wpId = "";
@@ -164,25 +164,21 @@ export async function planEmployees(sheets: Sheet[], defaultWorkplaceId: string)
     if (digits && !keyReady) errors.push("주민등록번호: 암호화 키(HR_DATA_KEY)가 서버에 없어 저장할 수 없습니다");
     const hash = digits && keyReady ? rrnHash(digits) : "";
 
-    // 이미 있는 직원인가 — 주민등록번호 → 사번 → (성명 + 입사일) 순으로 같은 사업장에서 찾는다
+    // 이미 있는 직원인가 — 주민등록번호 → (성명 + 입사일) 순으로 같은 사업장에서 찾는다(사번은 쓰지 않는다)
     let old: Old | null = null;
     if (wpId) {
       const mine = olds.filter((o) => o.workplace_id === wpId);
-      const byRrn = hash ? mine.find((o) => o.rrn_hash === hash) || null : null;
-      const byNo = empNo ? mine.find((o) => o.emp_no === empNo) || null : null;
-      if (byRrn && byNo && byRrn.id !== byNo.id) errors.push(`주민등록번호와 사번이 서로 다른 직원을 가리킵니다(${byRrn.name}, ${byNo.name})`);
-      else if (!byRrn && byNo && name && byNo.name !== name) errors.push(`사번: ${empNo} 은 다른 직원(${byNo.name})이 쓰고 있습니다`);
-      old = byRrn || byNo;
+      old = hash ? mine.find((o) => o.rrn_hash === hash) || null : null;
       if (!old && name) {
         const same = mine.filter((o) => o.name === name);
         if (hire) {
           old = same.find((o) => o.hire_date === hire) || null;
           if (!old && same.length > 0) warns.push(`같은 이름의 직원이 있습니다(입사일 ${same.map((o) => o.hire_date).join(", ")}). 다른 사람으로 보고 새로 등록합니다`);
         } else if (same.length === 1) old = same[0];
-        else if (same.length > 1) errors.push("같은 이름의 직원이 둘 이상입니다. 사번이나 주민등록번호를 넣으세요");
+        else if (same.length > 1) errors.push("같은 이름의 직원이 둘 이상입니다. 입사일이나 주민등록번호를 넣으세요");
       }
     }
-    const who = `${name || old?.name || "(이름 없음)"}${empNo || old?.emp_no ? ` (${empNo || old?.emp_no})` : ""}`;
+    const who = name || old?.name || "(이름 없음)";
     const base = { line: r.line, name: name || old?.name || "", who, notes, errors, warns };
 
     if (old) {
@@ -230,7 +226,7 @@ export async function planEmployees(sheets: Sheet[], defaultWorkplaceId: string)
     }
 
     // 새 직원
-    for (const [key, label] of [[`no|${wpId}|${empNo}`, "사번"], [`rrn|${wpId}|${hash}`, "주민등록번호"], [`name|${wpId}|${name}|${hire}`, "성명과 입사일"]] as const) {
+    for (const [key, label] of [[`rrn|${wpId}|${hash}`, "주민등록번호"], [`name|${wpId}|${name}|${hire}`, "성명과 입사일"]] as const) {
       if (key.endsWith("|") || (label === "성명과 입사일" && (!name || !hire))) continue;
       const dup = seenNew.get(key);
       if (dup) { errors.push(`같은 ${label}이 ${dup}줄에도 있습니다`); break; }
@@ -316,7 +312,7 @@ export function employeeReport(plan: EmpPlan, done?: { failed: string[] }): Impo
 // ── 근무대장 ────────────────────────────────────────────────────────
 type WorkPlanEmp = { e: RosterEmployee; add: number; change: number; same: number; rows: WorkLog[] }; // rows = 그 달 전체(저장된 것 위에 올린 것을 덮은 것)
 export type WorkPlan = { month: string; emps: WorkPlanEmp[]; errors: ImportLine[]; errorCount: number; notes: string[] };
-const whoOf = (e: { name: string; emp_no: string }) => `${e.name}${e.emp_no ? ` (${e.emp_no})` : ""}`;
+const whoOf = (e: { name: string }) => e.name || "(이름 없음)";
 
 // 파일 → 직원마다 그 달에 넣을 줄. 파일에 있는 날짜만 넣거나 고친다(없는 날·빈 줄은 저장된 그대로 둔다).
 export async function planWork(sheets: Sheet[], month: string): Promise<WorkPlan> {
@@ -335,26 +331,18 @@ export async function planWork(sheets: Sheet[], month: string): Promise<WorkPlan
     saved.set(`${employee_id}|${l.work_date}`, log);
   }
 
-  // 사번·성명 → 직원(그 달에 재직한 사람 가운데)
+  // 성명 → 직원(그 달에 재직한 사람 가운데). 사번은 쓰지 않는다 — 같은 이름이 둘이면 엑셀로는 가릴 수 없어 화면에서 넣게 한다.
   const found = new Map<string, RosterEmployee | string>();
-  const resolve = (empNo: string, name: string): RosterEmployee | string => {
-    const key = `${empNo}|${name}`;
-    const hit = found.get(key);
+  const resolve = (name: string): RosterEmployee | string => {
+    const hit = found.get(name);
     if (hit) return hit;
     let out: RosterEmployee | string;
-    if (!empNo && !name) out = "누구의 줄인지 알 수 없습니다(사번·성명이 없습니다)";
-    else if (empNo) {
-      let by = roster.filter((e) => e.emp_no === empNo);
-      if (by.length > 1 && name) by = by.filter((e) => e.name === name);
-      out = by.length === 0 ? `이 달에 재직한 직원이 아닙니다(사번 ${empNo})`
-        : by.length > 1 ? `사번 ${empNo} 인 직원이 둘 이상입니다. 성명 칸을 넣으세요`
-        : name && by[0].name !== name && !by[0].name.startsWith(name) ? `사번 ${empNo} 의 이름이 다릅니다(파일 ${name}, 인사대장 ${by[0].name})`
-        : by[0];
-    } else {
+    if (!name) out = "누구의 줄인지 알 수 없습니다(성명이 없습니다)";
+    else {
       const by = roster.filter((e) => e.name === name);
-      out = by.length === 0 ? `이 달에 재직한 직원이 아닙니다(${name})` : by.length > 1 ? `${name} 직원이 둘 이상입니다. 사번 칸을 넣으세요` : by[0];
+      out = by.length === 0 ? `이 달에 재직한 직원이 아닙니다(${name})` : by.length > 1 ? `${name} 직원이 둘 이상입니다. 근무대장 화면에서 직접 넣으세요` : by[0];
     }
-    found.set(key, out);
+    found.set(name, out);
     return out;
   };
 
@@ -380,8 +368,8 @@ export async function planWork(sheets: Sheet[], month: string): Promise<WorkPlan
     if (r.error) { fail(at, label, r.error); continue; }
     if (r.date < from || r.date > to) { otherMonth++; continue; }
     if (!r.raw) continue;                                                      // 내용이 없는 줄
-    const e = resolve(r.emp_no, r.name);
-    if (typeof e === "string") { fail(r.sheet, label, e, `who|${r.sheet}|${r.emp_no}|${r.name}`); continue; }
+    const e = resolve(r.name);
+    if (typeof e === "string") { fail(r.sheet, label, e, `who|${r.sheet}|${r.name}`); continue; }
     if (locked.has(e.workplace_id)) { fail(r.sheet, whoOf(e), "급여가 확정된 달입니다. 근무대장을 고치려면 급여 확정을 취소하세요", `lock|${e.id}`); continue; }
     if (r.date < e.hire_date) { fail(at, whoOf(e), `${r.date} 입사 전 날짜입니다`); continue; }
     if (e.leave_date && r.date > e.leave_date) { fail(at, whoOf(e), `${r.date} 퇴사 뒤 날짜입니다`); continue; }
@@ -496,21 +484,19 @@ export async function planPayroll(sheets: Sheet[], workplaceId: string, month: s
   if (sheet.title && !squash(sheet.title).startsWith(squash(ctx.wp.name))) throw new ImportError(`이 파일은 '${sheet.title.slice(0, 40)}' 급여대장입니다. 열어 둔 사업장(${ctx.wp.name})과 다릅니다.`);
   // 내려받은 뒤 급여가 다시 저장됐으면 받지 않는다. 파일의 값이 '저장된 값'이 아니게 되어, 손대지 않은 칸(옛 공제 등)이
   //  고친 칸으로 읽혀 옛 금액으로 굳는다 — 같은 파일을 고쳐 두 번 올릴 때 바로 그렇게 된다.
-  const again = "[이 달 급여대장 내려받기]로 다시 받아 고친 뒤 올리세요.";
+  const again = "[엑셀 내려받기]로 다시 받아 고친 뒤 올리세요.";
   if (!sheet.stamp) throw new ImportError(`이 파일에서 저장 시각을 찾지 못했습니다. ${again}`);
   if (sheet.stamp !== saved.head.updated_at) throw new ImportError(`이 파일을 내려받은 뒤 급여가 다시 저장됐습니다. ${again}`);
   if (sheet.rows.length === 0) throw new ImportError("머리 줄 아래에 직원이 한 줄도 없습니다.");
   const labels = sheet.labels;
 
-  // 사번 → 성명 → 입사일 순으로 그 달 급여의 직원을 찾는다
+  // 성명 → (같은 이름이면) 입사일 순으로 그 달 급여의 직원을 찾는다. 사번은 쓰지 않는다.
   const resolve = (r: PaySheetRow): PayEmployee | string => {
-    if (!r.emp_no && !r.name) return "누구의 줄인지 알 수 없습니다(사번·성명이 없습니다)";
-    let by = r.emp_no ? ctx.employees.filter((e) => e.emp_no === r.emp_no) : ctx.employees.filter((e) => e.name === r.name);
-    if (by.length === 0) return r.emp_no ? `이 달 급여에 없는 직원입니다(사번 ${r.emp_no})` : `이 달 급여에 없는 직원입니다(${r.name})`;
-    if (by.length > 1 && r.emp_no && r.name) by = by.filter((e) => e.name === r.name);
+    if (!r.name) return "누구의 줄인지 알 수 없습니다(성명이 없습니다)";
+    let by = ctx.employees.filter((e) => e.name === r.name);
+    if (by.length === 0) return `이 달 급여에 없는 직원입니다(${r.name})`;
     if (by.length > 1 && r.hire) by = by.filter((e) => e.hire_date === r.hire);
-    if (by.length !== 1) return "같은 사번·성명의 직원이 둘 이상이거나 입사일이 맞지 않습니다. 사번·성명·입사일 칸을 내려받은 그대로 두세요";
-    if (r.emp_no && r.name && by[0].name !== r.name) return `사번 ${r.emp_no} 의 이름이 다릅니다(파일 ${r.name}, 인사대장 ${by[0].name})`;
+    if (by.length !== 1) return "같은 이름의 직원이 둘 이상이거나 입사일이 맞지 않습니다. 성명·입사일 칸을 내려받은 그대로 두세요";
     return by[0];
   };
 
@@ -523,7 +509,7 @@ export async function planPayroll(sheets: Sheet[], workplaceId: string, month: s
   let cells = 0;
 
   for (const r of sheet.rows) {
-    const label = `${r.name || "(이름 없음)"}${r.emp_no ? ` (${r.emp_no})` : ""}`;
+    const label = r.name || "(이름 없음)";
     const e = resolve(r);
     if (typeof e === "string") { rows.push({ line: r.line, who: label, action: "error", notes: [], errors: [...r.errors, e], warns: [] }); continue; }
     const who = whoOf(e), errors = [...r.errors];

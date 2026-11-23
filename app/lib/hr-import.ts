@@ -1,9 +1,11 @@
 // 엑셀 올리기(인사대장·근무대장·급여대장) — 화면과 서버가 같이 쓰는 타입·순수 함수. 비밀(키·DB)에 닿는 코드는 두지 않는다.
 //
 //  올리는 양식 = 내려받는 양식이다. [엑셀 내려받기]로 받은 파일을 고쳐 그대로 올릴 수 있다(칸 이름으로 찾으므로 순서·빠진 칸은 상관없다).
-//   · 인사대장: 한 줄 = 한 사람. 주민등록번호·사번·(성명+입사일)로 이미 있는 직원을 찾아 고치고, 없으면 새로 등록한다.
+//  사번은 쓰지 않는다(2026-11-23 대표: "사번 기능을 사용하지 않을 예정이니, 삭제") — 직원은 성명(같은 이름이면 입사일·주민등록번호)으로 찾는다.
+//   옛 파일에 '사번' 칸이 있어도 읽지 않는다. DB 의 emp_no 칸은 그대로 두되 어디에도 보이지 않고 채우지도 않는다.
+//   · 인사대장: 한 줄 = 한 사람. 주민등록번호·(성명+입사일)로 이미 있는 직원을 찾아 고치고, 없으면 새로 등록한다.
 //       빈 칸은 건드리지 않는다(지우려면 화면에서). 가려진 번호(900101-1******)도 건드리지 않는다.
-//   · 근무대장: 한 줄 = 한 사람의 하루. 직원마다 한 시트(내려받은 모양)이거나, 한 시트에 사번·성명 칸이 있는 목록이거나.
+//   · 근무대장: 한 줄 = 한 사람의 하루. 직원마다 한 시트(내려받은 모양)이거나, 한 시트에 성명 칸이 있는 목록이거나.
 //       파일에 있는 날짜만 넣거나 고친다 — 파일에 없는 날·내용이 빈 줄은 건드리지 않는다(지우지 않는다).
 //  읽은 내용의 검증·저장은 서버(app/lib/hr-import-db.ts)가 화면 입력과 같은 함수로 한다.
 
@@ -94,7 +96,6 @@ export type EmpCol = { label: string; key: string; kind: EmpKind; alias?: string
 export const EMP_XLSX_COLS: EmpCol[] = [
   { label: "사업장", key: "workplace", kind: "workplace" },
   { label: "소속", key: "affiliation", kind: "text" },   // 사업장의 소속 목록 가운데 하나(파도소리 · 엄마와 바다 …)
-  { label: "사번", key: "emp_no", kind: "text" },
   { label: "성명", key: "name", kind: "text", alias: ["이름"] },
   { label: "주민등록번호", key: "rrn", kind: "rrn", alias: ["주민번호"] },
   { label: "생년월일", key: "", kind: "skip" },          // 주민등록번호에서 정한다
@@ -265,14 +266,14 @@ export function dailyHoursOf(start: string, end: string, breakMin: number): numb
 export type WorkRaw = { work_date: string; kind: WorkKind; start_time: string | null; end_time: string | null; break_min: number | null; hours: number; night_hours: number | null; leave_days: number; memo: string };
 export type WorkRow = {
   sheet: string; line: number;
-  emp_no: string; name: string;     // 누구의 줄인가(시트 머리 또는 그 줄의 사번·성명)
+  name: string;                     // 누구의 줄인가(시트 머리 또는 그 줄의 성명)
   date: string;                     // YYYY-MM-DD("" = 날짜를 읽지 못함)
   raw: WorkRaw | null;              // null = 내용이 없는 줄(건드리지 않는다). break_min·night_hours 의 null = 빈 칸
   error: string;                    // 줄을 읽다 생긴 오류("" = 없음)
 };
 const WORK_HEADS: Record<string, string[]> = {
   date: ["날짜", "일자", "근무일", "근무일자"],
-  emp_no: ["사번"], name: ["성명", "이름"],
+  name: ["성명", "이름"],
   kind: ["종류", "구분", "근무 종류"],
   start: ["출근", "출근 시각", "출근 시간"], end: ["퇴근", "퇴근 시각", "퇴근 시간"],
   brk: ["휴게(분)", "휴게", "휴게 시간(분)"],
@@ -309,17 +310,16 @@ export function readWorkSheet(sheet: Sheet): WorkRow[] | null {
   if (head < 0) return null;
   const col: Record<string, number> = {};
   (grid[head] || []).forEach((v, j) => { const k = keyOf.get(normHead(v)); if (k && col[k] == null) col[k] = j; });
-  const perRow = col.emp_no != null || col.name != null;
+  const perRow = col.name != null;
 
-  // 직원마다 한 시트인 모양: 머리 줄 위에서 사번·성명을 찾는다(내려받은 파일의 첫 줄 = 근무대장 YYYY-MM, , 사업장, 성명, 사번 N, …)
-  let sheetNo = "", sheetName = "";
+  // 직원마다 한 시트인 모양: 머리 줄 위에서 성명을 찾는다(내려받은 파일의 첫 줄 = 근무대장 YYYY-MM, , 사업장, 성명, …). 없으면 시트 이름.
+  let sheetName = "";
   if (!perRow) {
     for (let i = 0; i < head; i++) {
       const row = grid[i] || [];
-      for (const v of row) { const m = /^사번\s*(\S.*)$/.exec(cellText(v)); if (m) sheetNo = m[1].trim(); }
       if (cellText(row[0]).startsWith("근무대장") && cellText(row[3])) sheetName = cellText(row[3]);
     }
-    if (!sheetName && !sheetNo) sheetName = sheet.name.trim();
+    if (!sheetName) sheetName = sheet.name.trim();
   }
 
   const at = (row: Cell[], k: string): Cell | undefined => (col[k] == null ? undefined : row[col[k]]);
@@ -331,7 +331,7 @@ export function readWorkSheet(sheet: Sheet): WorkRow[] | null {
     if (first === "주" || first === "합계") break;                       // 내려받은 파일의 주별·합계 표
     if (row.every((v) => isBlank(v))) { if (!perRow && seen) break; continue; }
     const content = ["kind", "start", "end", "hours", "leave"].some((k) => !isBlank(at(row, k)));
-    const base = { sheet: sheet.name, line: i + 1, emp_no: perRow ? cellText(at(row, "emp_no")) : sheetNo, name: perRow ? cellText(at(row, "name")) : sheetName };
+    const base = { sheet: sheet.name, line: i + 1, name: perRow ? cellText(at(row, "name")) : sheetName };
     const date = cellDate(at(row, "date"));
     if (!date) {
       if (content) out.push({ ...base, date: "", raw: null, error: date === "" ? "날짜가 비어 있습니다" : `날짜를 읽지 못했습니다(${short(at(row, "date"))})` });
@@ -395,7 +395,7 @@ export function isPayFixedHead(name: string): boolean {
 }
 
 export type PaySheetRow = {
-  line: number; emp_no: string; name: string; hire: string;
+  line: number; name: string; hire: string;
   cells: Record<string, number>;                                   // 코드(자동 항목 = SystemCode, 직접 넣는 항목 = "x:<항목 id>") → 금액. 빈 칸은 없다
   totals: Partial<Record<"pay" | "deduct" | "net", number>>;       // 파일에 적힌 합계(읽지 않는다 — 다시 계산한 값과 다르면 알려 주려고)
   memo: string | null;                                             // null = 빈 칸(건드리지 않는다)
@@ -438,11 +438,12 @@ export function readPaySheet(grid: Grid, extras: { code: string; name: string }[
   type Col = { j: number; kind: "id" | "amount" | "total" | "memo"; key: string; label: string };
   const cols: Col[] = [], seen = new Set<string>(), unknown: string[] = [], dups: string[] = [];
   const labels: Record<string, string> = {};
+  let oldNoCol = -1;   // 옛 파일의 '사번' 칸 — 읽지 않지만, 그 칸에 '합계'가 적힌 줄(옛 합계 줄)을 알아보는 데만 쓴다
   (grid[h] || []).forEach((raw, j) => {
     const n = normHead(raw), label = cellText(raw);
     if (!n) return;
     let col: Col;
-    if (n === "사번") col = { j, kind: "id", key: "emp_no", label };
+    if (n === "사번") { oldNoCol = j; return; }
     else if (n === "성명") col = { j, kind: "id", key: "name", label };
     else if (n === "입사일") col = { j, kind: "id", key: "hire", label };
     else if (n === "비고") col = { j, kind: "memo", key: "memo", label };
@@ -460,11 +461,12 @@ export function readPaySheet(grid: Grid, extras: { code: string; name: string }[
   for (let i = h + 1; i < grid.length && rows.length < PAY_MAX_ROWS; i++) {
     const line = grid[i] || [];
     if (line.every(isBlank)) continue;
-    const r: PaySheetRow = { line: i + 1, emp_no: "", name: "", hire: "", cells: {}, totals: {}, memo: null, errors: [], warns: [] };
+    if (oldNoCol >= 0 && cellText(line[oldNoCol]) === "합계") continue;   // 옛 파일의 합계 줄
+    const r: PaySheetRow = { line: i + 1, name: "", hire: "", cells: {}, totals: {}, memo: null, errors: [], warns: [] };
     for (const c of cols) {
       const v = line[c.j];
       if (c.kind === "id") {
-        if (c.key === "hire") r.hire = cellDate(v) || ""; else if (c.key === "emp_no") r.emp_no = cellText(v); else r.name = cellText(v);
+        if (c.key === "hire") r.hire = cellDate(v) || ""; else r.name = cellText(v);
       } else if (c.kind === "memo") {
         const t = cellText(v);
         if (t) r.memo = t.slice(0, 300);
@@ -479,7 +481,7 @@ export function readPaySheet(grid: Grid, extras: { code: string; name: string }[
         r.cells[c.key] = won;
       }
     }
-    if (r.emp_no === "합계" || (!r.emp_no && r.name === "합계")) continue;   // 맨 아래 합계 줄
+    if (r.name === "합계") continue;   // 맨 아래 합계 줄(성명 칸에 '합계')
     rows.push(r);
   }
   return { month, title, stamp, rows, labels, unknown, dups };

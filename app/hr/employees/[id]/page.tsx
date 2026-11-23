@@ -101,6 +101,7 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
           {e.has_rrn && (rrn
             ? <button type="button" className="b2b-btn-secondary" onClick={() => setRrn(null)}>번호 가리기</button>
             : <button type="button" className="b2b-btn-secondary" onClick={showRrn} disabled={!keyReady}>번호 보기</button>)}
+          <Link href={`/hr/docs?employee=${e.id}&doc=contract`} prefetch={false} className="b2b-btn-secondary">근로계약서 작성</Link>
           <button type="button" className="b2b-btn-secondary" onClick={() => window.print()}>인사기록카드 인쇄</button>
           <button type="button" className="b2b-btn-primary" onClick={() => setFormOpen(true)}>정보 수정</button>
         </div>
@@ -111,7 +112,6 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
         <dl className="hr-dl">
           {item("사업장", wp?.name)}
           {((wp?.affiliations.length ?? 0) > 0 || e.affiliation) && item("소속", e.affiliation)}
-          {item("사번", e.emp_no)}
           {item("성명", e.name)}
           <div>
             <dt>주민등록번호</dt>
@@ -152,7 +152,7 @@ export default function HrEmployeeCardPage({ params }: { params: Promise<{ id: s
           {item("하루 소정근로시간", `${e.daily_hours}시간`)}
         </dl>
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          <table className="b2b-table hr-table">
             <thead><tr><th>임금 적용 시작일</th><th className="num">시급</th><th className="num">월급</th><th>비고</th><th className="hr-noprint"></th></tr></thead>
             <tbody>
               {e.wages.map((w) => (

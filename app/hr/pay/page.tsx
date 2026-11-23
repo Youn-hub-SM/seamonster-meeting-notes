@@ -4,7 +4,7 @@
 //  작성 중에는 근무대장·임금·요율로 그때그때 계산해 보여 주고(hr-pay.ts, 서버도 같은 함수), [확정]하면 그 금액이 굳는다.
 //  급여대장(가로)·급여명세서(한 사람 한 장) 인쇄, 급여대장 엑셀.
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useConfirm, useToast } from "@/app/components/Feedback";
@@ -57,7 +57,8 @@ function PayMain() {
   const [editing, setEditing] = useState<string | null>(null);
   const [printMode, setPrintMode] = useState<string | null>(null); // "ledger" | "slips" | "slip:<직원 id>"
   const [aff, setAff] = useState("");                               // 소속으로 좁혀 보기("" = 모든 소속)
-  const [importOpen, setImportOpen] = useState(false);              // 엑셀 올리기 창
+  const [importFile, setImportFile] = useState<File | null>(null);  // 엑셀 올리기 — 고른 파일(있으면 미리보기 창이 열린다)
+  const importRef = useRef<HTMLInputElement>(null);
 
   const adopt = useCallback((j: PayBundle) => {
     const wp = j.workplaces.find((w) => w.id === j.workplace_id);
@@ -186,10 +187,11 @@ function PayMain() {
     try { await hrDownload("/api/hr/payroll/export", { workplace_id: b.workplace_id, month: b.month, affiliation: affOn || undefined }, `payroll-${b.month}.xlsx`); }
     catch (err) { toast.error(errText(err, "급여대장을 내보내지 못했습니다.")); }
   }
-  // 엑셀 올리기 — 내려받은 급여대장에서 금액을 고쳐 다시 올린다. 저장된 급여와 대조하므로 저장하지 않은 것이 있으면 먼저 저장한다.
+  // 엑셀 올리기 — [엑셀 내려받기]로 받은 급여대장에서 금액을 고쳐 다시 올린다. 누르면 바로 파일 고르기가 뜨고, 고르면 미리보기 창이 열린다.
+  //  저장된 급여와 대조하므로 저장하지 않은 것이 있으면 먼저 저장한다.
   function openImport() {
     if (needSave) { toast.error("변경을 저장한 뒤 올리세요"); return; }
-    setEditing(null); setImportOpen(true);
+    setEditing(null); importRef.current?.click();
   }
   function print(mode: string) {
     if (needSave) { toast.error("변경을 저장한 뒤 인쇄하세요"); return; }
@@ -282,7 +284,7 @@ function PayMain() {
               <thead>
                 <tr>
                   {showAff && <th>소속</th>}
-                  <th>사번</th><th>성명</th><th>임금</th><th className="num">근무 일수</th><th className="num">근무 시간</th><th className="num">연장</th><th className="num">야간</th><th className="num">휴일 근무</th>
+                  <th>성명</th><th>임금</th><th className="num">근무 일수</th><th className="num">근무 시간</th><th className="num">연장</th><th className="num">야간</th><th className="num">휴일 근무</th>
                   <th className="num">지급 합계</th><th className="num">공제 합계</th><th className="num">실수령액</th><th>확인할 것</th>
                 </tr>
               </thead>
@@ -290,7 +292,6 @@ function PayMain() {
                 {view.map(({ id, snap, result: r }) => (
                   <tr key={id} onClick={() => setEditing(id)} tabIndex={0} role="button" onKeyDown={(ev) => { if (ev.key === "Enter") setEditing(id); }}>
                     {showAff && <td>{affOf[id] || ""}</td>}
-                    <td className="hr-mono">{snap.emp_no}</td>
                     <td><strong>{snap.name}</strong>{r.items.some((i) => i.edited) && <span className="b2b-status-pill hr-pill-off" style={{ marginLeft: 8 }}>고침</span>}</td>
                     <td>{wageLabel(r)}</td>
                     <td className="num">{r.basis.pay_type === "hourly" ? r.basis.workDays : ""}</td>
@@ -305,7 +306,7 @@ function PayMain() {
                   </tr>
                 ))}
                 <tr className="hr-pay-sum">
-                  <td colSpan={showAff ? 9 : 8}>합계 {view.length}명</td>
+                  <td colSpan={showAff ? 8 : 7}>합계 {view.length}명</td>
                   <td className="num">{won(totals.pay_total)}</td><td className="num">{won(totals.deduct_total)}</td><td className="num">{won(totals.net_pay)}</td><td></td>
                 </tr>
               </tbody>
@@ -314,11 +315,13 @@ function PayMain() {
         </>
       )}
 
-      {importOpen && b && (
-        <ExcelImport title={`급여 엑셀 올리기 — ${monthTitle(b.month)}${wp ? ` ${wp.name}` : ""}`} endpoint="/api/hr/payroll/import" extra={{ workplace_id: b.workplace_id, month: b.month }}
-          unit="명" applyWord="저장" blockOnError templateLabel="이 달 급여대장 내려받기"
-          onTemplate={() => hrDownload("/api/hr/payroll/export", { workplace_id: b.workplace_id, month: b.month }, `payroll-${b.month}.xlsx`)}
-          onClose={() => setImportOpen(false)}
+      <input ref={importRef} type="file" accept=".xlsx" hidden aria-label="급여 엑셀 파일"
+        onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ""; if (f) setImportFile(f); }} />
+      {importFile && b && (
+        <ExcelImport key={`${importFile.name}:${importFile.lastModified}:${importFile.size}`} initialFile={importFile}
+          title={`급여 엑셀 올리기 — ${monthTitle(b.month)}${wp ? ` ${wp.name}` : ""}`} endpoint="/api/hr/payroll/import" extra={{ workplace_id: b.workplace_id, month: b.month }}
+          unit="명" applyWord="저장" blockOnError
+          onClose={() => setImportFile(null)}
           onDone={(r) => { load(); toast.success(`${r.counts.update}명의 급여를 고쳐 저장했습니다`); }} />
       )}
       {editRow && b && (
@@ -338,7 +341,7 @@ function PayMain() {
           <table className="hr-print-table hr-pay-ledger">
             <thead>
               <tr>
-                <th>사번</th><th>성명</th><th>생년월일</th><th>입사일</th><th>업무</th><th>임금</th>
+                <th>성명</th><th>생년월일</th><th>입사일</th><th>업무</th><th>임금</th>
                 <th>근로 일수</th><th>근로 시간</th><th>연장</th><th>야간</th><th>휴일</th>
                 <th>기본급</th><th>주휴</th><th>연장</th><th>야간</th><th>휴일</th><th>연차·유급</th><th>그 밖의 지급</th><th>지급 합계</th>
                 <th>국민연금</th><th>건강보험</th><th>장기요양</th><th>고용보험</th><th>소득세</th><th>지방소득세</th><th>그 밖의 공제</th><th>공제 합계</th><th>실수령액</th>
@@ -347,7 +350,7 @@ function PayMain() {
             <tbody>
               {view.map(({ id, snap, result: r }) => (
                 <tr key={id}>
-                  <td>{snap.emp_no}</td><td>{snap.name}</td><td>{snap.birth_date || ""}</td><td>{snap.hire_date || ""}</td><td>{snap.job || ""}</td><td>{wageLabel(r)}</td>
+                  <td>{snap.name}</td><td>{snap.birth_date || ""}</td><td>{snap.hire_date || ""}</td><td>{snap.job || ""}</td><td>{wageLabel(r)}</td>
                   <td className="num">{r.basis.workDays}</td><td className="num">{hoursText(r.basis.worked)}</td><td className="num">{hoursText(r.basis.overtime)}</td><td className="num">{hoursText(r.basis.night)}</td><td className="num">{hoursText(r.basis.holiday)}</td>
                   {SYSTEM_PAY.map((c) => <td key={c} className="num">{won(itemAmount(r, c))}</td>)}
                   <td className="num">{won(extraSum(r, "pay"))}</td><td className="num">{won(r.pay_total)}</td>
@@ -356,7 +359,7 @@ function PayMain() {
                 </tr>
               ))}
               <tr className="hr-print-week">
-                <td colSpan={11}>합계 {view.length}명</td>
+                <td colSpan={10}>합계 {view.length}명</td>
                 {SYSTEM_PAY.map((c) => <td key={c} className="num">{won(totals.byCode[c] || 0)}</td>)}
                 <td className="num">{won(view.reduce((t, r) => t + extraSum(r.result, "pay"), 0))}</td><td className="num">{won(totals.pay_total)}</td>
                 {SYSTEM_DEDUCT.map((c) => <td key={c} className="num">{won(totals.byCode[c] || 0)}</td>)}
@@ -385,9 +388,9 @@ function PayMain() {
 }
 
 // 급여명세서 한 장(인쇄) — 위: 사람·실수령액 / 가운데: 지급 내역 | 공제 내역(항목 아래 작은 글씨로 계산 방법) / 아래: 근무 산출근거.
-//  임금명세서에 있어야 하는 것(성명·생년월일·사번, 지급일, 총액, 항목별 금액과 계산 방법, 공제 내역)은 모두 이 장에 있다.
+//  임금명세서에 있어야 하는 것(성명·생년월일 — 근로자를 특정할 정보, 지급일, 총액, 항목별 금액과 계산 방법, 공제 내역)은 모두 이 장에 있다.
 function PaySlip({ snap, r, wpName, month, payDate }: { snap: PaySnapshot; r: PayResult; wpName: string; month: string; payDate: string }) {
-  const who = [snap.name, snap.birth_date || "", snap.emp_no, [snap.dept, snap.position].filter(Boolean).join(" "), snap.hire_date ? `입사 ${snap.hire_date}` : "", wpName].filter(Boolean);
+  const who = [snap.name, snap.birth_date || "", [snap.dept, snap.position].filter(Boolean).join(" "), snap.hire_date ? `입사 ${snap.hire_date}` : "", wpName].filter(Boolean);
   const basis: [string, string][] = r.basis.pay_type === "hourly" ? [
     ["근무 일수", `${r.basis.workDays}일`], ["근무 시간", `${hoursText(r.basis.worked)}시간`],
     ["연장", `${hoursText(r.basis.overtime)}시간`], ["야간", `${hoursText(r.basis.night)}시간`],

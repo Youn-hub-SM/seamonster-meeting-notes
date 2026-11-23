@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
 import {
-  PAY_TYPE_LABEL, currentWage, isActiveOn, numText, rateOn, tenureText, todayKst, wageText,
+  PAY_TYPE_LABEL, currentWage, hasLeftOn, numText, rateOn, tenureText, todayKst, wageText,
   type Employee, type Rate, type Workplace,
 } from "@/app/lib/hr";
 import { HrApiError, errText, hrApi, hrDownload } from "./api";
@@ -66,17 +66,18 @@ export default function HrEmployeesPage() {
   const hasAff = affNames.length > 0;
   const inWp = useMemo(() => employees.filter((e) => (!wp || e.workplace_id === wp) && (!aff || e.affiliation === aff)), [employees, wp, aff]);
   const counts = useMemo(() => {
-    const active = inWp.filter((e) => isActiveOn(e, today)).length;
+    // 재직 = 퇴사하지 않은 직원. 입사일이 아직 오지 않은 직원(입사 예정)도 여기에 든다 — 등록하고 계약서를 쓰는 때가 보통 입사 전이다
+    const active = inWp.filter((e) => !hasLeftOn(e, today)).length;
     return { active, left: inWp.length - active, all: inWp.length } as Record<Tab, number>;
   }, [inWp, today]);
   const rows = useMemo(() => {
     const k = q.trim().toLowerCase();
     return inWp.filter((e) => {
-      const active = isActiveOn(e, today);
+      const active = !hasLeftOn(e, today);
       if (tab === "active" && !active) return false;
       if (tab === "left" && active) return false;
       if (!k) return true;
-      return [e.name, e.emp_no, e.affiliation, e.dept, e.position, e.job, e.phone].some((v) => v.toLowerCase().includes(k));
+      return [e.name, e.affiliation, e.dept, e.position, e.job, e.phone].some((v) => v.toLowerCase().includes(k));
     });
   }, [inWp, tab, q, today]);
 
@@ -155,7 +156,7 @@ export default function HrEmployeesPage() {
                 {affNames.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             )}
-            <input className="b2b-input hr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="성명·사번·부서 검색" />
+            <input className="b2b-input hr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="성명·부서 검색" />
           </div>
 
           {rows.length === 0 ? (
@@ -174,7 +175,7 @@ export default function HrEmployeesPage() {
                   <tr>
                     {multiWp && <th>사업장</th>}
                     {hasAff && <th>소속</th>}
-                    <th>사번</th><th>성명</th><th>주민등록번호</th><th>입사일</th>
+                    <th>성명</th><th>주민등록번호</th><th>입사일</th>
                     {tab === "active" ? <th>근속</th> : <th>퇴사일</th>}
                     <th>부서</th><th>직위</th><th className="num">임금</th><th>연락처</th>
                   </tr>
@@ -185,11 +186,10 @@ export default function HrEmployeesPage() {
                       onKeyDown={(ev) => { if (ev.key === "Enter") router.push(`/hr/employees/${e.id}`); }}>
                       {multiWp && <td>{wpName.get(e.workplace_id) || ""}</td>}
                       {hasAff && <td>{e.affiliation}</td>}
-                      <td className="hr-mono">{e.emp_no}</td>
                       <td><strong>{e.name}</strong></td>
                       <td className="hr-mono">{e.rrn_masked || <span className="sm-faint">미입력</span>}</td>
                       <td>{e.hire_date}</td>
-                      {tab === "active" ? <td>{tenureText(e.hire_date, today)}</td> : <td>{e.leave_date || ""}</td>}
+                      {tab === "active" ? <td>{e.hire_date > today ? "입사 예정" : tenureText(e.hire_date, today)}</td> : <td>{e.leave_date || ""}</td>}
                       <td>{e.dept}</td>
                       <td>{e.position}</td>
                       <td className="num">{wageText(e)}</td>
@@ -212,7 +212,7 @@ export default function HrEmployeesPage() {
                 <tr>
                   {multiWp && !wp && <th>사업장</th>}
                   {hasAff && !aff && <th>소속</th>}
-                  <th>사번</th><th>성명</th><th>주민등록번호</th><th>주소</th><th>연락처</th><th>입사일</th><th>퇴사일</th>
+                  <th>성명</th><th>주민등록번호</th><th>주소</th><th>연락처</th><th>입사일</th><th>퇴사일</th>
                   <th>부서</th><th>직위</th><th>업무</th><th>고용 형태</th><th>임금</th>
                 </tr>
               </thead>
@@ -221,7 +221,7 @@ export default function HrEmployeesPage() {
                   <tr key={e.id}>
                     {multiWp && !wp && <td>{wpName.get(e.workplace_id) || ""}</td>}
                     {hasAff && !aff && <td>{e.affiliation}</td>}
-                    <td>{e.emp_no}</td><td>{e.name}</td><td>{printRrn?.[e.id] || e.rrn_masked}</td><td>{e.address}</td><td>{e.phone}</td>
+                    <td>{e.name}</td><td>{printRrn?.[e.id] || e.rrn_masked}</td><td>{e.address}</td><td>{e.phone}</td>
                     <td>{e.hire_date}</td><td>{e.leave_date || ""}</td><td>{e.dept}</td><td>{e.position}</td><td>{e.job}</td><td>{e.emp_type}</td>
                     <td>{PAY_TYPE_LABEL[e.pay_type]} {numText(e.pay_type === "hourly" ? currentWage(e.wages)?.hourly_wage : currentWage(e.wages)?.monthly_wage)}</td>
                   </tr>
@@ -239,6 +239,7 @@ export default function HrEmployeesPage() {
             setFormOpen(false);
             setEmployees((p) => [...p, e]);
             if (note) toast.error(note); else toast.success(`${e.name} 직원을 등록했습니다`);
+            router.push(`/hr/employees/${e.id}`);   // 등록한 직원의 인사기록카드로 — 거기서 [근로계약서 작성]으로 이어진다
           }} />
       )}
       {importOpen && (

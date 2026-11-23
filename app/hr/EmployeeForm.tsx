@@ -195,7 +195,6 @@ export default function EmployeeForm({
                 </label>
               )}
               {text("name", "성명", { req: true, max: 60 })}
-              {text("emp_no", "사번", { max: 30 })}
               <label className="b2b-field">
                 <span className="b2b-field-label">주민등록번호{employee?.has_rrn && <span className="opt"> 비우면 그대로</span>}</span>
                 <input className="b2b-input hr-mono" inputMode="numeric" autoComplete="off" value={f.rrn} disabled={!keyReady}

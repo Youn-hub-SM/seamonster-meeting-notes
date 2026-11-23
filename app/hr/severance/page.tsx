@@ -12,7 +12,7 @@ import { HrApiError, errText, hrApi } from "../api";
 
 const won = (n: number) => `${numText(n)}원`;
 const money2 = (n: number) => `${n.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}원`;
-const pickLabel = (e: SevPick) => `${e.name}${e.emp_no ? ` (${e.emp_no})` : ""}${e.leave_date ? ` · 퇴사 ${e.leave_date}` : ""}`;
+const pickLabel = (e: SevPick) => `${e.name}${e.leave_date ? ` · 퇴사 ${e.leave_date}` : ""}`;
 const digits = (v: string) => v.replace(/[^\d]/g, "");
 
 export default function HrSeverancePage() {
@@ -108,7 +108,7 @@ export default function HrSeverancePage() {
 
       <div className="hr-filters hr-noprint">
         <div className="hr-sev-pick">
-          <Combobox value={picked ? pickLabel(picked) : ""} options={options} onSelect={(o) => pick(o.id)} placeholder="이름·생년월일·사번으로 찾기" emptyText="일치하는 직원이 없습니다" ariaLabel="직원" />
+          <Combobox value={picked ? pickLabel(picked) : ""} options={options} onSelect={(o) => pick(o.id)} placeholder="이름·생년월일로 찾기" emptyText="일치하는 직원이 없습니다" ariaLabel="직원" />
         </div>
         {b && (
           <label className="hr-sev-last">
@@ -206,8 +206,8 @@ export default function HrSeverancePage() {
           <div className="hr-print-head"><h1>퇴직금 산정서</h1><span>{e.workplace}</span></div>
           <table className="hr-print-table hr-sev-print">
             <tbody>
-              <tr><th>성명</th><td>{e.name}</td><th>사번</th><td>{e.emp_no}</td><th>생년월일</th><td>{e.birth_date || ""}</td></tr>
-              <tr><th>부서·직위</th><td>{[e.dept, e.position].filter(Boolean).join(" ")}</td><th>입사일</th><td>{e.hire_date}</td><th>마지막 근무일</th><td>{b.last_day}</td></tr>
+              <tr><th>성명</th><td>{e.name}</td><th>생년월일</th><td>{e.birth_date || ""}</td><th>부서·직위</th><td>{[e.dept, e.position].filter(Boolean).join(" ")}</td></tr>
+              <tr><th>입사일</th><td>{e.hire_date}</td><th>마지막 근무일</th><td>{b.last_day}</td><th>재직일수</th><td>{numText(view.serviceDays)}일</td></tr>
             </tbody>
           </table>
           <table className="hr-print-table hr-sev-print">

@@ -50,7 +50,7 @@ export async function fetchPayEmployees(month: string, workplaceId: string): Pro
   const { from, to } = monthRange(month);
   const { data, error } = await hrDb().from("employees").select(EMP_COLS)
     .eq("workplace_id", workplaceId).lte("hire_date", to).or(`leave_date.is.null,leave_date.gte.${from}`)
-    .order("emp_no").order("hire_date").order("name");
+    .order("hire_date").order("name");
   if (error) throw error;
   const rows = (data || []) as unknown as Row[];
   const wages = await wagesOf(rows.map((r) => String(r.id)));
@@ -118,8 +118,8 @@ export async function fetchPayroll(workplaceId: string, month: string): Promise<
     const result = r.result && typeof r.result === "object" && Array.isArray((r.result as PayResult).items) ? (r.result as PayResult) : null;
     return { employee_id: String(r.employee_id), inputs: (r.inputs || {}) as LineInputs, result, snapshot: (r.snapshot || {}) as SavedLine["snapshot"] };
   });
-  // 급여대장 순서: 사번 → 성명
-  lines.sort((a, b) => (a.snapshot.emp_no || "").localeCompare(b.snapshot.emp_no || "", "ko", { numeric: true }) || (a.snapshot.name || "").localeCompare(b.snapshot.name || "", "ko"));
+  // 급여대장 순서: 입사일 → 성명(작성 중인 달의 직원 순서와 같다. 사번은 쓰지 않는다)
+  lines.sort((a, b) => (a.snapshot.hire_date || "").localeCompare(b.snapshot.hire_date || "") || (a.snapshot.name || "").localeCompare(b.snapshot.name || "", "ko"));
   return { head, lines };
 }
 

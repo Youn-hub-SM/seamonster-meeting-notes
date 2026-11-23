@@ -4,7 +4,7 @@
 //  등록할 때 서버가 파일을 다시 읽어 다시 대조한다(미리보기 결과를 그대로 저장하지 않는다). 오류가 있는 줄은 넣지 않고 나머지를 넣는다.
 //  급여(blockOnError)는 다르다: 오류가 한 줄이라도 있으면 아무것도 넣지 않는다(한 달 급여는 한 묶음으로 저장된다).
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEscClose } from "@/app/lib/use-esc";
 import { numText } from "@/app/lib/hr";
 import { IMPORT_ACTION_LABEL, type ImportAction, type ImportReport } from "@/app/lib/hr-import";
@@ -22,39 +22,49 @@ function toBase64(file: File): Promise<string> {
 }
 
 export default function ExcelImport({
-  title, endpoint, extra, unit, applyWord, templateLabel, onTemplate, blockOnError, children, onClose, onDone,
+  title, endpoint, extra, unit, applyWord, templateLabel, onTemplate, blockOnError, initialFile, children, onClose, onDone,
 }: {
   blockOnError?: boolean;                        // 오류가 있으면 등록 버튼을 막는다(급여)
+  initialFile?: File | null;                     // 이미 고른 파일 — 창이 열리자마자 미리보기를 낸다(급여: 버튼을 누르면 바로 파일 고르기가 뜬다)
   title: string;
   endpoint: string;                              // POST { name, file, apply?, …extra }
   extra?: Record<string, unknown>;               // 달·사업장처럼 같이 보낼 값
   unit: string;                                  // "명" | "일"
   applyWord: string;                             // 버튼의 동사: "직원 3명 등록" 의 "등록"
-  templateLabel: string;
-  onTemplate: () => Promise<void>;
+  templateLabel?: string;                        // 양식 내려받기 단추(없으면 보이지 않는다 — 급여는 화면의 [엑셀 내려받기]가 그 양식이다)
+  onTemplate?: () => Promise<void>;
   children?: React.ReactNode;                    // 파일 위에 놓을 칸(사업장 고르기 등)
   onClose: () => void;
   onDone: (r: ImportReport) => void;             // 등록이 끝났을 때(목록 다시 읽기)
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(initialFile ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [report, setReport] = useState<ImportReport | null>(null);
   const [onlyIssues, setOnlyIssues] = useState(false);
   useEscClose(onClose, busy);
 
-  async function send(apply: boolean) {
-    if (!file) { setError("엑셀 파일을 고르세요."); return; }
+  async function send(apply: boolean, picked: File | null = file) {
+    if (!picked) { setError("엑셀 파일을 고르세요."); return; }
     setBusy(true); setError("");
     try {
-      const r = await hrApi<ImportReport>(endpoint, "POST", { ...(extra || {}), name: file.name, file: await toBase64(file), apply });
+      const r = await hrApi<ImportReport>(endpoint, "POST", { ...(extra || {}), name: picked.name, file: await toBase64(picked), apply });
       setReport(r);
       if (apply) onDone(r);
     } catch (e) { setError(errText(e, "엑셀을 올리지 못했습니다.")); }
     setBusy(false);
   }
+  // 파일을 들고 열린 창은 바로 미리보기를 낸다(한 번만)
+  const started = useRef(false);
+  useEffect(() => {
+    if (!initialFile || started.current) return;
+    started.current = true;
+    send(false, initialFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
   async function template() {
+    if (!onTemplate) return;
     setBusy(true); setError("");
     try { await onTemplate(); } catch (e) { setError(errText(e, "양식을 내려받지 못했습니다.")); }
     setBusy(false);
@@ -76,7 +86,7 @@ export default function ExcelImport({
         <div className="b2b-modal-body">
           {!done && (
             <div className="hr-import-pick">
-              <button type="button" className="b2b-btn-secondary" onClick={template} disabled={busy}>{templateLabel}</button>
+              {templateLabel && onTemplate && <button type="button" className="b2b-btn-secondary" onClick={template} disabled={busy}>{templateLabel}</button>}
               <button type="button" className="b2b-btn-secondary" onClick={() => fileRef.current?.click()} disabled={busy}>엑셀 파일 고르기</button>
               <input ref={fileRef} type="file" accept=".xlsx" hidden onChange={(e) => { setFile(e.target.files?.[0] ?? null); setReport(null); setError(""); e.target.value = ""; }} />
               {file && <span className="hr-import-file">{file.name}</span>}

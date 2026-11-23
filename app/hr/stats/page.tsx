@@ -15,8 +15,8 @@ import { HrApiError, errText, hrApi } from "../api";
 
 const won = (n: number) => numText(n);
 const laborCost = (a: CostAgg) => a.pay_total + a.employer;
-// 순위 막대의 이름표 — 같은 이름이 있어도 겹치지 않게 사번을 붙인다
-const who = (p: { name: string; emp_no: string }) => (p.emp_no ? `${p.name} (${p.emp_no})` : p.name);
+// 순위 막대의 이름표(사번은 쓰지 않는다 — 2026-11-23 대표)
+const who = (p: { name: string }) => p.name;
 
 export default function HrStatsPage() {
   return (

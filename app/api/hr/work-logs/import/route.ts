@@ -11,7 +11,7 @@ export const maxDuration = 60;
 // POST /api/hr/work-logs/import — 근무대장 엑셀 올리기(한 달)
 //   { month, name, file(base64 .xlsx) }  → 미리보기(직원마다 새로·고침·같음, 읽지 못한 줄)
 //   { …, apply: true }                  → 파일을 다시 읽어 대조한 뒤 저장
-//  양식 = 그 달의 [엑셀 내려받기] 파일(직원마다 한 시트). 한 시트에 사번·성명 칸이 있는 목록도 읽는다.
+//  양식 = 그 달의 [엑셀 내려받기] 파일(직원마다 한 시트). 한 시트에 성명 칸이 있는 목록도 읽는다.
 //  파일에 있는 날짜만 넣거나 고친다 — 파일에 없는 날은 지우지 않는다. 급여가 확정된 달은 넣지 않는다.
 export async function POST(req: NextRequest) {
   const who = await requireHr(req);

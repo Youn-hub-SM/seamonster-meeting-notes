@@ -20,7 +20,8 @@ type Data = {
 };
 type Tab = "active" | "left" | "uses" | "cal";
 type History = { id: number; at: string; actor: string; action: string; target_name: string; detail: Record<string, unknown> };
-const TAB_LABEL: Record<Tab, string> = { active: "재직", left: "퇴사", uses: "사용 내역", cal: "달력" };
+// 달력이 먼저다(2026-11-23 대표: "연차에서 달력을 메인으로") — 화면을 열면 달력이 보이고, 탭도 이 순서로 놓인다
+const TAB_LABEL: Record<Tab, string> = { cal: "달력", uses: "사용 내역", active: "재직", left: "퇴사" };
 const monthly = (t: Tab) => t === "uses" || t === "cal";   // 한 달 단위로 보는 탭(달 고르기가 보인다)
 const STATE_LABEL: Record<GrantView["state"], string> = { valid: "유효", expired: "기간 끝남", future: "시작 전", voided: "없던 것으로 함", minus: "빼는 건" };
 const ACTION_LABEL: Record<string, string> = {
@@ -34,7 +35,7 @@ export default function HrLeavePage() {
   const [d, setD] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<Tab>("active");
+  const [tab, setTab] = useState<Tab>("cal");
   const [wp, setWp] = useState("");
   const [q, setQ] = useState("");
   const [month, setMonth] = useState(() => todayKst().slice(0, 7));   // '사용 내역' 탭이 보는 달
@@ -79,7 +80,7 @@ export default function HrLeavePage() {
       const active = isActiveOn(e, d.today);
       if (tab === "active" ? !active : active) return false;
       if (wp && e.workplace_id !== wp) return false;
-      return !k || [e.name, e.emp_no, e.dept, e.position].some((v) => v.toLowerCase().includes(k));
+      return !k || [e.name, e.dept, e.position].some((v) => v.toLowerCase().includes(k));
     });
   }, [d, tab, wp, q]);
   // 사용 내역(그 달) — 날짜 순. 사업장·검색으로 좁힌다
@@ -88,7 +89,7 @@ export default function HrLeavePage() {
   const useRows = useMemo(() => {
     const k = q.trim().toLowerCase();
     return monthUses.map((u) => ({ u, e: empOf.get(u.employee_id)! }))
-      .filter(({ e }) => (!wp || e.workplace_id === wp) && (!k || [e.name, e.emp_no, e.dept, e.position].some((v) => v.toLowerCase().includes(k))))
+      .filter(({ e }) => (!wp || e.workplace_id === wp) && (!k || [e.name, e.dept, e.position].some((v) => v.toLowerCase().includes(k))))
       .sort((a, b) => a.u.work_date.localeCompare(b.u.work_date) || a.e.name.localeCompare(b.e.name, "ko"));
   }, [monthUses, empOf, wp, q]);
   const useDays = useMemo(() => useRows.reduce((s, r) => s + r.u.days, 0), [useRows]);
@@ -124,7 +125,7 @@ export default function HrLeavePage() {
     catch (err) { toast.error(errText(err, "이력을 불러오지 못했습니다.")); }
   }
 
-  const cols = 9 + (multiWp ? 1 : 0);
+  const cols = 8 + (multiWp ? 1 : 0);
 
   return (
     <div className="b2b-container">
@@ -162,7 +163,7 @@ export default function HrLeavePage() {
                 <button type="button" className="b2b-btn-secondary" onClick={() => setMonth(shiftMonth(month, 1))}>다음 달</button>
               </>
             )}
-            <input className="b2b-input hr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="성명·사번·부서 검색" />
+            <input className="b2b-input hr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="성명·부서 검색" />
           </div>
           {!monthly(tab) && <p className="hr-rule">일 단위. 발생·사용·잔여는 지금 쓸 수 있는 발생 건 기준이고, 곧 소멸은 60일 안에 끝나는 건의 남은 일수입니다.</p>}
 
@@ -176,7 +177,7 @@ export default function HrLeavePage() {
                 <table className="b2b-table hr-table">
                   <thead>
                     <tr>
-                      <th>날짜</th><th>요일</th>{multiWp && <th>사업장</th>}<th>사번</th><th>성명</th><th>부서</th><th>종류</th><th className="num">일수</th><th></th>
+                      <th>날짜</th><th>요일</th>{multiWp && <th>사업장</th>}<th>성명</th><th>부서</th><th>종류</th><th className="num">일수</th><th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -185,7 +186,6 @@ export default function HrLeavePage() {
                         <td>{u.work_date}</td>
                         <td>{WEEKDAYS[weekdayOf(u.work_date) - 1]}</td>
                         {multiWp && <td>{wpOf.get(e.workplace_id)?.name || ""}</td>}
-                        <td className="hr-mono">{e.emp_no}</td>
                         <td><strong>{e.name}</strong></td>
                         <td>{e.dept}</td>
                         <td>{leaveText(u.days, e.daily_hours)}</td>
@@ -194,7 +194,7 @@ export default function HrLeavePage() {
                       </tr>
                     ))}
                     <tr className="hr-pay-sum">
-                      <td colSpan={multiWp ? 7 : 6}>합계 {useRows.length}건</td>
+                      <td colSpan={multiWp ? 6 : 5}>합계 {useRows.length}건</td>
                       <td className="num">{dayText(useDays)}</td><td></td>
                     </tr>
                   </tbody>
@@ -209,7 +209,7 @@ export default function HrLeavePage() {
                 <thead>
                   <tr>
                     {multiWp && <th>사업장</th>}
-                    <th>사번</th><th>성명</th><th>입사일</th><th>기준</th><th className="num">발생</th><th className="num">사용</th><th className="num">잔여</th><th className="num">곧 소멸</th><th>확인할 것</th>
+                    <th>성명</th><th>입사일</th><th>기준</th><th className="num">발생</th><th className="num">사용</th><th className="num">잔여</th><th className="num">곧 소멸</th><th>확인할 것</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -228,7 +228,6 @@ export default function HrLeavePage() {
                         <tr onClick={() => setOpen(open === e.id ? null : e.id)} tabIndex={0} role="button" aria-expanded={open === e.id}
                           onKeyDown={(ev) => { if (ev.key === "Enter") setOpen(open === e.id ? null : e.id); }}>
                           {multiWp && <td>{w?.name || ""}</td>}
-                          <td className="hr-mono">{e.emp_no}</td>
                           <td><strong>{e.name}</strong></td>
                           <td>{e.hire_date}{e.leave_date ? ` ~ ${e.leave_date}` : ""}</td>
                           <td>{auto && w ? LEAVE_BASIS_LABEL[leaveBasisOf(e, w)] : !w?.five_plus ? "5인 미만 — 자동 발생 없음" : "주 15시간 미만 — 자동 발생 없음"}</td>
@@ -393,9 +392,9 @@ function historyText(detail: Record<string, unknown>): string {
   return parts.join(" · ");
 }
 
-// 직원 고르기 — 이름·생년월일·사번·부서를 쳐서 찾는다(초성도 된다: "ㄱㅅㅎ"). 같은 이름은 아래 줄의 생년월일로 가린다.
+// 직원 고르기 — 이름·생년월일·부서를 쳐서 찾는다(초성도 된다: "ㄱㅅㅎ"). 같은 이름은 아래 줄의 생년월일로 가린다.
 //  생년월일은 1990-01-01 · 19900101 · 900101 어느 모양으로 쳐도 찾힌다.
-const employeeLabel = (e: LeaveEmployee) => `${e.name}${e.emp_no ? ` (${e.emp_no})` : ""}${e.leave_date ? " · 퇴사" : ""}`;
+const employeeLabel = (e: LeaveEmployee) => `${e.name}${e.leave_date ? " · 퇴사" : ""}`;
 function EmployeePicker({ employees, value, onChange, invalid }: { employees: LeaveEmployee[]; value: string; onChange: (id: string) => void; invalid?: boolean }) {
   const options: ComboOption[] = useMemo(() => employees.map((e) => {
     const b = e.birth_date || "";
@@ -408,7 +407,7 @@ function EmployeePicker({ employees, value, onChange, invalid }: { employees: Le
   const picked = employees.find((e) => e.id === value);
   return (
     <Combobox value={picked ? employeeLabel(picked) : ""} options={options} onSelect={(o) => onChange(o.id)}
-      placeholder="이름·생년월일·사번으로 찾기" emptyText="일치하는 직원이 없습니다" ariaLabel="직원" invalid={invalid} />
+      placeholder="이름·생년월일로 찾기" emptyText="일치하는 직원이 없습니다" ariaLabel="직원" invalid={invalid} />
   );
 }
 

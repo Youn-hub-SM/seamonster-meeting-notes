@@ -42,7 +42,7 @@ export async function fetchLeaveWorkplaces(): Promise<LeaveWorkplace[]> {
 
 // 재직자와 최근 1년 안에 퇴사한 직원(employeeId 를 주면 그 한 명)
 export async function fetchLeaveEmployees(today: string, employeeId?: string): Promise<LeaveEmployee[]> {
-  let q = hrDb().from("employees").select(EMP_COLS).order("emp_no").order("hire_date").order("name");
+  let q = hrDb().from("employees").select(EMP_COLS).order("hire_date").order("name");
   if (employeeId) q = q.eq("id", employeeId);
   else q = q.or(`leave_date.is.null,leave_date.gte.${addDays(today, -365)}`);
   const { data, error } = await q;

@@ -337,7 +337,7 @@ function WorkSheet({ id }: { id: string }) {
       <div className="hr-print-only">
         <div className="hr-print-head">
           <h1>근무대장 {title}</h1>
-          <span>{workplace.name} · {employee.name}{employee.emp_no ? ` (${employee.emp_no})` : ""}{employee.dept ? ` · ${employee.dept}` : ""}{employee.position ? ` ${employee.position}` : ""}</span>
+          <span>{workplace.name} · {employee.name}{employee.dept ? ` · ${employee.dept}` : ""}{employee.position ? ` ${employee.position}` : ""}</span>
         </div>
         <table className="hr-print-table">
           <thead><tr><th>날짜</th><th>요일</th><th>종류</th><th>출근</th><th>퇴근</th><th>휴게(분)</th><th>근무 시간</th><th>야간</th><th>연장</th><th>연차</th><th>비고</th></tr></thead>

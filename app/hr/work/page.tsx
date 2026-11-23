@@ -112,7 +112,7 @@ function WorkList() {
                 <tr>
                   {multiWp && <th>사업장</th>}
                   {affNames.length > 0 && !aff && <th>소속</th>}
-                  <th>사번</th><th>성명</th><th className="num">근무 일수</th><th className="num">근무 시간</th><th className="num">연장</th>
+                  <th>성명</th><th className="num">근무 일수</th><th className="num">근무 시간</th><th className="num">연장</th>
                   <th className="num">야간</th><th className="num">휴일 근무</th><th className="num">주휴</th><th className="num">연차(일)</th><th className="num">결근</th><th className="num">입력 전</th>
                 </tr>
               </thead>
@@ -123,7 +123,6 @@ function WorkList() {
                     <tr key={e.id} onClick={() => router.push(href)} tabIndex={0} role="link" onKeyDown={(ev) => { if (ev.key === "Enter") router.push(href); }}>
                       {multiWp && <td>{wpName}</td>}
                       {affNames.length > 0 && !aff && <td>{e.affiliation || ""}</td>}
-                      <td className="hr-mono">{e.emp_no}</td>
                       <td><strong>{e.name}</strong>{e.pay_type === "monthly" && <span className="b2b-status-pill hr-pill-off" style={{ marginLeft: 8 }}>월급</span>}</td>
                       <td className="num">{s.workDays}</td>
                       <td className="num">{hoursText(s.worked)}</td>

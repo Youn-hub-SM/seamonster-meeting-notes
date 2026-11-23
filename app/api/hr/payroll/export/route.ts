@@ -9,6 +9,9 @@ import { fetchAffiliationOf } from "@/app/lib/hr-work-db";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// 엑셀의 '회계' 서식(기호 없음): 천 단위 구분, 음수는 앞에 −, 0 은 '-'
+const ACCOUNTING = '_-* #,##0_-;-* #,##0_-;_-* "-"_-;_-@_-';
+
 // POST /api/hr/payroll/export — 급여대장 엑셀. { workplace_id, month }
 //  저장된 줄을 그대로 내보낸다(작성 중이면 마지막으로 저장한 금액 — 화면은 저장한 뒤에만 내려받게 한다).
 //  이 파일이 [엑셀 올리기](/api/hr/payroll/import)의 양식이다 — 칸 이름을 바꾸면 hr-import.ts 의 급여대장 읽기도 같이 고친다.
@@ -35,7 +38,9 @@ export async function POST(req: NextRequest) {
       return [...seen];
     };
     const payX = extra("pay"), dedX = extra("deduct");
-    const head = ["사번", "성명", "생년월일", "입사일", "부서", "직위", "업무", "급여 형태", "시급·월급", "근무 일수", "근무 시간", "연장", "야간", "휴일 근무", "주휴 시간",
+    const TEXT_COLS = 7;   // 성명 · 생년월일 · 입사일 · 부서 · 직위 · 업무 · 급여 형태
+    const COUNT_COLS = 6;  // 근무 일수 · 근무 시간 · 연장 · 야간 · 휴일 근무 · 주휴 시간(일수·시간 — 돈이 아니다)
+    const head = ["성명", "생년월일", "입사일", "부서", "직위", "업무", "급여 형태", "시급·월급", "근무 일수", "근무 시간", "연장", "야간", "휴일 근무", "주휴 시간",
       ...SYSTEM_PAY.map((c) => SYSTEM_LABEL[c]), ...payX.map(([, n]) => n), "지급 합계", "비과세", "과세 급여",
       ...SYSTEM_DEDUCT.map((c) => SYSTEM_LABEL[c]), ...dedX.map(([, n]) => n), "공제 합계", "실수령액",
       "회사 국민연금", "회사 건강보험", "회사 장기요양", "회사 고용보험", "회사 산재보험", "비고"];
@@ -55,27 +60,31 @@ export async function POST(req: NextRequest) {
     ws.addRow(head);
     ws.getRow(2).font = { bold: true };
     ws.getRow(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
-    const numFrom = 9; // '시급·월급' 열부터 숫자
     const totals: number[] = [];
     for (const l of lines) {
       const s = l.snapshot, vals = rowOf(l.result!);
-      ws.addRow([s.emp_no || "", s.name || "", s.birth_date || "", s.hire_date || "", s.dept || "", s.position || "", s.job || "", ...vals, l.inputs?.memo || ""]);
+      ws.addRow([s.name || "", s.birth_date || "", s.hire_date || "", s.dept || "", s.position || "", s.job || "", ...vals, l.inputs?.memo || ""]);
       vals.forEach((v, i) => { if (typeof v === "number" && i >= 2) totals[i] = (totals[i] || 0) + v; });
     }
-    const sumRow = ws.addRow(["합계", `${lines.length}명`, "", "", "", "", "", "", "", ...Array.from({ length: rowOf(lines[0].result!).length - 2 }, (_, i) => Math.round((totals[i + 2] || 0) * 100) / 100), ""]);
+    // 합계 줄: 성명 칸에 '합계'([엑셀 올리기]가 이 글자로 합계 줄을 알아보고 건너뛴다), 그 옆에 인원
+    const sumRow = ws.addRow(["합계", `${lines.length}명`, "", "", "", "", "", "", ...Array.from({ length: rowOf(lines[0].result!).length - 2 }, (_, i) => Math.round((totals[i + 2] || 0) * 100) / 100), ""]);
     sumRow.font = { bold: true };
-    ws.columns.forEach((c, i) => { c.width = i === 1 ? 12 : i < 9 ? 11 : 13; if (i + 1 >= numFrom) c.numFmt = "#,##0.##"; });
-    ws.views = [{ state: "frozen", xSplit: 2, ySplit: 2 }];
+    // 숫자 서식: 돈은 회계(천 단위 구분·0 은 '-'), 일수·시간은 일반. '#,##0.##' 는 정수 뒤에 점이 남아(2,146,560.) 쓰지 않는다.
+    ws.columns.forEach((c, i) => {
+      c.width = i === 0 ? 12 : i < TEXT_COLS ? 11 : 14;
+      if (i === TEXT_COLS || (i > TEXT_COLS + COUNT_COLS && i < ws.columns.length - 1)) c.numFmt = ACCOUNTING;   // 끝 칸(비고)은 글이라 뺀다
+    });
+    ws.views = [{ state: "frozen", xSplit: 1, ySplit: 2 }];
 
     // 계산 방법 — 명세서에 찍히는 문장 그대로
     const cs = wb.addWorksheet("계산 방법");
-    cs.addRow(["사번", "성명", "구분", "항목", "금액", "계산 방법", "직접 고침"]);
+    cs.addRow(["성명", "구분", "항목", "금액", "계산 방법", "직접 고침"]);
     cs.getRow(1).font = { bold: true };
     for (const l of lines) for (const i of l.result!.items) {
       if (!i.amount && !i.edited) continue;
-      cs.addRow([l.snapshot.emp_no || "", l.snapshot.name || "", i.kind === "pay" ? "지급" : "공제", i.name, i.amount, i.calc, i.edited ? "예" : ""]);
+      cs.addRow([l.snapshot.name || "", i.kind === "pay" ? "지급" : "공제", i.name, i.amount, i.calc, i.edited ? "예" : ""]);
     }
-    cs.columns.forEach((c, i) => { c.width = i === 5 ? 70 : 13; if (i === 4) c.numFmt = "#,##0"; });
+    cs.columns.forEach((c, i) => { c.width = i === 4 ? 70 : 13; if (i === 3) c.numFmt = ACCOUNTING; });
 
     const buf = await wb.xlsx.writeBuffer();
     return new NextResponse(buf as ArrayBuffer, {

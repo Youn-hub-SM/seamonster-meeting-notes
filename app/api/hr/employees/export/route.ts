@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { readEmployees, toEmployee, wagesOf } from "@/app/lib/hr-employees";
 import { decryptRrn } from "@/app/lib/hr-crypto";
-import { PAY_TYPE_LABEL, currentWage, formatRrn, isActiveOn, todayKst, workDaysText } from "@/app/lib/hr";
+import { PAY_TYPE_LABEL, currentWage, formatRrn, hasLeftOn, todayKst, workDaysText } from "@/app/lib/hr";
 import { EMP_XLSX_LABELS, INS_BASIS_TEXT, LEAVE_BASIS_TEXT } from "@/app/lib/hr-import";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error;
     const today = todayKst();
     const rows = ((data || []) as unknown as Row[]).filter((r) => {
-      const active = isActiveOn({ hire_date: String(r.hire_date), leave_date: (r.leave_date as string) || null }, today);
+      const active = !hasLeftOn({ leave_date: (r.leave_date as string) || null }, today);   // 화면의 [재직] 탭과 같은 기준(입사 예정 포함)
       if (affiliation && String(r.affiliation ?? "") !== affiliation) return false;
       return status === "all" ? true : status === "active" ? active : !active;
     });
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       const w = currentWage(e.wages);
       const rrn = full && r.rrn_enc ? formatRrn(decryptRrn(String(r.rrn_enc))) : e.rrn_masked;
       const cells: Record<string, string | number> = {
-        "사업장": wpName.get(e.workplace_id) || "", "소속": e.affiliation, "사번": e.emp_no, "성명": e.name, "주민등록번호": rrn, "생년월일": e.birth_date || "", "성별": e.gender,
+        "사업장": wpName.get(e.workplace_id) || "", "소속": e.affiliation, "성명": e.name, "주민등록번호": rrn, "생년월일": e.birth_date || "", "성별": e.gender,
         "주소": e.address, "연락처": e.phone, "비상 연락처": e.emergency, "입사일": e.hire_date, "퇴사일": e.leave_date || "", "퇴사 사유": e.leave_reason,
         "부서": e.dept, "직위": e.position, "업무": e.job, "고용 형태": e.emp_type, "계약 시작": e.contract_start || "", "계약 종료": e.contract_end || "",
         "급여 형태": PAY_TYPE_LABEL[e.pay_type], "시급": w?.hourly_wage ?? 0, "월급": w?.monthly_wage ?? 0, "임금 적용 시작일": w?.effective_from || "",
