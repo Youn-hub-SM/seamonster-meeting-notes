@@ -52,6 +52,17 @@
 .crm-link-ext { color: var(--sm-text-mid); }
 .crm-field-num { max-width: 140px; }
 .crm-ga-line { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
+/* 데이터라이즈 — 점검 창과 드로어의 실제 소재(2026-11-24) */
+.b2b-modal.crm-dz-modal { max-width: 920px; }
+.crm-dz-table { flex-shrink: 0; }
+.crm-dz-name { white-space: normal; min-width: 160px; line-height: var(--sm-lh-body); }
+.crm-dz-utm { white-space: normal; font-family: var(--sm-mono); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); overflow-wrap: anywhere; }
+.crm-dz-creative { display: flex; flex-direction: column; gap: var(--sm-space-2); padding: var(--sm-space-3); border: 1px solid var(--sm-border); border-radius: 8px; }
+.crm-dz-creative-head { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; }
+.crm-dz-creative-name { font-weight: 500; overflow-wrap: anywhere; }
+.crm-dz-creative-title { font-weight: 500; }
+.crm-dz-creative-msg { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); padding: var(--sm-space-3); background: var(--sm-bg-subtle); border-radius: 8px; max-height: 240px; overflow-y: auto; }
+.crm-dz-btn { overflow-wrap: anywhere; }
 .crm-active-check { font-size: var(--sm-fs-base); cursor: pointer; display: flex; align-items: center; gap: var(--sm-space-2); }
 
 /* 여정 — D+n(세로) × 트리거(가로) 타임라인 (2026-11-09 축 교체) */

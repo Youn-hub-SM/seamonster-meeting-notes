@@ -10,7 +10,7 @@ import { isTrackedUrl } from "@/app/lib/utm-rules";
 import { qty, wonText } from "@/app/lib/format";
 import type { Labels } from "./types";
 
-type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; targetCtr: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sent: (number | null)[]; sessions: (number | null)[]; purchases: (number | null)[]; revenue: (number | null)[]; ctr: (number | null)[] };
+type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; targetCtr: number | null; sentBasis: "solapi" | "datarize" | "manual" | "estimate" | "none"; sent: (number | null)[]; sessions: (number | null)[]; purchases: (number | null)[]; revenue: (number | null)[]; ctr: (number | null)[] };
 type Resp = { ok: boolean; error?: string; weeks: string[]; row: HistoryRow | null; total: { sent: number[]; sessions: (number | null)[]; ctr: (number | null)[] }; note: string; daily: { date: string; sessions: number; purchases: number; revenue: number }[]; weekday: number[]; byTerm: { term: string; sessions: number; purchases: number; revenue: number }[] };
 
 const SEL_KEY = "crm.msg";
@@ -21,7 +21,7 @@ const sum = (xs: (number | null)[]) => xs.reduce<number>((a, b) => a + (b ?? 0),
 const hasAny = (xs: (number | null)[]) => xs.some((x) => x != null);
 const diffPoint = (cur: number | null | undefined, prev: number | null | undefined): string => (cur == null || prev == null ? "" : `${cur >= prev ? "+" : ""}${(Math.round((cur - prev) * 10) / 10).toFixed(1)}%p`);
 const tone = (cur: number | null, base: number | null) => (cur == null || base == null ? undefined : cur >= base ? "var(--sm-success)" : "var(--sm-danger)");
-const SENT_BASIS: Record<HistoryRow["sentBasis"], string> = { solapi: "솔라피 실제", manual: "직접 입력", estimate: "추정(매출 원장 대상자)", none: "발송 수 없음" };
+const SENT_BASIS: Record<HistoryRow["sentBasis"], string> = { solapi: "솔라피 실제", datarize: "데이터라이즈 실제", manual: "직접 입력", estimate: "추정(매출 원장 대상자)", none: "발송 수 없음" };
 
 export default function MessageView({ msgs, labels, onOpen }: { msgs: CrmMessage[]; labels: Labels; onOpen: (m: CrmMessage) => void }) {
   // 드롭다운 순서 = 목록과 같게(단계 번호 → 단계 이름 → 정렬 순서)

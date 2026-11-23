@@ -14,10 +14,10 @@ type SourceDef = { key: string; label: string; how: "csv" | "api" | "manual" };
 type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; label: string; sent: number; clicked: number | null; days: number }[] };
 type GaRow = { medium: string; sessions: number; purchases: number; revenue: number };
 type StatRow = { id: string; source: string; grain: "day" | "week"; date: string; template: string; sent: number; clicked: number | null; cost: number | null; note: string; batch: string };
-type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; aliases?: string[]; triggerText: string; sent: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null };
+type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; aliases?: string[]; triggerText: string; dzClicks?: number | null; cost?: number | null; sent: number | null; sentBasis: "solapi" | "datarize" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null };
 type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; aliases?: string[]; targetCtr: number | null; sentBasis: TrackedRow["sentBasis"]; sent: (number | null)[]; sessions: (number | null)[]; ctr: (number | null)[] };
 type History = { weeks: string[]; rows: HistoryRow[]; total: { sent: number[]; sessions: (number | null)[]; ctr: (number | null)[] }; note: string };
-type Resp = { ok: boolean; error?: string; week: string; until: string; sources: WeeklySource[]; rows: StatRow[]; ga: GaRow[] | null; gaNote: string; trend: { week: string; bySource: Record<string, number> }[]; tracked: TrackedRow[]; trackedNote: string; history?: History | null; sourceDefs: SourceDef[]; solapi: boolean };
+type Resp = { ok: boolean; error?: string; week: string; until: string; sources: WeeklySource[]; rows: StatRow[]; ga: GaRow[] | null; gaNote: string; trend: { week: string; bySource: Record<string, number> }[]; tracked: TrackedRow[]; trackedNote: string; history?: History | null; sourceDefs: SourceDef[]; solapi: boolean; datarize?: boolean };
 
 const fmtDate = (iso: string) => iso.slice(5).replace("-", "/");
 const pct = (a: number | null, b: number) => (a == null || !b ? "-" : `${((a / b) * 100).toFixed(1)}%`);
@@ -58,6 +58,17 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
   useEffect(() => { load(week); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   const go = (n: number) => load(shiftDays(week, 7 * n));
 
+  // 데이터라이즈 — 보고 있는 주까지 12주를 한 번에(다시 가져오면 덮어쓴다). 주간 표와 12주 이력이 함께 채워진다.
+  const syncDatarize = async () => {
+    setBusy("datarize");
+    try {
+      const j = await fetch("/api/crm/datarize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ since: shiftDays(week, -77), until: data?.until && data.until < kstToday() ? data.until : kstToday() }) }).then((r) => r.json());
+      if (!j.ok) throw new Error(j.error || "데이터라이즈에서 가져오지 못했습니다. 잠시 뒤 다시 누르세요");
+      toast.success(`데이터라이즈 ${j.since}~${j.until}: 발송 ${qtyText(j.sends, "건")} → ${qtyText(j.rows, "줄")} 저장`);
+      await load(week);
+    } catch (e) { toast.error(e instanceof Error ? e.message : "데이터라이즈에서 가져오지 못했습니다. 잠시 뒤 다시 누르세요"); }
+    finally { setBusy(""); }
+  };
   const syncSolapi = async () => {
     setBusy("solapi");
     try {
@@ -143,6 +154,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
           <button className="sm-tab" onClick={() => go(1)} disabled={loading || week >= kstToday()} aria-label="다음 주">다음 주</button>
         </div>
         <span className="crm-bar-spacer" />
+        {data?.datarize && <button className="b2b-btn-secondary" onClick={syncDatarize} disabled={!!busy}>{busy === "datarize" ? "가져오는 중..." : "데이터라이즈 가져오기"}</button>}
         {data?.solapi && <button className="b2b-btn-secondary" onClick={syncSolapi} disabled={!!busy}>{busy === "solapi" ? "가져오는 중..." : "솔라피 가져오기"}</button>}
         <button className="b2b-btn-secondary" onClick={() => setShowAdd(true)}>발송 기록 입력</button>
       </div>
@@ -204,7 +216,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
                     <td className="crm-title-cell"><div>{t.title}</div><span className="crm-sub" title={t.aliases?.length ? `이전 이름: ${t.aliases.join(", ")}` : undefined}>{[t.stage, t.customer, t.campaign + (t.aliases?.length ? ` +${t.aliases.length}` : "")].filter(Boolean).join(" · ")}</span></td>
                     <td className="crm-cell-nowrap">{t.medium || "-"}</td>
                     <td>{(() => { const [head, ...rest] = (t.triggerText || "").split(" · "); return <><span className="crm-cell-nowrap">{head || "-"}</span>{rest.length > 0 && <span className="crm-sub crm-trig-note" title={rest.join(" · ")}>{rest.join(" · ")}</span>}</>; })()}</td>
-                    <td className="num" title={t.sentNote}>{t.sent == null ? "-" : qty(t.sent)}{t.sentBasis === "estimate" && <span className="crm-sub">추정</span>}</td>
+                    <td className="num" title={[t.sentNote, t.dzClicks != null ? `데이터라이즈 클릭 ${qty(t.dzClicks)}` : "", t.cost ? `발송 비용 ${qty(Math.round(t.cost))}원` : ""].filter(Boolean).join(" · ")}>{t.sent == null ? "-" : qty(t.sent)}{t.sentBasis === "estimate" && <span className="crm-sub">추정</span>}</td>
                     <td className="num">{t.sessions == null ? "-" : qty(t.sessions)}</td>
                     <td className="num" style={{ color: tone, fontWeight: tone ? 600 : undefined }}>{t.ctr == null ? "-" : `${t.ctr}%`}{t.targetCtr != null && <span className="crm-sub">목표 {t.targetCtr}%</span>}</td>
                     <td className="num">{t.purchases == null ? "-" : qty(t.purchases)}</td>
@@ -267,11 +279,11 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
               <tr key={r.id}>
                 <td className="crm-cell-nowrap">{r.date}{r.grain === "week" ? " 주" : ""}</td>
                 <td>{defs.find((d) => d.key === r.source)?.label || r.source}</td>
-                <td className="crm-ellipsis" title={r.template}>{r.batch === "solapi-sync" && r.note ? r.note.split(" · ")[0] : (r.template || "-")}</td>
+                <td className="crm-ellipsis" title={r.template}>{(r.batch === "solapi-sync" || r.batch === "datarize-sync") && r.note ? r.note.split(" · ")[0] : (r.template || "-")}</td>
                 <td className="num">{qty(r.sent)}</td>
                 <td className="num">{r.clicked == null ? "-" : qty(r.clicked)}</td>
                 <td className="sm-faint">{r.note || ""}</td>
-                <td className="sm-faint">{r.batch === "solapi-sync" ? "솔라피 API" : r.batch === "manual" ? "직접 입력" : r.batch || "-"}</td>
+                <td className="sm-faint">{r.batch === "solapi-sync" ? "솔라피 API" : r.batch === "datarize-sync" ? "데이터라이즈 API" : r.batch === "manual" ? "직접 입력" : r.batch || "-"}</td>
                 <td><button className="b2b-link-btn" onClick={() => remove(r.id)}>삭제</button></td>
               </tr>
             ))}</tbody>

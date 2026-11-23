@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     try { tracked = (await trackedMessages(week, w.until, w.rows)).tracked; } catch (e) { trackedNote = e instanceof Error ? e.message : "추적 메시지 집계 실패"; }
     let history: Awaited<ReturnType<typeof trackedHistory>>;
     try { history = await trackedHistory(week, 12); } catch (e) { history = { weeks: [], rows: [], total: { sent: [], sessions: [], ctr: [] }, note: e instanceof Error ? e.message : "주간 이력 집계 실패" }; }
-    return NextResponse.json({ ok: true, ...w, ga, gaNote, trend, tracked, trackedNote, history, sources: w.sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured() });
+    return NextResponse.json({ ok: true, ...w, ga, gaNote, trend, tracked, trackedNote, history, sources: w.sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured(), datarize: !!(process.env.DATARIZE_API_KEY || "").trim() });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }

@@ -6,6 +6,7 @@ import { CRM_STATUSES, CRM_TRIGGERS, CRM_CAMPAIGN_ALIASES, statusKey, type CrmMe
 import { CRM_MEDIA, isTrackedUrl, parseUtm } from "@/app/lib/utm-rules";
 import { qty, wonText } from "@/app/lib/format";
 import type { GaStat, Labels } from "./types";
+import { DatarizeCreatives } from "./DatarizeCheck";
 
 export default function Drawer({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported, triggersSupported, solapiTpls, opts, labels, ga, stageNames }: {
   data: CrmMessageInput; onChange: (d: CrmMessageInput) => void; onClose: () => void;
@@ -113,6 +114,9 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
             {!aliasText && (CRM_CAMPAIGN_ALIASES[(data.links.utm_campaign || "").trim()] || []).length > 0 && <div className="crm-ga-line">기본 별칭 적용 중: {CRM_CAMPAIGN_ALIASES[(data.links.utm_campaign || "").trim()].join(", ")}</div>}
             {ga && <div className="crm-ga-line">GA 90일 · 세션 {qty(ga.sessions)} · 구매 {qty(ga.purchases)}{ga.revenue ? ` · ${wonText(ga.revenue)}` : ""}</div>}
           </section>
+
+          {/* 저장된 메시지의 utm_campaign 으로 데이터라이즈에서 지금 나가는 소재 — 맵에 적은 문구와 실제를 견준다 */}
+          {data.id && <DatarizeCreatives messageId={data.id} campaign={data.links.utm_campaign || ""} />}
 
           {triggersSupported && (
             <section className="crm-sec">

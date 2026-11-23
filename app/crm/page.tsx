@@ -18,6 +18,7 @@ import JourneyView from "./JourneyView";
 import WeeklyStats from "./WeeklyStats";
 import MessageView from "./MessageView";
 import Drawer from "./Drawer";
+import DatarizeCheck from "./DatarizeCheck";
 import type { Channel, GaStat, GaState, Labels, Stage } from "./types";
 
 const VIEW_KEY = "crm.view";
@@ -46,6 +47,7 @@ export default function CrmPage() {
   const [ga, setGa] = useState<GaState | null>(null);
   const [opts, setOpts] = useState<CrmOptions>(DEFAULT_CRM_OPTIONS);
   const [showOpts, setShowOpts] = useState(false);
+  const [showDz, setShowDz] = useState(false); // 데이터라이즈 점검 창(맵과 실제의 차이)
   const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
@@ -157,6 +159,7 @@ export default function CrmPage() {
           <button className="b2b-btn-primary" onClick={() => openNew()}>메시지 추가</button>
           <button className="b2b-btn-secondary" onClick={() => setShowImport(true)}>엑셀로 가져오기</button>
           {messages.length > 0 && <a className="b2b-btn-secondary crm-xlsx-btn" href="/api/crm/export">엑셀 내려받기</a>}
+          <button className="b2b-btn-secondary" onClick={() => setShowDz(true)}>데이터라이즈 점검</button>
           <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리하기</button>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "다시 불러오기"}</button>
         </div>
@@ -211,6 +214,7 @@ export default function CrmPage() {
           datesSupported={datesSupported} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} solapiTpls={solapiTpls} opts={opts} labels={labels} ga={gaForEdit} stageNames={stageNames} />
       )}
       {showImport && <ImportModal onClose={() => setShowImport(false)} onDone={() => { load(); }} />}
+      {showDz && <DatarizeCheck onClose={() => setShowDz(false)} onOpenMessage={(id) => { const m = messages.find((x) => x.id === id); if (m) { setShowDz(false); openEdit(m); } }} />}
       {showOpts && <OptionsModal current={opts} onClose={() => setShowOpts(false)} onSaved={(o) => { setOpts(o); setShowOpts(false); }} />}
     </div>
   );
