@@ -226,7 +226,7 @@ function Work({ d, onMonth }: { d: MeBundle; onMonth: (m: string) => void }) {
             {a.logs.map((x) => (
               <li key={x.work_date}>
                 <div>
-                  <span>{md(x.work_date)} ({WEEKDAYS[weekdayOf(x.work_date) - 1]}) · {WORK_KIND_LABEL[x.kind]}{x.leave_days > 0 && x.kind === "work" ? ` · ${x.leave_days === 0.5 ? "반차" : "반반차"}` : ""}</span>
+                  <span>{md(x.work_date)} ({WEEKDAYS[weekdayOf(x.work_date) - 1]}) · {WORK_KIND_LABEL[x.kind]}{x.leave_days > 0 && x.kind === "work" ? ` · ${x.leave_days === 0.5 ? "반차" : x.leave_days === 0.25 ? "반반차" : `연차 ${dayText(x.leave_days)}일`}` : ""}</span>
                   {x.start_time && x.end_time && <small>{x.start_time} ~ {x.end_time}{x.night_hours > 0 ? ` · 야간 ${hoursText(x.night_hours)}시간` : ""}</small>}
                 </div>
                 <b>{x.hours > 0 ? `${hoursText(x.hours)}시간` : x.leave_days > 0 ? `${dayText(x.leave_days)}일` : ""}</b>

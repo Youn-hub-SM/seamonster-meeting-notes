@@ -255,8 +255,8 @@ export function normalizeLog(raw: Partial<WorkLog> & { work_date: string }): { o
 
   if (kind === "paid_holiday" || kind === "absent" || kind === "unpaid") return { ok: true, log: base };
   if (kind === "leave") {
-    const part = Number(raw.leave_days) || 1;
-    if (![0.25, 0.5, 1].includes(part)) return { ok: false, error: "연차는 1·0.5·0.25일" };
+    const part = round4(Number(raw.leave_days) || 1);
+    if (!(part > 0 && part <= 1)) return { ok: false, error: "연차는 하루 이하" };
     return { ok: true, log: { ...base, leave_days: part } };
   }
   // 근무·휴일 근무
@@ -276,8 +276,8 @@ export function normalizeLog(raw: Partial<WorkLog> & { work_date: string }): { o
   if (hours > 24) return { ok: false, error: "근무 시간은 24시간 이하" };
   if (!Number.isFinite(night)) night = 0;
   if (night < 0) return { ok: false, error: "야간 시간은 0 이상" };
-  const part = kind === "work" ? Number(raw.leave_days) || 0 : 0;
-  if (![0, 0.25, 0.5].includes(part)) return { ok: false, error: "근무한 날의 연차는 반차·반반차만" };
+  const part = kind === "work" ? round4(Number(raw.leave_days) || 0) : 0;
+  if (!(part >= 0 && part < 1)) return { ok: false, error: "근무한 날의 연차는 하루보다 적어야 합니다" };
   return {
     ok: true,
     log: { ...base, start_time: s || null, end_time: en || null, break_min: s ? breakMin : 0, hours: round2(hours), night_hours: round2(Math.min(night, hours)), leave_days: part },
@@ -285,3 +285,16 @@ export function normalizeLog(raw: Partial<WorkLog> & { work_date: string }): { o
 }
 
 export const hoursText = (n: number | null | undefined): string => (n ? String(round2(n)) : "0");
+
+// 연차 일수는 소수 넷째 자리까지(시간 단위 연차 = 시간 ÷ 하루 소정근로시간 — hr/009)
+export const round4 = (n: number): number => Math.round((Number(n) || 0) * 10000) / 10000;
+// 연차 n시간 → 일수. 하루 소정근로시간 이상이면 1일.
+export const leaveDaysOf = (hours: number, dailyHours: number): number => (dailyHours > 0 ? Math.min(1, round4(hours / dailyHours)) : 0);
+// 그날 쓴 연차를 글로: 하루 = "연차", 그보다 적으면 "2시간"(하루 소정근로시간을 모르면 "0.25일"). 없으면 "".
+export function leaveText(days: number | null | undefined, dailyHours?: number | null): string {
+  const d = Number(days) || 0;
+  if (!(d > 0)) return "";
+  if (d >= 1) return "연차";
+  const h = dailyHours && dailyHours > 0 ? round2(d * dailyHours) : 0;
+  return h > 0 ? `${hoursText(h)}시간` : `${round2(d)}일`;
+}

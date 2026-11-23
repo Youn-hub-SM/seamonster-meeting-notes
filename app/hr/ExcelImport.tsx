@@ -1,7 +1,8 @@
 "use client";
 
-// 엑셀 올리기 창 — 인사대장·근무대장이 같이 쓴다. 양식 내려받기 → 파일 고르기 → 미리보기(줄마다 새로·고침·같음·오류) → 등록.
+// 엑셀 올리기 창 — 인사대장·근무대장·급여가 같이 쓴다. 양식 내려받기 → 파일 고르기 → 미리보기(줄마다 새로·고침·같음·오류) → 등록.
 //  등록할 때 서버가 파일을 다시 읽어 다시 대조한다(미리보기 결과를 그대로 저장하지 않는다). 오류가 있는 줄은 넣지 않고 나머지를 넣는다.
+//  급여(blockOnError)는 다르다: 오류가 한 줄이라도 있으면 아무것도 넣지 않는다(한 달 급여는 한 묶음으로 저장된다).
 
 import { useRef, useState } from "react";
 import { useEscClose } from "@/app/lib/use-esc";
@@ -21,8 +22,9 @@ function toBase64(file: File): Promise<string> {
 }
 
 export default function ExcelImport({
-  title, endpoint, extra, unit, applyWord, templateLabel, onTemplate, children, onClose, onDone,
+  title, endpoint, extra, unit, applyWord, templateLabel, onTemplate, blockOnError, children, onClose, onDone,
 }: {
+  blockOnError?: boolean;                        // 오류가 있으면 등록 버튼을 막는다(급여)
   title: string;
   endpoint: string;                              // POST { name, file, apply?, …extra }
   extra?: Record<string, unknown>;               // 달·사업장처럼 같이 보낼 값
@@ -60,6 +62,7 @@ export default function ExcelImport({
 
   const done = !!report?.applied;
   const todo = report ? report.counts.create + report.counts.update : 0;
+  const blocked = !!blockOnError && !!report && report.counts.error > 0;
   const issues = (report?.lines || []).filter((l) => l.errors.length > 0 || l.warns.length > 0);
   const lines = onlyIssues ? issues : report?.lines || [];
 
@@ -114,7 +117,7 @@ export default function ExcelImport({
                           <td className="hr-import-note">
                             {l.errors.map((m, k) => <div key={`e${k}`} className="hr-bad">{m}</div>)}
                             {l.warns.map((m, k) => <div key={`w${k}`}>{m}</div>)}
-                            {l.notes.map((m, k) => <div key={`n${k}`} className="sm-faint">{m}</div>)}
+                            {l.notes.map((m, k) => <div key={`n${k}`} className="sm-muted">{m}</div>)}
                           </td>
                         </tr>
                       ))}
@@ -132,7 +135,7 @@ export default function ExcelImport({
                 <button type="button" className="b2b-btn-secondary" onClick={onClose} disabled={busy}>그만두기</button>
                 {!report
                   ? <button type="button" className="b2b-btn-primary" onClick={() => send(false)} disabled={busy || !file}>{busy ? "읽는 중..." : "미리보기"}</button>
-                  : <button type="button" className="b2b-btn-primary" onClick={() => send(true)} disabled={busy || todo === 0}>{busy ? "넣는 중..." : `${numText(todo)}${unit} ${applyWord}`}</button>}
+                  : <button type="button" className="b2b-btn-primary" onClick={() => send(true)} disabled={busy || todo === 0 || blocked}>{busy ? "넣는 중..." : `${numText(todo)}${unit} ${applyWord}`}</button>}
               </>
             )}
           </div>

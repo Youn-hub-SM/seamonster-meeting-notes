@@ -9,7 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { WEEKDAYS, todayKst } from "@/app/lib/hr";
 import {
-  LEAVE_PART_LABEL, WORK_KINDS, WORK_KIND_LABEL, defaultLog, hoursFromTimes, hoursText, isMonth, monthRange, normalizeLog,
+  LEAVE_PART_LABEL, WORK_KINDS, WORK_KIND_LABEL, defaultLog, hoursFromTimes, hoursText, isMonth, leaveText, monthRange, normalizeLog,
   shiftMonth, summarizeMonth, weekdayOf,
   type RosterEmployee, type RosterLog, type RosterWorkplace, type WorkKind, type WorkLog,
 } from "@/app/lib/hr-work";
@@ -35,6 +35,12 @@ function toRaw(date: string, d: Draft): Partial<WorkLog> & { work_date: string }
   };
 }
 const isWorking = (k: Draft["kind"]) => k === "work" || k === "holiday_work";
+// 연차 칸의 고르기: 반차·반반차에 더해, 연차 화면에서 시간으로 넣은 값(예: 0.375 = 3시간)이 있으면 그 값도 한 칸으로 보인다(없애지 않게)
+function leaveOptions(base: string[], cur: string, dailyHours: number): [string, string][] {
+  const out: [string, string][] = base.map((v) => [v, LEAVE_PART_LABEL[v]]);
+  if (cur && !base.includes(cur) && Number(cur) > 0) out.push([cur, leaveText(Number(cur), dailyHours)]);
+  return out;
+}
 const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
 
 export default function HrWorkSheetPage({ params }: { params: Promise<{ id: string }> }) {
@@ -134,7 +140,7 @@ function WorkSheet({ id }: { id: string }) {
     if (isWorking(kind)) {
       // 시간이 비어 있으면 평소 근무로 채운다
       const base = cur.hours || cur.start ? cur : fromLog(defaultLog(employee, date));
-      edit(date, { ...base, kind, leave: kind === "work" && ["0.25", "0.5"].includes(cur.leave) ? cur.leave : "0", memo: cur.memo });
+      edit(date, { ...base, kind, leave: kind === "work" && Number(cur.leave) > 0 && Number(cur.leave) < 1 ? cur.leave : "0", memo: cur.memo });
     } else if (kind === "leave") edit(date, { ...EMPTY, kind, leave: "1", memo: cur.memo });
     else edit(date, { ...EMPTY, kind, memo: cur.memo });
   }
@@ -300,11 +306,11 @@ function WorkSheet({ id }: { id: string }) {
                       <td>
                         {row.kind === "work" ? (
                           <select className="b2b-input hr-w-leave" value={row.leave} aria-label={`${md(d)} 연차`} onChange={(e) => edit(d, { leave: e.target.value })}>
-                            {["0", "0.25", "0.5"].map((v) => <option key={v} value={v}>{LEAVE_PART_LABEL[v]}</option>)}
+                            {leaveOptions(["0", "0.25", "0.5"], row.leave, employee.daily_hours).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                           </select>
                         ) : row.kind === "leave" ? (
                           <select className="b2b-input hr-w-leave" value={row.leave} aria-label={`${md(d)} 연차`} onChange={(e) => edit(d, { leave: e.target.value })}>
-                            {["1", "0.5", "0.25"].map((v) => <option key={v} value={v}>{LEAVE_PART_LABEL[v]}</option>)}
+                            {leaveOptions(["1", "0.5", "0.25"], row.leave, employee.daily_hours).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                           </select>
                         ) : null}
                       </td>
@@ -345,7 +351,7 @@ function WorkSheet({ id }: { id: string }) {
                   <td>{l?.start_time || ""}</td><td>{l?.end_time || ""}</td><td>{l?.start_time ? l.break_min : ""}</td>
                   <td>{l?.hours ? hoursText(l.hours) : ""}</td><td>{l?.night_hours ? hoursText(l.night_hours) : ""}</td>
                   <td>{summary.overtimeByDay[d] ? hoursText(summary.overtimeByDay[d]) : ""}</td>
-                  <td>{l?.leave_days ? LEAVE_PART_LABEL[String(l.leave_days)] : ""}</td><td>{l?.memo || ""}</td>
+                  <td>{l?.leave_days ? LEAVE_PART_LABEL[String(l.leave_days)] || leaveText(l.leave_days, employee.daily_hours) : ""}</td><td>{l?.memo || ""}</td>
                 </tr>,
                 week && <tr key={`${d}-week`} className="hr-print-week"><td colSpan={11}>{weekText(week)}   {weeklyText(week)}</td></tr>,
               ];

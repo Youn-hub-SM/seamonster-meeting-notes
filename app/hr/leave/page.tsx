@@ -9,7 +9,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
 import { LEAVE_BASIS_LABEL, WEEKDAYS, isActiveOn, isDate, todayKst } from "@/app/lib/hr";
-import { isMonth, shiftMonth, weekdayOf } from "@/app/lib/hr-work";
+import { hoursText, isMonth, leaveText, monthRange, shiftMonth, weekdayOf } from "@/app/lib/hr-work";
 import { GRANT_KIND_LABEL, dayText, leaveBasisOf, partTimeFactor, summarizeLeave, type GrantView, type LeaveEmployee, type LeaveGrant, type LeaveSummary, type LeaveUse, type LeaveWorkplace } from "@/app/lib/hr-leave";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";   // 업무도우미와 같이 쓰는 검색 고르기(화면 부품일 뿐 — 자료에는 닿지 않는다)
 import { HrApiError, errText, hrApi } from "../api";
@@ -18,11 +18,11 @@ type Data = {
   today: string; workplaces: LeaveWorkplace[]; employees: LeaveEmployee[]; grants: LeaveGrant[]; uses: LeaveUse[];
   compare: Record<string, { hire: number; fiscal: number; short: number }>; added: number;
 };
-type Tab = "active" | "left" | "uses";
+type Tab = "active" | "left" | "uses" | "cal";
 type History = { id: number; at: string; actor: string; action: string; target_name: string; detail: Record<string, unknown> };
-const TAB_LABEL: Record<Tab, string> = { active: "재직", left: "퇴사", uses: "사용 내역" };
+const TAB_LABEL: Record<Tab, string> = { active: "재직", left: "퇴사", uses: "사용 내역", cal: "달력" };
+const monthly = (t: Tab) => t === "uses" || t === "cal";   // 한 달 단위로 보는 탭(달 고르기가 보인다)
 const STATE_LABEL: Record<GrantView["state"], string> = { valid: "유효", expired: "기간 끝남", future: "시작 전", voided: "없던 것으로 함", minus: "빼는 건" };
-const PART_LABEL: Record<string, string> = { "1": "연차", "0.5": "반차", "0.25": "반반차" };
 const ACTION_LABEL: Record<string, string> = {
   leave_auto: "자동 발생", leave_grant: "연차 추가", leave_grant_update: "발생 건 수정", leave_grant_delete: "발생 건 삭제", leave_use: "사용 등록", leave_use_cancel: "사용 취소",
 };
@@ -94,14 +94,14 @@ export default function HrLeavePage() {
   const useDays = useMemo(() => useRows.reduce((s, r) => s + r.u.days, 0), [useRows]);
 
   const counts = useMemo(() => {
-    const c = { active: 0, left: 0, uses: monthUses.length };
+    const c: Partial<Record<Tab, number>> & { active: number; left: number } = { active: 0, left: 0, uses: monthUses.length };
     for (const e of d?.employees || []) c[isActiveOn(e, d!.today) ? "active" : "left"]++;
     return c;
   }, [d, monthUses]);
   const multiWp = (d?.workplaces.length || 0) > 1;
 
   async function cancelUse(e: LeaveEmployee, u: LeaveUse) {
-    const ok = await confirm({ title: `${u.work_date} ${PART_LABEL[String(u.days)] || `${u.days}일`} 사용 취소`, body: u.kind === "leave" ? "근무대장에서 그 날의 연차 줄을 지웁니다." : "근무대장에서 그 날의 반차·반반차 표시를 지웁니다(근무 기록은 그대로).", action: "사용 취소" });
+    const ok = await confirm({ title: `${u.work_date} ${leaveText(u.days, e.daily_hours)} 사용 취소`, body: u.kind === "leave" ? "근무대장에서 그 날의 연차 줄을 지웁니다." : "근무대장에서 그 날의 연차 시간을 지웁니다. 그 날의 근무 시간은 그대로이니 근무대장에서 확인하세요.", action: "사용 취소" });
     if (!ok) return;
     try {
       await hrApi("/api/hr/leave", "POST", { action: "cancel_use", employee_id: e.id, date: u.work_date });
@@ -146,7 +146,7 @@ export default function HrLeavePage() {
           <div className="hr-filters">
             <div className="sm-tabs">
               {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
-                <button key={t} type="button" className={`sm-tab ${tab === t ? "is-active" : ""}`} onClick={() => setTab(t)}>{TAB_LABEL[t]}<span className="sm-tab-count">{counts[t]}</span></button>
+                <button key={t} type="button" className={`sm-tab ${tab === t ? "is-active" : ""}`} onClick={() => setTab(t)}>{TAB_LABEL[t]}{counts[t] != null && <span className="sm-tab-count">{counts[t]}</span>}</button>
               ))}
             </div>
             {multiWp && (
@@ -155,7 +155,7 @@ export default function HrLeavePage() {
                 {d.workplaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             )}
-            {tab === "uses" && (
+            {monthly(tab) && (
               <>
                 <button type="button" className="b2b-btn-secondary" onClick={() => setMonth(shiftMonth(month, -1))}>이전 달</button>
                 <input type="month" className="b2b-input hr-month" value={month} aria-label="달" onChange={(e) => { if (isMonth(e.target.value)) setMonth(e.target.value); }} />
@@ -164,9 +164,11 @@ export default function HrLeavePage() {
             )}
             <input className="b2b-input hr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="성명·사번·부서 검색" />
           </div>
-          {tab !== "uses" && <p className="hr-rule">일 단위. 발생·사용·잔여는 지금 쓸 수 있는 발생 건 기준이고, 곧 소멸은 60일 안에 끝나는 건의 남은 일수입니다.</p>}
+          {!monthly(tab) && <p className="hr-rule">일 단위. 발생·사용·잔여는 지금 쓸 수 있는 발생 건 기준이고, 곧 소멸은 60일 안에 끝나는 건의 남은 일수입니다.</p>}
 
-          {tab === "uses" ? (
+          {tab === "cal" ? (
+            <LeaveCalendar month={month} today={d.today} rows={useRows} />
+          ) : tab === "uses" ? (
             useRows.length === 0 ? (
               <div className="b2b-empty">{monthUses.length > 0 ? "조건에 맞는 사용 내역이 없습니다." : `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월에 쓴 연차가 없습니다.`}</div>
             ) : (
@@ -186,7 +188,7 @@ export default function HrLeavePage() {
                         <td className="hr-mono">{e.emp_no}</td>
                         <td><strong>{e.name}</strong></td>
                         <td>{e.dept}</td>
-                        <td>{PART_LABEL[String(u.days)] || ""}{u.kind === "work" ? " (근무한 날)" : ""}</td>
+                        <td>{leaveText(u.days, e.daily_hours)}</td>
                         <td className="num">{dayText(u.days)}</td>
                         <td className="actions"><button type="button" className="b2b-link-btn" onClick={() => cancelUse(e, u)}>사용 취소</button></td>
                       </tr>
@@ -279,7 +281,7 @@ export default function HrLeavePage() {
                                       <tbody>
                                         {usesOf(e.id).slice(0, 60).map((u) => (
                                           <tr key={u.work_date}>
-                                            <td>{u.work_date}</td><td>{PART_LABEL[String(u.days)] || ""}{u.kind === "work" ? " (근무한 날)" : ""}</td><td className="num">{dayText(u.days)}</td>
+                                            <td>{u.work_date}</td><td>{leaveText(u.days, e.daily_hours)}</td><td className="num">{dayText(u.days)}</td>
                                             <td className="actions"><button type="button" className="b2b-link-btn" onClick={() => cancelUse(e, u)}>사용 취소</button></td>
                                           </tr>
                                         ))}
@@ -338,6 +340,40 @@ export default function HrLeavePage() {
         <GrantEdit grant={editGrant} onClose={() => setEditGrant(null)}
           onSaved={(g) => { setEditGrant(null); setD((p) => (p ? { ...p, grants: p.grants.map((x) => (x.id === g.id ? g : x)) } : p)); toast.success("발생 건을 저장했습니다"); }} />
       )}
+    </div>
+  );
+}
+
+// 연차 달력 — 한 달. 날짜 칸마다 그날 연차를 쓰는 사람(하루 연차는 이름만, 시간 연차는 이름 옆에 시간).
+//  rows = 그 달의 사용(사업장·검색으로 좁힌 것). 일요일부터 시작한다.
+const CAL_HEAD = ["일", "월", "화", "수", "목", "금", "토"];
+function LeaveCalendar({ month, today, rows }: { month: string; today: string; rows: { u: LeaveUse; e: LeaveEmployee }[] }) {
+  const cells = useMemo(() => {
+    const { from, days } = monthRange(month);
+    const out: (string | null)[] = [...Array.from({ length: weekdayOf(from) % 7 }, () => null), ...days];
+    while (out.length % 7 !== 0) out.push(null);
+    return out;
+  }, [month]);
+  const byDate = useMemo(() => {
+    const m = new Map<string, { u: LeaveUse; e: LeaveEmployee }[]>();
+    for (const r of rows) m.set(r.u.work_date, [...(m.get(r.u.work_date) || []), r]);
+    return m;
+  }, [rows]);
+  return (
+    <div className="hr-cal-wrap">
+      <div className="hr-cal" role="grid" aria-label={`${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월 연차 달력`}>
+        {CAL_HEAD.map((w) => <div key={w} className="hr-cal-head" role="columnheader">{w}</div>)}
+        {cells.map((date, i) => (date ? (
+          <div key={date} role="gridcell" className={`hr-cal-cell${date === today ? " is-today" : ""}${i % 7 === 0 || i % 7 === 6 ? " is-weekend" : ""}`}>
+            <div className="hr-cal-day">{Number(date.slice(8))}</div>
+            {(byDate.get(date) || []).map(({ u, e }) => (
+              <div key={e.id} className="hr-cal-item">
+                <strong>{e.name}</strong>{u.days < 1 && <span>{leaveText(u.days, e.daily_hours)}</span>}
+              </div>
+            ))}
+          </div>
+        ) : <div key={`x${i}`} role="gridcell" className="hr-cal-cell is-out" />))}
+      </div>
     </div>
   );
 }
@@ -449,22 +485,30 @@ function GrantForm({ employees, today, employee, onClose, onSaved }: { employees
 }
 
 // 사용 등록 — 기간의 소정근로일마다 근무대장에 연차 줄을 넣는다
+type UseChange = { date: string; before: string; after: string };
 function UseForm({ employees, today, employee, onClose, onSaved }: {
   employees: LeaveEmployee[]; today: string; employee: string; onClose: () => void;
   onSaved: (employeeId: string, done: number, skipped: { date: string; reason: string }[]) => void;
 }) {
-  const [f, setF] = useState({ employee_id: employee, from: today, to: today, part: "1" });
+  // 종류: 연차(하루) 또는 시간(0.5 단위). 이미 근무 기록이 있는 날을 덮게 되면 서버가 먼저 알려 준다(changes) → [덮어쓰고 등록]
+  const [f, setF] = useState({ employee_id: employee, from: today, to: today, mode: "day", hours: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [changes, setChanges] = useState<UseChange[] | null>(null);
   useEscClose(onClose, busy);
-  const set = <K extends keyof typeof f>(k: K, v: string) => setF((p) => ({ ...p, [k]: v }));
+  const set = <K extends keyof typeof f>(k: K, v: string) => { setF((p) => ({ ...p, [k]: v })); setChanges(null); };
+  const daily = employees.find((x) => x.id === f.employee_id)?.daily_hours || 0;
 
-  async function save() {
+  async function save(overwrite: boolean) {
+    if (f.mode === "hours" && !(Number(f.hours) > 0)) { setErrors({ hours: "시간을 입력하세요" }); setFormError("입력을 확인하세요."); return; }
     setBusy(true); setFormError(""); setErrors({});
     try {
-      const j = await hrApi<{ done: string[]; skipped: { date: string; reason: string }[] }>("/api/hr/leave", "POST", { action: "use", employee_id: f.employee_id, from: f.from, to: f.to || f.from, part: Number(f.part) });
-      onSaved(f.employee_id, j.done.length, j.skipped);
+      const j = await hrApi<{ done?: string[]; skipped: { date: string; reason: string }[]; need_confirm?: boolean; changes?: UseChange[] }>("/api/hr/leave", "POST", {
+        action: "use", employee_id: f.employee_id, from: f.from, to: f.to || f.from, ...(f.mode === "hours" ? { hours: Number(f.hours) } : {}), overwrite,
+      });
+      if (j.need_confirm) { setChanges(j.changes || []); setBusy(false); return; }
+      onSaved(f.employee_id, (j.done || []).length, j.skipped);
     } catch (e) {
       if (e instanceof HrApiError) { setErrors(e.fields); setFormError(e.message); } else setFormError("사용을 등록하지 못했습니다.");
       setBusy(false);
@@ -491,7 +535,7 @@ function UseForm({ employees, today, employee, onClose, onSaved }: {
               </div>
               <label className="b2b-field">
                 <span className="b2b-field-label">시작일<span className="req">*</span></span>
-                <input className="b2b-input" type="date" value={f.from} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, from: v, to: isDate(v) && (!isDate(p.to) || p.to < v) ? v : p.to })); }} aria-invalid={inv("from")} />
+                <input className="b2b-input" type="date" value={f.from} onChange={(e) => { const v = e.target.value; setChanges(null); setF((p) => ({ ...p, from: v, to: isDate(v) && (!isDate(p.to) || p.to < v) ? v : p.to })); }} aria-invalid={inv("from")} />
                 {err("from")}
               </label>
               <label className="b2b-field">
@@ -502,19 +546,37 @@ function UseForm({ employees, today, employee, onClose, onSaved }: {
               <div className="b2b-field">
                 <span className="b2b-field-label">종류</span>
                 <div className="sm-tabs">
-                  {(["1", "0.5", "0.25"] as const).map((p) => (
-                    <button key={p} type="button" className={`sm-tab ${f.part === p ? "is-active" : ""}`} onClick={() => set("part", p)}>{PART_LABEL[p]}</button>
+                  {([["day", "연차"], ["hours", "시간"]] as const).map(([m, label]) => (
+                    <button key={m} type="button" className={`sm-tab ${f.mode === m ? "is-active" : ""}`} onClick={() => set("mode", m)}>{label}</button>
                   ))}
                 </div>
                 {err("part")}
               </div>
+              {f.mode === "hours" && (
+                <label className="b2b-field">
+                  <span className="b2b-field-label">시간<span className="req">*</span>{daily > 0 && <span className="opt"> 하루 {hoursText(daily)}시간까지</span>}</span>
+                  <input className="b2b-input num" inputMode="decimal" value={f.hours} placeholder="0" onChange={(e) => set("hours", e.target.value.replace(/[^\d.]/g, ""))} aria-invalid={inv("hours")} />
+                  {err("hours")}
+                </label>
+              )}
             </section>
           </div>
+          {changes && (
+            <div className="sm-warn" role="alert">
+              이미 기록이 있는 날 {changes.length}일을 덮어씁니다.
+              <ul className="hr-import-list">
+                {changes.slice(0, 12).map((c) => <li key={c.date}>{c.date} · {c.before} → {c.after}</li>)}
+                {changes.length > 12 && <li>그 밖에 {changes.length - 12}일</li>}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="b2b-modal-foot">
           <div className="b2b-modal-foot-right">
             <button type="button" className="b2b-btn-secondary" onClick={onClose} disabled={busy}>그만두기</button>
-            <button type="button" className="b2b-btn-primary" onClick={save} disabled={busy}>{busy ? "등록 중..." : "사용 등록"}</button>
+            {changes
+              ? <button type="button" className="b2b-btn-primary" onClick={() => save(true)} disabled={busy}>{busy ? "등록 중..." : "덮어쓰고 등록"}</button>
+              : <button type="button" className="b2b-btn-primary" onClick={() => save(false)} disabled={busy}>{busy ? "등록 중..." : "사용 등록"}</button>}
           </div>
         </div>
       </div>

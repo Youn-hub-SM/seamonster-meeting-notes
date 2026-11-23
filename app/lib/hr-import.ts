@@ -1,4 +1,4 @@
-// 엑셀 올리기(인사대장·근무대장) — 화면과 서버가 같이 쓰는 타입·순수 함수. 비밀(키·DB)에 닿는 코드는 두지 않는다.
+// 엑셀 올리기(인사대장·근무대장·급여대장) — 화면과 서버가 같이 쓰는 타입·순수 함수. 비밀(키·DB)에 닿는 코드는 두지 않는다.
 //
 //  올리는 양식 = 내려받는 양식이다. [엑셀 내려받기]로 받은 파일을 고쳐 그대로 올릴 수 있다(칸 이름으로 찾으므로 순서·빠진 칸은 상관없다).
 //   · 인사대장: 한 줄 = 한 사람. 주민등록번호·사번·(성명+입사일)로 이미 있는 직원을 찾아 고치고, 없으면 새로 등록한다.
@@ -7,8 +7,9 @@
 //       파일에 있는 날짜만 넣거나 고친다 — 파일에 없는 날·내용이 빈 줄은 건드리지 않는다(지우지 않는다).
 //  읽은 내용의 검증·저장은 서버(app/lib/hr-import-db.ts)가 화면 입력과 같은 함수로 한다.
 
-import { EMP_TYPES, WEEKDAYS, isDate, rrnDigits } from "./hr";
+import { EMP_TYPES, WEEKDAYS, isDate, numText, rrnDigits } from "./hr";
 import { WORK_KIND_LABEL, type WorkKind, type WorkLog } from "./hr-work";
+import { SYSTEM_DEDUCT, SYSTEM_LABEL, SYSTEM_PAY } from "./hr-pay";
 
 export type Cell = string | number | boolean | Date | null;
 export type Grid = Cell[][];                       // grid[i] = 엑셀의 i+1 번째 줄(빈 줄은 빈 배열)
@@ -293,6 +294,8 @@ function leavePart(v: Cell | undefined): number | null {
   if (t === "반차" || t === "0.5") return 0.5;
   if (t === "반반차" || t === "0.25") return 0.25;
   if (t === "없음" || t === "0") return 0;
+  const n = Number(t);
+  if (Number.isFinite(n) && n > 0 && n <= 1) return Math.round(n * 10000) / 10000;   // 시간 단위 연차는 일수로 적혀 나온다(예: 0.375)
   return null;
 }
 
@@ -371,4 +374,113 @@ export function sameWorkLog(a: WorkLog, b: WorkLog): boolean {
   return a.kind === b.kind && (a.start_time || "") === (b.start_time || "") && (a.end_time || "") === (b.end_time || "")
     && n(a.break_min) === n(b.break_min) && n(a.hours) === n(b.hours) && n(a.night_hours) === n(b.night_hours)
     && n(a.leave_days) === n(b.leave_days) && (a.memo || "") === (b.memo || "");
+}
+
+// ── 급여대장 ────────────────────────────────────────────────────────
+// 올리는 양식 = [급여] 화면의 [엑셀 내려받기] 파일(app/api/hr/payroll/export). 한 줄 = 한 사람의 그달 급여.
+//  읽는 칸: 자동 항목 12가지(기본급 … 지방소득세), 직접 넣는 항목(이름이 같은 칸 — 새로 만든 열도 된다), 비고.
+//  합계·실수령액·근무 시간·회사 부담은 읽지 않는다(자동 계산). 빈 칸은 건드리지 않는다(0 으로 만들려면 0 을 적는다).
+//  무엇이 '고친 칸'인지는 서버(hr-import-db.ts)가 저장된 급여와 대조해 정한다 — 이 함수는 칸을 읽기만 한다.
+const PAY_IGNORED = ["생년월일", "부서", "직위", "업무", "급여 형태", "시급·월급", "근무 일수", "근무 시간", "연장", "야간", "휴일 근무", "주휴 시간",
+  "비과세", "과세 급여", "회사 국민연금", "회사 건강보험", "회사 장기요양", "회사 고용보험", "회사 산재보험"];
+const PAY_TOTAL_COLS: [string, "pay" | "deduct" | "net"][] = [["지급 합계", "pay"], ["공제 합계", "deduct"], ["실수령액", "net"]];
+export const PAY_TOTAL_LABEL = { pay: "지급 합계", deduct: "공제 합계", net: "실수령액" } as const;
+const PAY_MAX_ROWS = 2000;
+
+// 급여대장에서 자리가 정해진 칸 이름인가(직접 넣는 항목의 이름이 이것과 같으면 그 항목은 엑셀로 읽을 수 없다)
+export function isPayFixedHead(name: string): boolean {
+  const n = normHead(name);
+  return ["사번", "성명", "입사일", "비고"].includes(n) || PAY_IGNORED.some((l) => normHead(l) === n) || PAY_TOTAL_COLS.some(([l]) => normHead(l) === n)
+    || [...SYSTEM_PAY, ...SYSTEM_DEDUCT].some((c) => normHead(SYSTEM_LABEL[c]) === n);
+}
+
+export type PaySheetRow = {
+  line: number; emp_no: string; name: string; hire: string;
+  cells: Record<string, number>;                                   // 코드(자동 항목 = SystemCode, 직접 넣는 항목 = "x:<항목 id>") → 금액. 빈 칸은 없다
+  totals: Partial<Record<"pay" | "deduct" | "net", number>>;       // 파일에 적힌 합계(읽지 않는다 — 다시 계산한 값과 다르면 알려 주려고)
+  memo: string | null;                                             // null = 빈 칸(건드리지 않는다)
+  errors: string[]; warns: string[];
+};
+export type PaySheet = {
+  month: string; title: string; stamp: string;                     // 첫 줄의 귀속월 · 사업장 글 · 저장 시각("" = 없음)
+  rows: PaySheetRow[];
+  labels: Record<string, string>;                                  // 코드 → 파일의 칸 이름
+  unknown: string[];                                               // 읽지 않은 칸(모르는 이름)
+  dups: string[];                                                  // 두 번 나온 칸
+};
+
+// extras = 엑셀로 읽을 직접 넣는 항목(코드 "x:<id>" 와 이름). 급여대장 머리 줄(성명·기본급)이 없으면 null.
+export function readPaySheet(grid: Grid, extras: { code: string; name: string }[]): PaySheet | null {
+  let h = -1;
+  for (let i = 0; i < Math.min(grid.length, 12); i++) {
+    const heads = (grid[i] || []).map(normHead);
+    if (heads.includes("성명") && heads.includes("기본급")) { h = i; break; }
+  }
+  if (h < 0) return null;
+
+  // 머리 줄 위: "급여대장 YYYY-MM" · 그 두 칸 옆의 사업장 글 · "저장 <시각>"
+  let month = "", title = "", stamp = "";
+  for (let i = 0; i < h; i++) {
+    const row = grid[i] || [];
+    for (let j = 0; j < row.length; j++) {
+      const t = cellText(row[j]);
+      const m = /급여대장\s*(\d{4}-\d{2})/.exec(t);
+      if (m && !month) { month = m[1]; title = cellText(row[j + 2]); }
+      const s = /^저장\s+(\S+)$/.exec(t);
+      if (s) stamp = s[1];
+    }
+  }
+
+  const sys = new Map<string, string>([...SYSTEM_PAY, ...SYSTEM_DEDUCT].map((c) => [normHead(SYSTEM_LABEL[c]), c]));
+  const ext = new Map(extras.map((x) => [normHead(x.name), x.code]));
+  const ignored = new Set(PAY_IGNORED.map(normHead));
+  const totalOf = new Map(PAY_TOTAL_COLS.map(([l, k]) => [normHead(l), k]));
+  type Col = { j: number; kind: "id" | "amount" | "total" | "memo"; key: string; label: string };
+  const cols: Col[] = [], seen = new Set<string>(), unknown: string[] = [], dups: string[] = [];
+  const labels: Record<string, string> = {};
+  (grid[h] || []).forEach((raw, j) => {
+    const n = normHead(raw), label = cellText(raw);
+    if (!n) return;
+    let col: Col;
+    if (n === "사번") col = { j, kind: "id", key: "emp_no", label };
+    else if (n === "성명") col = { j, kind: "id", key: "name", label };
+    else if (n === "입사일") col = { j, kind: "id", key: "hire", label };
+    else if (n === "비고") col = { j, kind: "memo", key: "memo", label };
+    else if (sys.has(n)) col = { j, kind: "amount", key: sys.get(n)!, label };
+    else if (totalOf.has(n)) col = { j, kind: "total", key: totalOf.get(n)!, label };
+    else if (ignored.has(n)) return;
+    else if (ext.has(n)) col = { j, kind: "amount", key: ext.get(n)!, label };
+    else { unknown.push(label.slice(0, 30)); return; }
+    if (seen.has(col.key)) { dups.push(label.slice(0, 30)); return; }
+    seen.add(col.key); cols.push(col);
+    if (col.kind === "amount") labels[col.key] = label;
+  });
+
+  const rows: PaySheetRow[] = [];
+  for (let i = h + 1; i < grid.length && rows.length < PAY_MAX_ROWS; i++) {
+    const line = grid[i] || [];
+    if (line.every(isBlank)) continue;
+    const r: PaySheetRow = { line: i + 1, emp_no: "", name: "", hire: "", cells: {}, totals: {}, memo: null, errors: [], warns: [] };
+    for (const c of cols) {
+      const v = line[c.j];
+      if (c.kind === "id") {
+        if (c.key === "hire") r.hire = cellDate(v) || ""; else if (c.key === "emp_no") r.emp_no = cellText(v); else r.name = cellText(v);
+      } else if (c.kind === "memo") {
+        const t = cellText(v);
+        if (t) r.memo = t.slice(0, 300);
+      } else {
+        const num = cellNum(v);
+        if (num == null) continue;
+        if (c.kind === "total") { if (Number.isFinite(num)) r.totals[c.key as "pay" | "deduct" | "net"] = Math.round(num); continue; }
+        if (!Number.isFinite(num)) { r.errors.push(`${c.label}: 숫자가 아닙니다(${short(v)})`); continue; }
+        const won = Math.round(num);
+        if (Math.abs(won) > 1e9) { r.errors.push(`${c.label}: 금액이 너무 큽니다`); continue; }
+        if (won !== num) r.warns.push(`${c.label}: 원 단위로 반올림했습니다(${numText(won)}원)`);
+        r.cells[c.key] = won;
+      }
+    }
+    if (r.emp_no === "합계" || (!r.emp_no && r.name === "합계")) continue;   // 맨 아래 합계 줄
+    rows.push(r);
+  }
+  return { month, title, stamp, rows, labels, unknown, dups };
 }

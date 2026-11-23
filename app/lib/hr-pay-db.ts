@@ -149,37 +149,62 @@ export async function loadBundle(month: string, wantWorkplace: string): Promise<
   return { ...empty, payroll: saved?.head || null, lines: saved?.lines || [], employees, logs, rates, tax, items, fixed };
 }
 
-// 저장·확정 때 서버가 다시 계산한다. 화면이 보낸 것은 입력(inputs)뿐이고 금액은 믿지 않는다.
-//  보내지 않은 직원은 저장된 입력을, 그것도 없으면 고정 항목만 채운 첫 입력을 쓴다.
-export async function buildPayroll(args: { workplaceId: string; month: string; payDate: string; sent: Record<string, unknown> }): Promise<
-  { ok: true; wp: PayWorkplace; lines: Row[]; fixed: Row[]; results: PayResult[] } | { ok: false; error: string; status: number }
-> {
-  const { workplaceId, month, payDate } = args;
+// 한 달 급여를 계산하는 데 드는 것 전부(한 번 읽어 여러 번 계산한다 — 저장, 엑셀 올리기의 대조).
+export type PayContext = {
+  wp: PayWorkplace; month: string; payDate: string;
+  employees: PayEmployee[]; rates: Rate[]; tax: TaxTable | null;
+  active: PayItemDef[];                                    // 사용 중인 직접 넣는 항목
+  saved: { head: PayrollHead; lines: SavedLine[] } | null;
+  logsOf: Map<string, RosterLog[]>;
+  fixedPay: PayBundle["fixed"];
+};
+type Refused = { ok: false; error: string; status: number };
+
+// payDate 를 주지 않으면 저장된 급여의 지급일을 쓴다(저장된 급여가 없으면 거절 — 엑셀 올리기).
+export async function loadPayContext(args: { workplaceId: string; month: string; payDate?: string }): Promise<{ ok: true; ctx: PayContext } | Refused> {
+  const { workplaceId, month } = args;
   if (!UUID_RE.test(workplaceId)) return { ok: false, error: "없는 사업장입니다.", status: 404 };
   if (!isMonth(month)) return { ok: false, error: "달을 고르세요.", status: 400 };
-  if (!isDate(payDate)) return { ok: false, error: "지급일을 입력하세요.", status: 400 };
-  if (payDate < `${month}-01`) return { ok: false, error: "지급일이 귀속월보다 앞입니다.", status: 400 };
+  if (args.payDate !== undefined) {
+    if (!isDate(args.payDate)) return { ok: false, error: "지급일을 입력하세요.", status: 400 };
+    if (args.payDate < `${month}-01`) return { ok: false, error: "지급일이 귀속월보다 앞입니다.", status: 400 };
+  }
   const wp = (await fetchPayWorkplaces()).find((w) => w.id === workplaceId);
   if (!wp) return { ok: false, error: "없는 사업장입니다.", status: 404 };
-  const [employees, rates, tax, items, saved] = await Promise.all([
-    fetchPayEmployees(month, workplaceId), fetchRates(), fetchTaxTable(payDate), fetchPayItems(), fetchPayroll(workplaceId, month),
-  ]);
+  const saved = await fetchPayroll(workplaceId, month);
+  const payDate = args.payDate ?? saved?.head.pay_date ?? "";
+  if (!isDate(payDate)) return { ok: false, error: "저장된 급여가 없습니다. 급여 화면에서 [변경 저장]을 누른 뒤 다시 하세요.", status: 400 };
+  const [employees, rates, tax, items] = await Promise.all([fetchPayEmployees(month, workplaceId), fetchRates(), fetchTaxTable(payDate), fetchPayItems()]);
   if (employees.length === 0) return { ok: false, error: "그 달에 재직한 직원이 없습니다.", status: 400 };
   const ids = employees.map((e) => e.id);
   const [logs, fixedPay] = await Promise.all([fetchLogs(month, ids), fetchFixedPay(ids)]);
   const logsOf = new Map<string, RosterLog[]>();
   for (const l of logs) { if (!logsOf.has(l.employee_id)) logsOf.set(l.employee_id, []); logsOf.get(l.employee_id)!.push(l); }
-  const savedOf = new Map((saved?.lines || []).map((l) => [l.employee_id, l]));
-  const active = items.filter((d) => d.active);
+  return { ok: true, ctx: { wp, month, payDate, employees, rates, tax, active: items.filter((d) => d.active), saved, logsOf, fixedPay } };
+}
 
+// 그 달 전원의 급여 줄. sent 에 있는 직원은 그 입력으로, 없는 직원은 저장된 입력으로, 그것도 없으면 고정 항목만 채운 첫 입력으로 계산한다.
+export function computeLines(ctx: PayContext, sent: Record<string, unknown>): { lines: Row[]; fixed: Row[]; results: PayResult[] } {
+  const { wp, month, payDate, rates, tax, active, fixedPay } = ctx;
+  const savedOf = new Map((ctx.saved?.lines || []).map((l) => [l.employee_id, l]));
   const lines: Row[] = [], fixed: Row[] = [], results: PayResult[] = [];
-  for (const e of employees) {
-    const raw = Object.prototype.hasOwnProperty.call(args.sent, e.id) ? args.sent[e.id] : savedOf.get(e.id)?.inputs;
+  for (const e of ctx.employees) {
+    const raw = Object.prototype.hasOwnProperty.call(sent, e.id) ? sent[e.id] : savedOf.get(e.id)?.inputs;
     const inputs = raw === undefined ? initialInputs(active, fixedPay[e.id]) : normalizeInputs(raw, active);
-    const result = computePay({ e, wp, logs: logsOf.get(e.id) || [], month, payDate, rates, tax, items: active, inputs });
+    const result = computePay({ e, wp, logs: ctx.logsOf.get(e.id) || [], month, payDate, rates, tax, items: active, inputs });
     results.push(result);
     lines.push({ employee_id: e.id, inputs, result, snapshot: snapshotOf(e), pay_total: result.pay_total, deduct_total: result.deduct_total, net_pay: result.net_pay });
     for (const d of active) if (d.fixed) fixed.push({ employee_id: e.id, item_id: d.id, amount: inputs.extras[d.id]?.amount || 0, qty: inputs.extras[d.id]?.qty || 1 });
   }
-  return { ok: true, wp, lines, fixed, results };
+  return { lines, fixed, results };
+}
+
+// 저장·확정 때 서버가 다시 계산한다. 화면이 보낸 것은 입력(inputs)뿐이고 금액은 믿지 않는다.
+//  보내지 않은 직원은 저장된 입력을, 그것도 없으면 고정 항목만 채운 첫 입력을 쓴다.
+export async function buildPayroll(args: { workplaceId: string; month: string; payDate: string; sent: Record<string, unknown> }): Promise<
+  { ok: true; wp: PayWorkplace; lines: Row[]; fixed: Row[]; results: PayResult[] } | Refused
+> {
+  const loaded = await loadPayContext({ workplaceId: args.workplaceId, month: args.month, payDate: args.payDate });
+  if (!loaded.ok) return loaded;
+  return { ok: true, wp: loaded.ctx.wp, ...computeLines(loaded.ctx, args.sent) };
 }

@@ -5,6 +5,7 @@ import { addDays, type WorkKind, type WorkLog } from "./hr-work";
 import { compareBases, expectedGrants, type LeaveEmployee, type LeaveGrant, type LeaveUse, type LeaveWorkplace } from "./hr-leave";
 
 export const HR_PENDING_004 = "DB 준비 전입니다. supabase/migrations/hr/004_leave.sql 을 적용하세요.";
+export const HR_PENDING_009 = "DB 준비 전입니다. 이 시간의 연차를 넣으려면 supabase/migrations/hr/009_leave_hours.sql 을 적용하세요.";
 
 type Row = Record<string, unknown>;
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);

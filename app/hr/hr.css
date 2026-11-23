@@ -258,6 +258,23 @@
 .hr-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-3); margin-bottom: var(--sm-space-3); }
 .hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
 .hr-sec-head .hr-holiday-nav { margin-bottom: 0; }   /* 공휴일 구역 머리의 해 이동·버튼 줄 */
+
+/* 연차 달력(연차 화면의 '달력' 탭) — 한 달, 날짜 칸마다 그날 연차를 쓰는 사람 */
+.hr-cal-wrap { overflow-x: auto; }
+.hr-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 720px; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); overflow: hidden; }
+.hr-cal-head { padding: var(--sm-space-2) var(--sm-space-3); background: var(--sm-bg-subtle); border-bottom: 1px solid var(--sm-border); font-size: var(--sm-fs-xs); font-weight: 600; line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.hr-cal-head + .hr-cal-head, .hr-cal-cell { border-left: 1px solid var(--sm-border-light); }
+.hr-cal-cell { display: flex; flex-direction: column; gap: var(--sm-space-1); min-height: 104px; padding: var(--sm-space-2); border-top: 1px solid var(--sm-border-light); }
+.hr-cal-cell:nth-child(7n + 1) { border-left: none; }
+.hr-cal-head ~ .hr-cal-cell:nth-child(-n + 14) { border-top: none; }   /* 첫 주는 머리 줄의 아래 선과 겹치지 않게 */
+.hr-cal-cell.is-out { background: var(--sm-bg-subtle); }
+.hr-cal-cell.is-today { background: var(--sm-bg-warm); }
+.hr-cal-day { font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.hr-cal-cell.is-weekend .hr-cal-day { color: var(--sm-text-light); }
+.hr-cal-cell.is-today .hr-cal-day { font-weight: 600; color: var(--sm-black); }
+.hr-cal-item { display: flex; align-items: baseline; gap: var(--sm-space-1); padding: 2px var(--sm-space-2); border: 1px solid var(--sm-border); border-radius: var(--sm-space-1); background: var(--sm-white); font-size: var(--sm-fs-xs); line-height: var(--sm-lh-ui); }
+.hr-cal-item strong { font-weight: 600; color: var(--sm-black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr-cal-item span { flex-shrink: 0; color: var(--sm-text-mid); }
 .hr-sec .sm-success { margin-bottom: var(--sm-space-3); }
 
 /* ── 입력 창(넓은 모달) ──────────────────────────────────────────── */
@@ -304,6 +321,36 @@
 .hr-card-sec .b2b-table-wrap { border: none; border-top: 1px solid var(--sm-border-light); border-radius: 0 0 var(--sm-radius) var(--sm-radius); }
 @media (max-width: 720px) { .hr-dl { grid-template-columns: minmax(0, 1fr); } }
 
+/* ── 급여명세서(인쇄용 한 장) ────────────────────────────────────────
+   위: 제목과 사람 / 실수령액 한 줄 / 가운데: 지급 내역 | 공제 내역(항목 아래 작은 글씨 = 계산 방법) / 아래: 근무 산출근거.
+   표의 칸 선 대신 가는 가로줄만 쓴다. 단위는 종이 기준(pt·mm) — 이 장은 인쇄할 때만 보인다(.hr-print-only). */
+.hr-slip { padding: 4mm 3mm 0; color: var(--sm-black); font-size: 10pt; line-height: 1.45; }
+.hr-slip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8mm; }
+.hr-slip-head h1 { margin: 0; font-size: 22pt; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+.hr-slip-who { display: flex; flex-wrap: wrap; justify-content: flex-end; row-gap: 1mm; font-size: 9pt; color: var(--sm-text-mid); }
+.hr-slip-who span + span { margin-left: 3mm; padding-left: 3mm; border-left: 0.5pt solid var(--sm-border-strong); }
+.hr-slip-net { display: flex; align-items: baseline; gap: 4mm; margin: 14mm 0 10mm; }
+.hr-slip-net-label { font-size: 13pt; font-weight: 600; white-space: nowrap; }
+.hr-slip-net-label small { margin-left: 3mm; font-size: 9pt; font-weight: 400; color: var(--sm-text-mid); }
+.hr-slip-net i { flex: 1; align-self: flex-end; margin-bottom: 4pt; border-bottom: 1pt dotted var(--sm-border-strong); }
+.hr-slip-net strong { font-size: 20pt; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hr-slip-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10mm; align-items: start; }
+.hr-slip-col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4mm; padding-bottom: 2.5mm; border-bottom: 1pt solid var(--sm-black); }
+.hr-slip-col-head h2 { margin: 0; font-size: 11.5pt; font-weight: 600; }
+.hr-slip-col-head strong { font-size: 11.5pt; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hr-slip-col-head span { font-size: 9pt; color: var(--sm-text-mid); }
+.hr-slip ul { list-style: none; margin: 0; padding: 0; }
+.hr-slip li { display: flex; align-items: flex-start; justify-content: space-between; gap: 4mm; padding: 2.6mm 0; border-bottom: 0.5pt solid var(--sm-border); break-inside: avoid; }
+.hr-slip li > div { display: flex; flex-direction: column; min-width: 0; }
+.hr-slip li small { margin-top: 0.6mm; font-size: 7.5pt; line-height: 1.4; color: var(--sm-text-mid); overflow-wrap: anywhere; }
+.hr-slip li b { font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hr-slip li em { margin-left: 2mm; padding: 0 1.2mm; border: 0.5pt solid var(--sm-border-strong); border-radius: 1mm; font-size: 7pt; font-style: normal; color: var(--sm-text-mid); vertical-align: 1pt; }
+.hr-slip-note { margin: 2mm 0 0; font-size: 8pt; color: var(--sm-text-mid); }
+.hr-slip-basis { margin-top: 12mm; }
+.hr-slip-kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10mm; margin: 0; }
+.hr-slip-kv > div { display: flex; justify-content: space-between; gap: 4mm; padding: 2.6mm 0; border-bottom: 0.5pt solid var(--sm-border); }
+.hr-slip-kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
 /* ── 인쇄 ────────────────────────────────────────────────────────── */
 /* 종이 크기·방향(@page)은 화면마다 다르므로 각 화면이 <style> 로 넣는다(이 파일에 두면 다른 화면 인쇄까지 바뀐다). */
 .hr-print-only { display: none; }
@@ -328,14 +375,9 @@
   .hr-pay-ledger { font-size: 6.5pt; }
   .hr-pay-ledger th, .hr-pay-ledger td { padding: 2px 3px; }
   .hr-print-sum.hr-pay-ledger { width: auto; min-width: 50%; }
-  /* 급여명세서(세로) — 한 사람 한 장 */
+  /* 급여명세서(세로) — 한 사람 한 장. 모양은 아래 .hr-slip-* (인쇄 밖에 둔다 — 화면에는 .hr-print-only 라 보이지 않는다) */
   .hr-slip { break-after: page; }
   .hr-slip:last-child { break-after: auto; }
-  .hr-slip h1 { margin: 0 0 4px; font-size: 18pt; font-weight: 600; text-align: center; letter-spacing: 0.3em; }
-  .hr-slip-sub { margin-bottom: 10px; text-align: center; font-size: 9pt; }
-  .hr-slip .hr-print-table { font-size: 9pt; margin-bottom: 10px; }
-  .hr-slip .hr-print-table th, .hr-slip .hr-print-table td { padding: 4px 6px; }
-  .hr-slip-net { display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 10px; border: 1pt solid #000; font-size: 12pt; font-weight: 600; }
   /* 증명서 — 종이 한 장을 꽉 채운다 */
   .hr-docs { display: block; }
   .hr-doc-wrap { overflow: visible; }

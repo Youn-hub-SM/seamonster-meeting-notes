@@ -1,4 +1,4 @@
-// 엑셀 올리기(인사대장·근무대장) — 서버 전용: 파일 읽기, 저장된 것과 대조, 저장. 화면에서 import 하지 말 것.
+// 엑셀 올리기(인사대장·근무대장·급여대장) — 서버 전용: 파일 읽기, 저장된 것과 대조, 저장. 화면에서 import 하지 말 것.
 //
 //  두 단계다: plan*(파일 → 무엇을 할지) 과 apply*(그대로 저장). 미리보기와 등록이 같은 plan 을 쓴다 —
 //  등록할 때도 파일을 다시 읽어 다시 대조하므로, 화면이 보낸 '미리보기 결과'를 믿고 저장하는 길이 없다.
@@ -12,10 +12,11 @@ import { applyRrn, missingAffiliation, parseEmployeeInput, readEmployees, wagesO
 import { currentWage, numText, type Wage } from "./hr";
 import { fetchLogs, fetchRoster } from "./hr-work-db";
 import { monthRange, normalizeLog, type RosterEmployee, type WorkLog } from "./hr-work";
-import { confirmedWorkplaces } from "./hr-pay-db";
+import { computeLines, confirmedWorkplaces, loadPayContext, type PayContext } from "./hr-pay-db";
+import { SYSTEM_PAY, itemAmount, normalizeInputs, sumResults, type LineInputs, type PayEmployee, type PayResult } from "./hr-pay";
 import {
-  EMP_KEY_LABEL, dailyHoursOf, readEmployeeSheet, readWorkSheet, sameWorkLog,
-  type Cell, type EmpSheet, type ImportAction, type ImportLine, type ImportReport, type Sheet, type WorkRow,
+  EMP_KEY_LABEL, PAY_TOTAL_LABEL, dailyHoursOf, isPayFixedHead, normHead, readEmployeeSheet, readPaySheet, readWorkSheet, sameWorkLog,
+  type Cell, type EmpSheet, type ImportAction, type ImportLine, type ImportReport, type PaySheet, type PaySheetRow, type Sheet, type WorkRow,
 } from "./hr-import";
 
 type Row = Record<string, unknown>;
@@ -445,4 +446,182 @@ export function workReport(plan: WorkPlan, done?: { failed: string[] }): ImportR
   const notes = [...plan.notes];
   if (plan.errors.length > MAX_LINES) notes.push(`오류는 처음 ${MAX_LINES}줄만 보입니다.`);
   return { applied: !!done, counts, lines, notes, failed: done?.failed || [] };
+}
+
+// ── 급여대장 ────────────────────────────────────────────────────────
+// 급여가 잘못됐을 때: [엑셀 내려받기]로 받은 급여대장에서 금액을 고쳐 그대로 올린다(docs/payroll-leave-plan.md 26장).
+//  · 고친 칸만 반영한다 — '고친 칸' = 저장된 급여(내려받은 값)와 다른 칸. 자동 항목이면 그 금액이 '직접 입력'이 되고,
+//    손대지 않은 칸은 계속 자동 계산을 따른다(기본급을 올리면 보험료·소득세는 새 금액으로 다시 계산된다).
+//    파일의 모든 칸을 최종 금액으로 받으면 손대지 않은 공제가 옛 값으로 굳는다 — 그렇게 하지 않는다.
+//  · 그래서 파일은 '지금 저장된 급여'를 내려받은 것이어야 한다 — 내려받은 뒤 다시 저장됐으면(첫 줄의 저장 시각이 다르면) 받지 않는다.
+//  · 오류가 한 줄이라도 있으면 아무것도 저장하지 않는다(한 달 급여는 사업장 전원이 한 묶음으로 저장된다).
+//  · 저장은 화면의 [변경 저장]과 같은 길이다(computeLines → hr.save_payroll). 확정은 하지 않는다.
+type PayPlanRow = { line: number; who: string; action: ImportAction; notes: string[]; errors: string[]; warns: string[] };
+export type PayPlan = {
+  ctx: PayContext; rows: PayPlanRow[];
+  sent: Record<string, LineInputs>;      // 고친 직원 → 새 입력
+  notes: string[]; errorCount: number; updates: number; cells: number;
+};
+const wonText = (n: number) => `${numText(n)}원`;
+const sameItems = (a: PayResult, b: PayResult): boolean => {
+  const codes = new Set([...a.items, ...b.items].map((i) => i.code));
+  for (const c of codes) if (itemAmount(a, c) !== itemAmount(b, c)) return false;
+  return true;
+};
+
+export async function planPayroll(sheets: Sheet[], workplaceId: string, month: string): Promise<PayPlan> {
+  const loaded = await loadPayContext({ workplaceId, month });
+  if (!loaded.ok) throw new ImportError(loaded.error);
+  const ctx = loaded.ctx;
+  const saved = ctx.saved;
+  if (!saved || saved.lines.every((l) => !l.result)) throw new ImportError("저장된 급여가 없습니다. 급여 화면에서 [변경 저장]을 누른 뒤 [엑셀 내려받기]로 받은 파일을 올리세요.");
+  if (saved.head.status === "confirmed") throw new ImportError("급여가 확정된 달입니다. [확정 취소]를 누른 뒤 올리세요.");
+
+  // 엑셀로 읽을 직접 넣는 항목: 이름이 하나뿐이고 자리가 정해진 칸 이름과 겹치지 않는 것
+  const byName = new Map<string, typeof ctx.active>();
+  for (const d of ctx.active) { const k = normHead(d.name); byName.set(k, [...(byName.get(k) || []), d]); }
+  const extras: { code: string; name: string }[] = [], clash: string[] = [];
+  for (const list of byName.values()) {
+    if (list.length > 1 || isPayFixedHead(list[0].name)) clash.push(list[0].name);
+    else extras.push({ code: `x:${list[0].id}`, name: list[0].name });
+  }
+  const defOf = new Map(ctx.active.map((d) => [`x:${d.id}`, d]));
+
+  let sheet: PaySheet | null = null;
+  for (const s of sheets) { sheet = readPaySheet(s.grid, extras); if (sheet) break; }
+  if (!sheet) throw new ImportError("급여대장의 머리 줄(성명·기본급)을 찾지 못했습니다. [엑셀 내려받기]로 받은 파일을 쓰세요.");
+  if (sheet.dups.length > 0) throw new ImportError(`같은 칸이 두 번 있습니다: ${sheet.dups.join(", ")}`);
+  if (!sheet.month) throw new ImportError("첫 줄에서 귀속월을 찾지 못했습니다. [엑셀 내려받기]로 받은 파일의 첫 줄을 그대로 두세요.");
+  if (sheet.month !== month) throw new ImportError(`이 파일은 ${sheet.month} 급여대장입니다. 열어 둔 달(${month})과 다릅니다.`);
+  if (sheet.title && !squash(sheet.title).startsWith(squash(ctx.wp.name))) throw new ImportError(`이 파일은 '${sheet.title.slice(0, 40)}' 급여대장입니다. 열어 둔 사업장(${ctx.wp.name})과 다릅니다.`);
+  // 내려받은 뒤 급여가 다시 저장됐으면 받지 않는다. 파일의 값이 '저장된 값'이 아니게 되어, 손대지 않은 칸(옛 공제 등)이
+  //  고친 칸으로 읽혀 옛 금액으로 굳는다 — 같은 파일을 고쳐 두 번 올릴 때 바로 그렇게 된다.
+  const again = "[이 달 급여대장 내려받기]로 다시 받아 고친 뒤 올리세요.";
+  if (!sheet.stamp) throw new ImportError(`이 파일에서 저장 시각을 찾지 못했습니다. ${again}`);
+  if (sheet.stamp !== saved.head.updated_at) throw new ImportError(`이 파일을 내려받은 뒤 급여가 다시 저장됐습니다. ${again}`);
+  if (sheet.rows.length === 0) throw new ImportError("머리 줄 아래에 직원이 한 줄도 없습니다.");
+  const labels = sheet.labels;
+
+  // 사번 → 성명 → 입사일 순으로 그 달 급여의 직원을 찾는다
+  const resolve = (r: PaySheetRow): PayEmployee | string => {
+    if (!r.emp_no && !r.name) return "누구의 줄인지 알 수 없습니다(사번·성명이 없습니다)";
+    let by = r.emp_no ? ctx.employees.filter((e) => e.emp_no === r.emp_no) : ctx.employees.filter((e) => e.name === r.name);
+    if (by.length === 0) return r.emp_no ? `이 달 급여에 없는 직원입니다(사번 ${r.emp_no})` : `이 달 급여에 없는 직원입니다(${r.name})`;
+    if (by.length > 1 && r.emp_no && r.name) by = by.filter((e) => e.name === r.name);
+    if (by.length > 1 && r.hire) by = by.filter((e) => e.hire_date === r.hire);
+    if (by.length !== 1) return "같은 사번·성명의 직원이 둘 이상이거나 입사일이 맞지 않습니다. 사번·성명·입사일 칸을 내려받은 그대로 두세요";
+    if (r.emp_no && r.name && by[0].name !== r.name) return `사번 ${r.emp_no} 의 이름이 다릅니다(파일 ${r.name}, 인사대장 ${by[0].name})`;
+    return by[0];
+  };
+
+  const savedOf = new Map(saved.lines.map((l) => [l.employee_id, l]));
+  const live = new Map(computeLines(ctx, {}).results.map((r) => [r.employee_id, r]));   // 저장된 입력으로 지금 다시 계산한 값
+  type Hit = { row: PaySheetRow; e: PayEmployee; who: string; edits: { code: string; from: number; to: number }[]; memoEdit: boolean; errors: string[] };
+  const hits: Hit[] = [], rows: PayPlanRow[] = [];
+  const sent: Record<string, LineInputs> = {};
+  const seen = new Map<string, number>();
+  let cells = 0;
+
+  for (const r of sheet.rows) {
+    const label = `${r.name || "(이름 없음)"}${r.emp_no ? ` (${r.emp_no})` : ""}`;
+    const e = resolve(r);
+    if (typeof e === "string") { rows.push({ line: r.line, who: label, action: "error", notes: [], errors: [...r.errors, e], warns: [] }); continue; }
+    const who = whoOf(e), errors = [...r.errors];
+    const dup = seen.get(e.id);
+    if (dup) errors.push(`같은 직원이 ${dup}줄에도 있습니다`); else seen.set(e.id, r.line);
+    const line = savedOf.get(e.id);
+    if (!line?.result) { rows.push({ line: r.line, who, action: "error", notes: [], errors: [...errors, "저장된 급여에 없는 직원입니다. 급여 화면에서 [변경 저장]을 누른 뒤 다시 내려받으세요"], warns: [] }); continue; }
+
+    const inputs = normalizeInputs(line.inputs, ctx.active);
+    const edits: Hit["edits"] = [];
+    for (const [code, to] of Object.entries(r.cells)) {
+      const from = itemAmount(line.result, code);
+      if (to === from) continue;                                   // 내려받은 값 그대로 — 손대지 않은 칸
+      const def = defOf.get(code);
+      const isPay = def ? def.kind === "pay" : (SYSTEM_PAY as readonly string[]).includes(code);
+      if (isPay && to < 0) { errors.push(`${labels[code] || code}: 0 이상이어야 합니다`); continue; }
+      if (!def) inputs.overrides[code] = to;
+      else if (to === 0) delete inputs.extras[def.id];
+      else inputs.extras[def.id] = { amount: to, ...(def.tax === "childcare" ? { qty: inputs.extras[def.id]?.qty || 1 } : {}) };
+      edits.push({ code, from, to });
+    }
+    const memoEdit = r.memo !== null && r.memo !== (inputs.memo || "");
+    if (memoEdit) inputs.memo = r.memo as string;
+    if (errors.length === 0 && (edits.length > 0 || memoEdit)) sent[e.id] = inputs;
+    hits.push({ row: r, e, who, edits, memoEdit, errors });
+  }
+
+  // 새 입력으로 전원을 다시 계산한다. 고친 금액이 자동 계산값과 같으면 '직접 입력'으로 남기지 않는다(화면에서 고칠 때와 같다).
+  const next = new Map(computeLines(ctx, sent).results.map((r) => [r.employee_id, r]));
+  for (const h of hits) {
+    const inp = sent[h.e.id];
+    if (!inp) continue;
+    for (const ed of h.edits) if (!ed.code.startsWith("x:") && !next.get(h.e.id)?.items.find((i) => i.code === ed.code)?.edited) delete inp.overrides[ed.code];
+  }
+
+  let stale = 0;
+  for (const h of hits) {
+    const before = savedOf.get(h.e.id)!.result as PayResult, after = next.get(h.e.id) as PayResult, now = live.get(h.e.id) as PayResult;
+    const nameOf = (code: string) => labels[code] || after.items.find((i) => i.code === code)?.name || before.items.find((i) => i.code === code)?.name || code;
+    const notes: string[] = [], warns = [...h.row.warns];
+    if (h.errors.length > 0) { rows.push({ line: h.row.line, who: h.who, action: "error", notes, errors: h.errors, warns }); continue; }
+
+    const edited = h.edits.filter((ed) => itemAmount(after, ed.code) !== ed.from);
+    const editCodes = new Set(h.edits.map((ed) => ed.code));
+    const codes = [...new Set([...before.items, ...after.items].map((i) => i.code))];
+    const recalced = codes.filter((c) => !editCodes.has(c) && itemAmount(before, c) !== itemAmount(after, c));
+    if (edited.length > 0) notes.push(`고친 칸: ${edited.map((ed) => `${nameOf(ed.code)} ${wonText(ed.from)} → ${wonText(itemAmount(after, ed.code))}`).join(", ")}`);
+    if (recalced.length > 0) notes.push(`다시 계산: ${recalced.map((c) => `${nameOf(c)} ${wonText(itemAmount(before, c))} → ${wonText(itemAmount(after, c))}`).join(", ")}`);
+    if (h.memoEdit) notes.push("비고가 바뀝니다");
+    const totals = ([["pay", before.pay_total, after.pay_total], ["deduct", before.deduct_total, after.deduct_total], ["net", before.net_pay, after.net_pay]] as const);
+    const moved = totals.filter(([, a, b]) => a !== b);
+    if (moved.length > 0) notes.push(moved.map(([k, a, b]) => `${PAY_TOTAL_LABEL[k]} ${wonText(a)} → ${wonText(b)}`).join(" · "));
+    // 합계 칸을 직접 고친 경우: 읽지 않는다는 것과 다시 계산한 값을 알려 준다
+    for (const [k, a, b] of totals) {
+      const t = h.row.totals[k];
+      if (t != null && t !== a && t !== b) warns.push(`파일의 ${PAY_TOTAL_LABEL[k]}(${wonText(t)})은 읽지 않습니다. 다시 계산한 ${PAY_TOTAL_LABEL[k]}은 ${wonText(b)}입니다`);
+    }
+    if (!sameItems(before, now)) { stale++; warns.push("저장한 뒤 근무대장·임금·요율이 바뀌어, 고치지 않은 금액도 함께 달라집니다"); }
+
+    const changed = edited.length > 0 || recalced.length > 0 || h.memoEdit || moved.length > 0;
+    if (changed) cells += edited.length + (h.memoEdit ? 1 : 0);
+    rows.push({ line: h.row.line, who: h.who, action: changed ? "update" : "same", notes, errors: [], warns });
+  }
+
+  const notes: string[] = ["고친 칸만 반영합니다. 손대지 않은 칸은 자동 계산을 따르고, 빈 칸은 건드리지 않습니다."];
+  const untouched = ctx.employees.filter((e) => !seen.has(e.id)).length;
+  if (untouched > 0) notes.push(`파일에 없는 직원 ${untouched}명은 그대로 둡니다.`);
+  if (sheet.unknown.length > 0) notes.push(`읽지 않은 칸: ${sheet.unknown.slice(0, 12).join(", ")}`);
+  if (clash.length > 0) notes.push(`이름이 다른 칸과 겹쳐 엑셀로 읽지 않는 항목: ${clash.slice(0, 12).join(", ")}`);
+  if (stale > 0) notes.push(`저장한 뒤 금액이 달라진 직원이 ${stale}명 있습니다. 급여 화면에서 [변경 저장]을 누르고 다시 내려받으면 정확합니다.`);
+  const errorCount = rows.filter((p) => p.action === "error").length;
+  if (errorCount > 0) notes.push("오류가 한 줄이라도 있으면 아무것도 저장하지 않습니다. 파일을 고쳐 다시 올리세요.");
+  return { ctx, rows, sent, notes, errorCount, updates: rows.filter((p) => p.action === "update").length, cells };
+}
+
+// plan 대로 저장한다 — 사업장 전원을 한 번에(hr.save_payroll 한 트랜잭션). 확정은 하지 않는다.
+export async function applyPayroll(plan: PayPlan, actor: string, ip: string, file: string): Promise<{ saved: number; failed: string[] }> {
+  if (plan.errorCount > 0) throw new ImportError("오류가 있는 줄을 고친 뒤 다시 올리세요. 오류가 한 줄이라도 있으면 아무것도 저장하지 않습니다.");
+  if (plan.updates === 0) return { saved: 0, failed: [] };
+  const { ctx } = plan;
+  const built = computeLines(ctx, plan.sent);
+  const { data, error } = await hrDb().rpc("save_payroll", {
+    p_workplace: ctx.wp.id, p_month: ctx.month, p_pay_date: ctx.payDate, p_lines: built.lines, p_fixed: built.fixed, p_confirm: false, p_actor: actor,
+  });
+  if (error) throw error;
+  const t = sumResults(built.results);
+  await hrAudit({
+    actor, action: "payroll_import", ip, targetType: "payroll", targetId: String(data || ""), targetName: `${ctx.wp.name} ${ctx.month}`,
+    detail: { file, employees: plan.updates, cells: plan.cells, lines: built.lines.length, pay_total: t.pay_total, deduct_total: t.deduct_total, net_pay: t.net_pay },
+  });
+  return { saved: plan.updates, failed: [] };
+}
+
+export function payrollReport(plan: PayPlan, done?: { failed: string[] }): ImportReport {
+  const counts = emptyCounts();
+  const lines: ImportLine[] = plan.rows.map((p) => {
+    counts[p.action]++;
+    return { at: `${p.line}줄`, who: p.who, action: p.action, notes: p.notes, errors: p.errors, warns: p.warns };
+  }).sort((a, b) => order[a.action] - order[b.action]);
+  return { applied: !!done, counts, lines, notes: plan.notes, failed: done?.failed || [] };
 }

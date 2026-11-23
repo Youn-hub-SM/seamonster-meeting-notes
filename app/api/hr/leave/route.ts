@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { isDate, todayKst } from "@/app/lib/hr";
-import { addDays, normalizeLog, weekdayOf, type WorkLog } from "@/app/lib/hr-work";
-import { GRANT_COLS, HR_PENDING_004, ensureAutoGrants, fetchGrants, fetchLeaveEmployees, fetchLeaveLogs, fetchLeaveWorkplaces, fetchLogsBetween, leaverCompare, toGrant } from "@/app/lib/hr-leave-db";
+import { WORK_KIND_LABEL, addDays, hoursText, leaveDaysOf, leaveText, normalizeLog, round2, weekdayOf, type WorkLog } from "@/app/lib/hr-work";
+import { GRANT_COLS, HR_PENDING_004, HR_PENDING_009, ensureAutoGrants, fetchGrants, fetchLeaveEmployees, fetchLeaveLogs, fetchLeaveWorkplaces, fetchLogsBetween, leaverCompare, toGrant } from "@/app/lib/hr-leave-db";
 import { refusal } from "@/app/lib/hr-pay-db";
 import { dayOffsFor } from "@/app/lib/hr-holidays-db";
 import { fillKindOf } from "@/app/lib/hr-holidays";
@@ -41,7 +41,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/hr/leave — { action }
 //   grant      { employee_id, days, grant_date, expire_date?, reason }  직접 추가(음수 = 빼기)
-//   use        { employee_id, from, to, part }                         사용 등록 — 근무대장에 연차 줄을 넣는다(소정근로일만)
+//   use        { employee_id, from, to, hours?, overwrite? }           사용 등록 — 근무대장에 연차 줄을 넣는다(소정근로일만).
+//                 hours 가 없으면 하루 연차, 있으면 그 시간만큼. 이미 있는 기록을 덮게 되면 저장하지 않고 { need_confirm, changes } 를 돌려준다
+//                 → 화면이 알려 준 뒤 overwrite: true 로 다시 보낸다.
 //   cancel_use { employee_id, date }                                   사용 취소 — 그 줄을 지우거나(연차), 반차·반반차를 없앤다(근무한 날)
 export async function POST(req: NextRequest) {
   const who = await requireHr(req);
@@ -76,42 +78,96 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "use") {
       const from = String(body.from ?? ""), to = String(body.to ?? "") || from;
-      const part = Number(body.part);
       const errors: Record<string, string> = {};
       if (!isDate(from)) errors.from = "시작일을 입력하세요";
       if (!isDate(to)) errors.to = "종료일을 입력하세요";
       else if (isDate(from) && to < from) errors.to = "종료일이 시작일보다 앞입니다";
       else if (isDate(from) && addDays(from, 62) < to) errors.to = "한 번에 두 달까지 넣을 수 있습니다";
-      if (![1, 0.5, 0.25].includes(part)) errors.part = "종류를 고르세요";
+      // 종류: 연차(하루) 또는 시간. 시간은 0.5 단위, 하루 소정근로시간까지(같으면 하루 연차와 같다).
+      //  part(일수 1·0.5·0.25)만 보내는 옛 요청도 받는다.
+      const daily = e.daily_hours || 0;
+      const byHours = body.hours != null && body.hours !== "";
+      let part = 1;
+      if (byHours) {
+        const h = Number(body.hours);
+        if (!(daily > 0)) errors.hours = "직원 정보에 하루 소정근로시간이 없습니다";
+        else if (!Number.isFinite(h) || h <= 0 || Math.round(h * 2) !== h * 2) errors.hours = "시간은 0.5 단위로 넣으세요";
+        else if (h > daily) errors.hours = `하루 소정근로시간(${hoursText(daily)}시간)까지 넣을 수 있습니다`;
+        else part = leaveDaysOf(h, daily);
+      } else {
+        part = Number(body.part ?? 1);
+        if (![1, 0.5, 0.25].includes(part)) errors.part = "종류를 고르세요";
+      }
       if (Object.keys(errors).length > 0) return hrJson({ ok: false, error: "입력을 확인하세요.", fields: errors }, 400);
+      const full = part >= 1;
+      const leaveHours = round2(part * daily);
+      const restHours = round2(Math.max(0, daily - leaveHours));   // 시간 연차를 쓴 날에 근무로 남는 시간
+      const describe = (l: WorkLog): string => {
+        const lv = l.leave_days > 0 && l.leave_days < 1 ? ` + 연차 ${leaveText(l.leave_days, daily)}` : "";
+        if (l.kind === "work" || l.kind === "holiday_work") return `${WORK_KIND_LABEL[l.kind]} ${hoursText(l.hours)}시간${lv}`;
+        return l.kind === "leave" ? (l.leave_days >= 1 ? "연차" : `연차 ${leaveText(l.leave_days, daily)}`) : WORK_KIND_LABEL[l.kind];
+      };
 
       // 그 직원이 쉬는 날(공휴일·유급 휴무일·무급 휴무일)에는 연차를 넣지 않는다 — 쉬는 날에 연차가 깎이지 않게
       const [logs, offs, workplaces] = await Promise.all([fetchLogsBetween(e.id, from, to), dayOffsFor(from, to, { id: e.id, workplace_id: e.workplace_id }), fetchLeaveWorkplaces()]);
       const fivePlus = workplaces.find((w) => w.id === e.workplace_id)?.five_plus ?? true;
-      const done: string[] = [], skipped: { date: string; reason: string }[] = [];
+      // 날짜마다 넣을 줄을 먼저 만든다(아직 저장하지 않는다). 이미 있는 기록을 바꾸게 되는 날은 changes 에 모은다.
+      //  · 연차(하루): 그날의 줄이 '연차'가 된다. 다른 기록(근무·결근 등)이 있으면 덮는다.
+      //  · 시간: 그날은 '근무 + 연차 n시간'이 된다. 근무와 연차를 더해 하루 소정근로시간을 넘지 않게 근무 시간을 줄인다 —
+      //      평소대로 채워 둔 날(8시간)에 2시간을 넣으면 근무 6시간 + 연차 2시간, 실제 일한 시간(6시간)이 적힌 날은 그대로 두고 연차만 붙는다.
+      //      기록이 없는 날은 '근무(평소 − n시간) + 연차 n시간'을 새로 넣는다(나중에 [평소대로 채우기]가 이 날을 건너뛰어도 근무가 빠지지 않게).
+      const todo: { date: string; row: WorkLog }[] = [], changes: { date: string; before: string; after: string }[] = [];
+      const skipped: { date: string; reason: string }[] = [];
       for (let d = from; d <= to; d = addDays(d, 1)) {
         if (!e.work_days.includes(weekdayOf(d))) continue;                       // 소정근로일이 아닌 날은 연차를 쓰지 않는다
         if (d < e.hire_date || (e.leave_date && d > e.leave_date)) { skipped.push({ date: d, reason: "재직 기간이 아님" }); continue; }
         const off = offs[d];
         if (off && fillKindOf(off, d, fivePlus)) { skipped.push({ date: d, reason: `${off.kind === "public" ? "공휴일" : "휴무일"}(${off.name})` }); continue; }
         const cur = logs.get(d);
-        let row: WorkLog | null = null;
-        if (!cur || cur.kind === "leave") {
-          const n = normalizeLog({ work_date: d, kind: "leave", leave_days: part, memo: cur?.memo || "" });
-          if (n.ok) row = n.log;
-        } else if (cur.kind === "work" && part < 1) row = { ...cur, leave_days: part };
-        if (!row) { skipped.push({ date: d, reason: cur?.kind === "work" ? "근무 기록이 있는 날 — 근무대장에서 고치세요" : "다른 기록이 있는 날" }); continue; }
-        const { error } = await hrDb().rpc("save_work_logs", { p_employee: e.id, p_from: d, p_to: d, p_rows: [row], p_actor: who.name });
+        let raw: Partial<WorkLog> & { work_date: string };
+        let replaces = false;                                                    // 이미 있는 기록의 내용이 바뀌는가
+        if (full) {
+          raw = { work_date: d, kind: "leave", leave_days: 1, memo: cur?.memo || "" };
+          replaces = !!cur && cur.kind !== "leave";
+        } else if (cur?.kind === "work") {
+          const keep = cur.hours + leaveHours <= daily + 1e-9;
+          raw = keep ? { ...cur, leave_days: part }
+            : { work_date: d, kind: "work", start_time: null, end_time: null, break_min: 0, hours: restHours, night_hours: Math.min(cur.night_hours, restHours), leave_days: part, memo: cur.memo };
+          replaces = !keep;
+        } else {
+          raw = { work_date: d, kind: "work", start_time: null, end_time: null, break_min: 0, hours: restHours, night_hours: 0, leave_days: part, memo: cur?.memo || "" };
+          replaces = !!cur;
+        }
+        const n = normalizeLog(raw);
+        if (!n.ok) { skipped.push({ date: d, reason: n.error }); continue; }
+        if (cur && replaces) changes.push({ date: d, before: describe(cur), after: describe(n.log) });
+        todo.push({ date: d, row: n.log });
+      }
+      if (todo.length === 0) return hrJson({ ok: false, error: skipped[0] ? `등록한 날이 없습니다 — ${skipped[0].date} ${skipped[0].reason}` : "그 기간에 소정근로일이 없습니다." }, 400);
+      // 덮게 되는 기록이 있으면 먼저 알려 주고, 화면이 '덮어쓰고 등록'으로 다시 보낼 때만 저장한다
+      if (changes.length > 0 && body.overwrite !== true) return hrJson({ ok: true, need_confirm: true, changes, count: todo.length, skipped });
+
+      const done: string[] = [];
+      for (const t of todo) {
+        const { error } = await hrDb().rpc("save_work_logs", { p_employee: e.id, p_from: t.date, p_to: t.date, p_rows: [t.row], p_actor: who.name });
         if (error) {
-          if ((error as { code?: string }).code !== "P0001") throw error;
-          skipped.push({ date: d, reason: error.message });
+          const code = (error as { code?: string }).code;
+          // 시간 단위 연차의 일수(예: 0.375)는 hr/009 를 적용해야 들어간다
+          if (/leave_days/.test(error.message || "")) {
+            if (done.length === 0) return hrJson({ ok: false, pending: true, error: HR_PENDING_009 }, 503);
+            skipped.push({ date: t.date, reason: HR_PENDING_009 });
+            continue;
+          }
+          if (code !== "P0001") throw error;
+          skipped.push({ date: t.date, reason: error.message });
           continue;
         }
-        done.push(d);
+        done.push(t.date);
       }
-      if (done.length > 0) await hrAudit({ actor: who.name, action: "leave_use", ip: clientIp(req), targetType: "leave", targetId: e.id, targetName: e.name, detail: { from, to, part, days: done.length * part, dates: done.length } });
+      const overwritten = changes.filter((c) => done.includes(c.date)).length;
+      if (done.length > 0) await hrAudit({ actor: who.name, action: "leave_use", ip: clientIp(req), targetType: "leave", targetId: e.id, targetName: e.name, detail: { from, to, part, hours: full ? null : leaveHours, days: round2(done.length * part), dates: done.length, overwritten } });
       if (done.length === 0) return hrJson({ ok: false, error: skipped[0] ? `등록한 날이 없습니다 — ${skipped[0].date} ${skipped[0].reason}` : "그 기간에 소정근로일이 없습니다." }, 400);
-      return hrJson({ ok: true, done, skipped, uses: done.map((d) => ({ employee_id: e.id, work_date: d, days: part, kind: logs.get(d)?.kind === "work" ? "work" : "leave" })) });
+      return hrJson({ ok: true, done, skipped, overwritten, uses: done.map((d) => ({ employee_id: e.id, work_date: d, days: part, kind: full ? "leave" : "work" })) });
     }
 
     if (body.action === "cancel_use") {

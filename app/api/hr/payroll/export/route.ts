@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 
 // POST /api/hr/payroll/export — 급여대장 엑셀. { workplace_id, month }
 //  저장된 줄을 그대로 내보낸다(작성 중이면 마지막으로 저장한 금액 — 화면은 저장한 뒤에만 내려받게 한다).
+//  이 파일이 [엑셀 올리기](/api/hr/payroll/import)의 양식이다 — 칸 이름을 바꾸면 hr-import.ts 의 급여대장 읽기도 같이 고친다.
 export async function POST(req: NextRequest) {
   const who = await requireHr(req);
   if (who.res) return who.res;
@@ -47,7 +48,9 @@ export async function POST(req: NextRequest) {
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("급여대장");
-    ws.addRow([`급여대장 ${month}`, "", affiliation ? `${wp.name} ${affiliation}` : wp.name, "", `지급일 ${saved.head.pay_date}`, "", saved.head.status === "confirmed" ? "확정" : "작성 중"]);
+    // 첫 줄은 [엑셀 올리기]가 다시 읽는다(hr-import.ts readPaySheet): 귀속월 · 사업장 · '저장 <시각>'(내려받은 뒤 다시 저장됐는지 본다)
+    ws.addRow([`급여대장 ${month}`, "", affiliation ? `${wp.name} ${affiliation}` : wp.name, "", `지급일 ${saved.head.pay_date}`, "", saved.head.status === "confirmed" ? "확정" : "작성 중",
+      "", saved.head.updated_at ? `저장 ${saved.head.updated_at}` : ""]);
     ws.getRow(1).font = { bold: true };
     ws.addRow(head);
     ws.getRow(2).font = { bold: true };

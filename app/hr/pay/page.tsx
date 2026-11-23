@@ -16,6 +16,7 @@ import {
   type LineInputs, type PayBundle, type PayItemDef, type PayLineItem, type PayResult, type PaySnapshot, type TaxTable,
 } from "@/app/lib/hr-pay";
 import { HrApiError, errText, hrApi, hrDownload } from "../api";
+import ExcelImport from "../ExcelImport";
 
 type RowView = { id: string; snap: PaySnapshot; result: PayResult; memo: string };
 
@@ -56,6 +57,7 @@ function PayMain() {
   const [editing, setEditing] = useState<string | null>(null);
   const [printMode, setPrintMode] = useState<string | null>(null); // "ledger" | "slips" | "slip:<직원 id>"
   const [aff, setAff] = useState("");                               // 소속으로 좁혀 보기("" = 모든 소속)
+  const [importOpen, setImportOpen] = useState(false);              // 엑셀 올리기 창
 
   const adopt = useCallback((j: PayBundle) => {
     const wp = j.workplaces.find((w) => w.id === j.workplace_id);
@@ -184,6 +186,11 @@ function PayMain() {
     try { await hrDownload("/api/hr/payroll/export", { workplace_id: b.workplace_id, month: b.month, affiliation: affOn || undefined }, `payroll-${b.month}.xlsx`); }
     catch (err) { toast.error(errText(err, "급여대장을 내보내지 못했습니다.")); }
   }
+  // 엑셀 올리기 — 내려받은 급여대장에서 금액을 고쳐 다시 올린다. 저장된 급여와 대조하므로 저장하지 않은 것이 있으면 먼저 저장한다.
+  function openImport() {
+    if (needSave) { toast.error("변경을 저장한 뒤 올리세요"); return; }
+    setEditing(null); setImportOpen(true);
+  }
   function print(mode: string) {
     if (needSave) { toast.error("변경을 저장한 뒤 인쇄하세요"); return; }
     setEditing(null); setPrintMode(mode);
@@ -206,6 +213,7 @@ function PayMain() {
         <div className="b2b-page-actions">
           <Link href="/hr/pay/items" prefetch={false} className="b2b-btn-secondary">급여 항목</Link>
           <button type="button" className="b2b-btn-secondary" onClick={excel} disabled={busy || rows.length === 0}>엑셀 내려받기</button>
+          {!confirmed && <button type="button" className="b2b-btn-secondary" onClick={openImport} disabled={busy || rows.length === 0}>엑셀 올리기</button>}
           <button type="button" className="b2b-btn-secondary" onClick={() => print("ledger")} disabled={busy || rows.length === 0}>급여대장 인쇄</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => print("slips")} disabled={busy || rows.length === 0}>명세서 인쇄</button>
           {confirmed ? (
@@ -306,6 +314,13 @@ function PayMain() {
         </>
       )}
 
+      {importOpen && b && (
+        <ExcelImport title={`급여 엑셀 올리기 — ${monthTitle(b.month)}${wp ? ` ${wp.name}` : ""}`} endpoint="/api/hr/payroll/import" extra={{ workplace_id: b.workplace_id, month: b.month }}
+          unit="명" applyWord="저장" blockOnError templateLabel="이 달 급여대장 내려받기"
+          onTemplate={() => hrDownload("/api/hr/payroll/export", { workplace_id: b.workplace_id, month: b.month }, `payroll-${b.month}.xlsx`)}
+          onClose={() => setImportOpen(false)}
+          onDone={(r) => { load(); toast.success(`${r.counts.update}명의 급여를 고쳐 저장했습니다`); }} />
+      )}
       {editRow && b && (
         <LineEditor row={editRow} month={b.month} items={activeItems} readOnly={!!confirmed}
           input={confirmed ? { ...emptyInputs(), memo: editRow.memo } : inputs[editRow.id] || emptyInputs()}
@@ -360,44 +375,59 @@ function PayMain() {
       {b && wp && slipRows.length > 0 && (
         <div className="hr-print-only">
           {slipRows.map(({ id, snap, result: r }) => (
-            <section key={id} className="hr-slip">
-              <h1>급여명세서</h1>
-              <div className="hr-slip-sub">{monthTitle(b.month)}분 · 지급일 {confirmed ? b.payroll?.pay_date : payDate}</div>
-              <table className="hr-print-table">
-                <tbody>
-                  <tr><th>사업장</th><td>{wp.name}</td><th>성명</th><td>{snap.name}</td><th>사번</th><td>{snap.emp_no}</td></tr>
-                  <tr><th>부서·직위</th><td>{[snap.dept, snap.position].filter(Boolean).join(" ")}</td><th>생년월일</th><td>{snap.birth_date || ""}</td><th>입사일</th><td>{snap.hire_date || ""}</td></tr>
-                </tbody>
-              </table>
-              <table className="hr-print-table">
-                <thead><tr><th>지급</th><th className="num">금액(원)</th><th>계산 방법</th></tr></thead>
-                <tbody>
-                  {shown(r, "pay").map((i) => <tr key={i.code}><td>{i.name}</td><td className="num">{won(i.amount)}</td><td>{i.calc}</td></tr>)}
-                  <tr className="hr-print-week"><td>지급 합계</td><td className="num">{won(r.pay_total)}</td><td>{r.exempt_total > 0 ? `비과세 ${won(r.exempt_total)}원, 과세 ${won(r.taxable_total)}원` : ""}</td></tr>
-                </tbody>
-              </table>
-              <table className="hr-print-table">
-                <thead><tr><th>공제</th><th className="num">금액(원)</th><th>계산 방법</th></tr></thead>
-                <tbody>
-                  {shown(r, "deduct").map((i) => <tr key={i.code}><td>{i.name}</td><td className="num">{won(i.amount)}</td><td>{i.calc}</td></tr>)}
-                  <tr className="hr-print-week"><td>공제 합계</td><td className="num">{won(r.deduct_total)}</td><td></td></tr>
-                </tbody>
-              </table>
-              <div className="hr-slip-net"><span>실수령액</span><span>{won(r.net_pay)}원</span></div>
-              {r.basis.pay_type === "hourly" && (
-                <table className="hr-print-table">
-                  <thead><tr><th>근무 일수</th><th>근무 시간</th><th>연장</th><th>야간</th><th>휴일 근무</th><th>주휴 시간</th><th>연차·유급 휴일 시간</th><th>시급</th></tr></thead>
-                  <tbody><tr>
-                    <td className="num">{r.basis.workDays}</td><td className="num">{hoursText(r.basis.worked)}</td><td className="num">{hoursText(r.basis.overtime)}</td><td className="num">{hoursText(r.basis.night)}</td>
-                    <td className="num">{hoursText(r.basis.holiday)}</td><td className="num">{hoursText(r.basis.weeklyHours)}</td><td className="num">{hoursText(r.basis.paidHours)}</td><td className="num">{won(r.basis.wage)}</td>
-                  </tr></tbody>
-                </table>
-              )}
-            </section>
+            <PaySlip key={id} snap={snap} r={r} wpName={wp.name} month={b.month} payDate={(confirmed ? b.payroll?.pay_date : payDate) || ""} />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+// 급여명세서 한 장(인쇄) — 위: 사람·실수령액 / 가운데: 지급 내역 | 공제 내역(항목 아래 작은 글씨로 계산 방법) / 아래: 근무 산출근거.
+//  임금명세서에 있어야 하는 것(성명·생년월일·사번, 지급일, 총액, 항목별 금액과 계산 방법, 공제 내역)은 모두 이 장에 있다.
+function PaySlip({ snap, r, wpName, month, payDate }: { snap: PaySnapshot; r: PayResult; wpName: string; month: string; payDate: string }) {
+  const who = [snap.name, snap.birth_date || "", snap.emp_no, [snap.dept, snap.position].filter(Boolean).join(" "), snap.hire_date ? `입사 ${snap.hire_date}` : "", wpName].filter(Boolean);
+  const basis: [string, string][] = r.basis.pay_type === "hourly" ? [
+    ["근무 일수", `${r.basis.workDays}일`], ["근무 시간", `${hoursText(r.basis.worked)}시간`],
+    ["연장", `${hoursText(r.basis.overtime)}시간`], ["야간", `${hoursText(r.basis.night)}시간`],
+    ["휴일 근무", `${hoursText(r.basis.holiday)}시간`], ["주휴", `${hoursText(r.basis.weeklyHours)}시간`],
+    ["연차·유급 휴일", `${hoursText(r.basis.paidHours)}시간`], ["시급", `${won(r.basis.wage)}원`],
+  ] : [];
+  const items = (kind: "pay" | "deduct") => shown(r, kind).map((i) => (
+    <li key={i.code}>
+      <div><span>{i.name}{i.exempt > 0 && <em>비과세</em>}</span>{i.calc && i.calc !== "비과세" && <small>{i.calc}</small>}</div>
+      <b>{won(i.amount)}원</b>
+    </li>
+  ));
+  return (
+    <section className="hr-slip">
+      <header className="hr-slip-head">
+        <h1>급여명세서</h1>
+        <div className="hr-slip-who">{who.map((t, i) => <span key={i}>{t}</span>)}</div>
+      </header>
+      <div className="hr-slip-net">
+        <span className="hr-slip-net-label">실수령액<small>{monthTitle(month)}분 · {payDate} 지급</small></span>
+        <i aria-hidden="true" />
+        <strong>{won(r.net_pay)}원</strong>
+      </div>
+      <div className="hr-slip-cols">
+        <div>
+          <div className="hr-slip-col-head"><h2>지급 내역</h2><strong>{won(r.pay_total)}원</strong></div>
+          <ul>{items("pay")}</ul>
+          {r.exempt_total > 0 && <p className="hr-slip-note">비과세 {won(r.exempt_total)}원 · 과세 {won(r.taxable_total)}원</p>}
+        </div>
+        <div>
+          <div className="hr-slip-col-head"><h2>공제 내역</h2><strong>{won(r.deduct_total)}원</strong></div>
+          <ul>{items("deduct")}</ul>
+        </div>
+      </div>
+      {basis.length > 0 && (
+        <div className="hr-slip-basis">
+          <div className="hr-slip-col-head"><h2>근무 산출근거</h2><span>{monthTitle(month)}</span></div>
+          <dl className="hr-slip-kv">{basis.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+        </div>
+      )}
+    </section>
   );
 }
 
