@@ -44,25 +44,26 @@ const unescapeXml = (s: string): string => s
   .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 const attr = (tag: string, name: string): string => new RegExp(`(?:^|\\s)${name}="([^"]*)"`).exec(tag)?.[1] ?? "";
 // <t>…</t> 들을 이어 붙인다(rich text 는 조각이 여럿이다). 접두사가 있어도 없어도.
-const textOf = (xml: string): string => [...xml.matchAll(/<(?:\w+:)?t(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?t>/g)].map((m) => unescapeXml(m[1])).join("");
+//  속성 묶음은 짧게 잡는다(`[^>]*?`) — 길게 잡으면 `<c s="3" />` 같은 빈 태그의 `/` 까지 삼켜 다음 칸과 한 칸으로 합쳐진다.
+const textOf = (xml: string): string => [...xml.matchAll(/<(?:\w+:)?t(?:\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/(?:\w+:)?t>)/g)].map((m) => unescapeXml(m[1] || "")).join("");
 // "BC12" → 열 번호(0부터)
 const colOf = (ref: string): number => { let n = 0; for (const ch of ref.replace(/\d/g, "")) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
 
 function sharedStrings(xml: string | undefined): string[] {
   if (!xml) return [];
-  return [...xml.matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/g)].map((m) => textOf(m[1]));
+  return [...xml.matchAll(/<(?:\w+:)?si(?:\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/(?:\w+:)?si>)/g)].map((m) => textOf(m[1] || ""));
 }
 
 function gridOf(xml: string, shared: string[]): PlainCell[][] {
   const grid: PlainCell[][] = [];
   let rowNo = 0;
-  for (const rm of xml.matchAll(/<(?:\w+:)?row(\s[^>]*)?(?:\/>|>([\s\S]*?)<\/(?:\w+:)?row>)/g)) {
+  for (const rm of xml.matchAll(/<(?:\w+:)?row(\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/(?:\w+:)?row>)/g)) {
     const r = Number(attr(rm[1] || "", "r"));
     rowNo = r > 0 ? r : rowNo + 1;                       // 줄 번호가 없으면 차례대로
     if (rowNo > MAX_ROWS) throw new Error("줄이 너무 많습니다");
     const line: PlainCell[] = [];
     let colNo = -1;
-    for (const cm of (rm[2] || "").matchAll(/<(?:\w+:)?c(\s[^>]*)?(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g)) {
+    for (const cm of (rm[2] || "").matchAll(/<(?:\w+:)?c(\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g)) {
       const tag = cm[1] || "", inner = cm[2] || "";
       const ref = attr(tag, "r");
       colNo = ref ? colOf(ref) : colNo + 1;              // 칸 주소가 없으면 차례대로

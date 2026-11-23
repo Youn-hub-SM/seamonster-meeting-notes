@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { clientIp, hrAudit, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
+import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { HR_PENDING_010, fetchPunchSettings, saveNames, savePunchSettings } from "@/app/lib/hr-punch-db";
 import { cleanSettings } from "@/app/lib/hr-punch";
 
@@ -34,6 +34,12 @@ export async function PUT(req: NextRequest) {
         const employee_id = raw?.employee_id ? String(raw.employee_id) : null;
         if (!source_name || (employee_id && !UUID.test(employee_id))) return hrJson({ ok: false, error: "이름 짝이 올바르지 않습니다." }, 400);
         items.push({ source_name, employee_id, skip: raw?.skip === true });
+      }
+      const ids = [...new Set(items.map((i) => i.employee_id).filter((v): v is string => !!v))];
+      if (ids.length > 0) {
+        const found = await hrDb().from("employees").select("id").in("id", ids);
+        if (found.error) throw found.error;
+        if (((found.data || []) as unknown[]).length !== ids.length) return hrJson({ ok: false, error: "없는 직원이 들어 있습니다. 화면을 새로 열어 다시 고르세요." }, 400);
       }
       await saveNames(items, who.name);
       await hrAudit({ actor: who.name, action: "punch_names", ip: clientIp(req), targetType: "work", targetName: "세콤 이름 짝", detail: { count: items.length, skip: items.filter((i) => i.skip).length } });

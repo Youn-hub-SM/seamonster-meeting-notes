@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     const workplaceId = String(body.workplace_id ?? ""), month = String(body.month ?? "");
     if (!UUID.test(workplaceId)) return hrJson({ ok: false, error: "사업장을 고르세요." }, 400);
     if (!isMonth(month)) return hrJson({ ok: false, error: "달을 고르세요." }, 400);
+    if (typeof body.close !== "boolean") return hrJson({ ok: false, error: "알 수 없는 요청입니다." }, 400);
     const wp = await hrDb().from("workplaces").select("id,name").eq("id", workplaceId).maybeSingle();
     if (wp.error) throw wp.error;
     if (!wp.data) return hrJson({ ok: false, error: "없는 사업장입니다." }, 404);

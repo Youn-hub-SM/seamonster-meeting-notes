@@ -133,10 +133,22 @@ export function fitTimes(e: PunchEmployee, tin: string, tout: string, s: PunchSe
 }
 const minText = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ""}` : `${m}분`);
 // 맞춘 결과에서 알릴 것(지각·조퇴·퇴근 뒤 남음 …)
-function fitIssues(f: ReturnType<typeof fitTimes>): string[] {
+type Fit = ReturnType<typeof fitTimes>;
+// 맞춘 출근·퇴근이 하루 근무로 성립하는가 — 출근이 퇴근보다 앞이어야 한다.
+//  성립하지 않는 경우: 퇴근이 출근보다 이르거나 같게 찍힘, 출근이 소정 퇴근 뒤에 찍힘(퇴근은 소정 퇴근으로 맞춰져 뒤집힌다),
+//  퇴근이 소정 출근 앞에 찍힘. 이런 날을 그대로 넣으면 '다음 날 퇴근'으로 읽혀 22~23시간 근무가 된다 — 기본 처리를 주지 않고 반드시 고르게 한다.
+//  16시간 넘게 머문 것으로 찍힌 날(쉬는 날은 찍힌 대로 넣으므로 생길 수 있다)도 같은 까닭으로 기본 처리를 주지 않는다.
+const MAX_SPAN = 16 * 60;
+const sane = (f: Fit): boolean => !f.reversed && minOf(f.end) > minOf(f.start) && minOf(f.end) - minOf(f.start) <= MAX_SPAN;
+const workOf = (e: PunchEmployee, f: Fit, action: PunchAction = "work"): PunchDecision | null =>
+  (sane(f) ? { action, start: f.start, end: f.end, break_min: breakFor(e, f.start, f.end) } : null);
+// 맞춘 결과에서 알릴 것(지각·조퇴·퇴근 뒤 남음 …)
+function fitIssues(f: Fit): string[] {
+  if (f.reversed) return ["퇴근이 출근보다 이르거나 같게 찍힘"];
+  if (minOf(f.end) <= minOf(f.start)) return ["찍힌 시각이 소정 근무 시간 밖"];
+  if (!sane(f)) return ["머문 시간이 16시간을 넘음"];
   const out: string[] = [];
-  if (f.reversed) out.push("퇴근이 출근보다 이릅니다(다음 날 퇴근으로 봅니다)");
-  if (f.noSchedule && !f.reversed) out.push("소정 출퇴근 시각이 없어 찍힌 대로");
+  if (f.noSchedule) out.push("소정 출퇴근 시각이 없어 찍힌 대로");
   if (f.late) out.push(`지각 ${minText(f.late)}`);
   if (f.early) out.push(`조퇴 ${minText(f.early)}`);
   if (f.over) out.push(`퇴근 뒤 ${minText(f.over)} 남음`);
@@ -163,7 +175,7 @@ export function planDay(a: {
     const actions: PunchAction[] = ["work", "leave", "absent", "unpaid", "skip"];
     if (note && note.in_time && note.out_time) {
       const f = fitTimes(e, note.in_time, note.out_time, settings);
-      return { ...base, status: "check", issues: ["안 찍힘 · 미리 적은 시각으로", ...fitIssues(f)], proposal: { action: "work", start: f.start, end: f.end, break_min: breakFor(e, f.start, f.end) }, actions };
+      return { ...base, status: "check", issues: ["안 찍힘 · 미리 적은 시각으로", ...fitIssues(f)], proposal: workOf(e, f), actions };
     }
     return { ...base, status: "check", issues: ["안 찍힘"], proposal: null, actions };
   }
@@ -172,8 +184,8 @@ export function planDay(a: {
     const actions: PunchAction[] = ["holiday_work", "work", "skip"];
     if (a.in && a.out) {
       const f = fitTimes({ ...e, work_start: "", work_end: "" }, a.in, a.out, settings);   // 쉬는 날은 찍힌 대로
-      const issues = [a.off ? "쉬는 날에 찍힘" : "근무일이 아닌 날에 찍힘", ...(f.reversed ? ["퇴근이 출근보다 이릅니다(다음 날 퇴근으로 봅니다)"] : [])];
-      return { ...base, status: "check", issues, proposal: { action: a.restDay ? "holiday_work" : "work", start: f.start, end: f.end, break_min: breakFor(e, f.start, f.end) }, actions };
+      const issues = [a.off ? "쉬는 날에 찍힘" : "근무일이 아닌 날에 찍힘", ...(sane(f) ? [] : fitIssues(f))];
+      return { ...base, status: "check", issues, proposal: workOf(e, f, a.restDay ? "holiday_work" : "work"), actions };
     }
     return { ...base, status: "check", issues: [a.in ? "쉬는 날에 출근만 찍힘" : "쉬는 날에 퇴근만 찍힘"], proposal: { action: "skip" }, actions };
   }
@@ -186,12 +198,12 @@ export function planDay(a: {
     const issue = `${a.in ? "퇴근" : "출근"} 안 찍힘${(a.in ? note?.out_time : note?.in_time) ? " · 미리 적은 시각으로" : ""}`;
     if (!isTime(fillIn) || !isTime(fillOut)) return { ...base, status: "check", issues: [issue], proposal: { action: "work", start: fillIn, end: fillOut }, actions };
     const f = fitTimes(e, fillIn, fillOut, settings);
-    return { ...base, status: "check", issues: [issue, ...fitIssues(f)], proposal: { action: "work", start: f.start, end: f.end, break_min: breakFor(e, f.start, f.end) }, actions };
+    return { ...base, status: "check", issues: [issue, ...(f.reversed ? ["찍힌 시각이 소정 근무 시간 밖"] : fitIssues(f))], proposal: workOf(e, f), actions };
   }
 
   const f = fitTimes(e, a.in, a.out, settings);
   const issues = fitIssues(f);
-  return { ...base, status: issues.length ? "check" : "auto", issues, proposal: { action: "work", start: f.start, end: f.end, break_min: breakFor(e, f.start, f.end) }, actions };
+  return { ...base, status: issues.length ? "check" : "auto", issues, proposal: workOf(e, f), actions };
 }
 
 // 고른 처리 → 근무대장 한 줄. skip 이면 log = null(넣지 않는다). 모자라면 문장.
@@ -202,6 +214,7 @@ export function decisionLog(date: string, d: PunchDecision | null | undefined, e
   if (d.action === "absent" || d.action === "unpaid" || d.action === "paid_holiday") { const n = normalizeLog({ work_date: date, kind: d.action, memo }); return n.ok ? { ok: true, log: n.log } : n; }
   const start = d.start || "", end = d.end || "";
   if (!isTime(start) || !isTime(end)) return { ok: false, error: "출근·퇴근 시각을 넣으세요" };
+  if (start === end) return { ok: false, error: "출근과 퇴근이 같은 시각입니다" };
   const brk = d.break_min == null || !Number.isFinite(Number(d.break_min)) ? breakFor(e, start, end) : Math.round(Number(d.break_min));
   const n = normalizeLog({ work_date: date, kind: d.action, start_time: start, end_time: end, break_min: brk, memo });
   return n.ok ? { ok: true, log: n.log } : n;
@@ -237,6 +250,17 @@ export const dayLabel = (d: string): string => { const w = new Date(`${d}T00:00:
 // 화면에서 그 줄을 정했는가(서버도 같은 것을 본다)
 export function decisionProblem(d: PunchDecision | null | undefined): string {
   if (!d) return "처리를 고르세요";
-  if ((d.action === "work" || d.action === "holiday_work") && (!isTime(d.start || "") || !isTime(d.end || ""))) return "출근·퇴근 시각을 넣으세요";
+  if (d.action === "work" || d.action === "holiday_work") {
+    if (!isTime(d.start || "") || !isTime(d.end || "")) return "출근·퇴근 시각을 넣으세요";
+    if (d.start === d.end) return "출근과 퇴근이 같은 시각입니다";
+    // 휴게를 직접 넣었으면 서버(normalizeLog)와 같은 것을 본다: 0~600분, 머문 시간보다 짧아야 한다
+    if (d.break_min != null) {
+      const b = Number(d.break_min);
+      let span = minOf(d.end as string) - minOf(d.start as string);
+      if (span <= 0) span += 1440;
+      if (!Number.isFinite(b) || b < 0 || b > 600) return "휴게는 0~600분";
+      if (b >= span) return "휴게가 근무 시간보다 깁니다";
+    }
+  }
   return "";
 }

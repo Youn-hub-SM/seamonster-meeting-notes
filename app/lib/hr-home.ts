@@ -166,6 +166,7 @@ export type TodoFacts = {
   expiring: { id: string; days: number }[];   // 30일 안에 소멸하는 연차가 남은 직원
   rate: { exists: boolean; checked: boolean; min_wage: number };
   taxTable: boolean;                          // 오늘 쓸 간이세액표가 있는가
+  closing?: { ready: boolean; closed: ReadonlySet<string> };   // 지난달 근무대장 확정(hr/010): ready = 확정 기능이 있는가, closed = 확정한 사업장
 };
 export const SOON_DAYS = 7;          // 이 안이면 '지금'
 export const CONTRACT_AHEAD = 30;    // 계약 종료를 며칠 앞부터 알리나
@@ -189,7 +190,10 @@ export function buildTodos(f: TodoFacts): Todo[] {
     const p = f.payrolls.find((x) => x.workplace_id === wp.id && x.month === last);
     const payDate = p?.pay_date || defaultPayDate(last, wp.payday);
     const href = `/hr/pay?month=${last}&workplace=${wp.id}`;
-    if (!p) out.push({ key: `pay-none:${wp.id}`, level: level(payDate), text: `${monthNo(last)} 급여 저장 전`, sub: `${at(wp)}지급일 ${mdText(payDate)} · ${ddayText(today, payDate)}`, href, due: payDate });
+    // 근무대장을 확정해야 급여를 저장할 수 있다 — 확정 전이면 급여 줄 대신 확정 줄을 띄운다
+    const needClose = !!f.closing?.ready && !f.closing.closed.has(wp.id) && p?.status !== "confirmed";
+    if (needClose) out.push({ key: `work-close:${wp.id}`, level: level(payDate), text: `${monthNo(last)} 근무대장 확정 전`, sub: `${at(wp)}급여 지급일 ${mdText(payDate)} · ${ddayText(today, payDate)}`, href: `/hr/work?month=${last}`, due: payDate });
+    else if (!p) out.push({ key: `pay-none:${wp.id}`, level: level(payDate), text: `${monthNo(last)} 급여 저장 전`, sub: `${at(wp)}지급일 ${mdText(payDate)} · ${ddayText(today, payDate)}`, href, due: payDate });
     else if (p.status !== "confirmed") out.push({ key: `pay-draft:${wp.id}:${last}`, level: level(payDate), text: `${monthNo(last)} 급여 확정 전`, sub: `${at(wp)}지급일 ${mdText(payDate)} · ${ddayText(today, payDate)}`, href, due: payDate });
     if (!p || p.status !== "confirmed") {
       const empty = staff.filter((e) => e.pay_type === "hourly" && !f.loggedLastMonth.has(e.id));

@@ -17,6 +17,8 @@ import ExcelImport from "../ExcelImport";
 import PunchNotes from "./PunchNotes";
 
 type Closing = { workplace_id: string; closed_by: string; closed_at: string };
+// 저장된 시각(UTC) → 한국 날짜. 그대로 자르면 오전 9시 전에 확정한 날이 하루 앞으로 보인다
+const kstDate = (iso: string): string => { const t = Date.parse(iso); return Number.isNaN(t) ? iso.slice(0, 10) : new Date(t + 9 * 3600e3).toISOString().slice(0, 10); };
 
 export default function HrWorkPage() {
   return (
@@ -147,7 +149,7 @@ function WorkList() {
                 <li key={w.id}>
                   {multiWp && <strong>{w.name}</strong>}
                   {closed
-                    ? <><span className="b2b-status-pill hr-pill-ok">근무대장 확정</span><span className="sm-muted">{closed.closed_by} · {closed.closed_at.slice(0, 10)}</span></>
+                    ? <><span className="b2b-status-pill hr-pill-ok">근무대장 확정</span><span className="sm-muted">{closed.closed_by} · {kstDate(closed.closed_at)}</span></>
                     : <><span className="b2b-status-pill hr-pill-off">확정 전</span>{missing > 0 && <span className="sm-muted">시급제 입력 전 {missing}일</span>}</>}
                   {closed
                     ? (payLocked ? <span className="sm-muted">급여 확정됨</span> : <button type="button" className="b2b-btn-secondary" onClick={() => setClosed(w, false)} disabled={closeBusy === w.id}>확정 취소</button>)

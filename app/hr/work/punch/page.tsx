@@ -89,7 +89,7 @@ function PunchMain() {
   const nameRows = useMemo(() => (report ? report.names.filter((n) => allNames || n.state === "none" || names[n.source]) : []), [report, allNames, names]);
   const unmatched = report ? report.names.filter((n) => n.state === "none").length : 0;
   const nameDirty = Object.keys(names).length > 0;
-  const blocked = !report ? "" : unmatched > 0 || nameDirty ? "이름 짝을 저장하세요" : /이름이 둘 이상/.test(report.blocked) ? report.blocked : open > 0 ? `확인할 줄 ${open}건을 정하세요` : "";
+  const blocked = !report ? "" : report.names.length === 0 ? report.blocked || "이 달에 넣을 줄이 없습니다" : unmatched > 0 || nameDirty ? "이름 짝을 저장하세요" : /이름이 둘 이상/.test(report.blocked) ? report.blocked : open > 0 ? `확인할 줄 ${open}건을 정하세요` : "";
 
   function setDecision(c: PunchCheck, patch: Partial<PunchDecision>) {
     setDecisions((p) => ({ ...p, [c.key]: { ...(p[c.key] ?? c.proposal ?? { action: "skip" as PunchAction }), ...patch } }));
@@ -171,7 +171,7 @@ function PunchMain() {
             <span>그대로 둔 날 <strong>{report.counts.keep}</strong>일</span>
           </div>
           {report.notes.length > 0 && <ul className="hr-import-list hr-rule">{report.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-          {report.counts.people === 0 && unmatched === 0 && <div className="sm-warn">이 달에 넣을 줄이 없습니다. 달과 파일을 확인하세요.</div>}
+          {report.names.length === 0 && <div className="sm-warn">{report.blocked || "이 달에 넣을 줄이 없습니다. 달과 파일을 확인하세요."}</div>}
 
           {!done && (
             <div className="hr-punch-settings">

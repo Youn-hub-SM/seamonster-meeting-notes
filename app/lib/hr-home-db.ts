@@ -10,6 +10,7 @@ import { fetchGrants, fetchLeaveLogs } from "./hr-leave-db";
 import { summarizeLeave } from "./hr-leave";
 import { fetchRates, fetchTaxTable } from "./hr-pay-db";
 import { loadTax } from "./hr-tax-db";
+import { fetchClosings } from "./hr-punch-db";
 import type { TaxRow } from "./hr-tax";
 import {
   LEAVE_AHEAD, TAX_HORIZON, buildTodos, taxSchedule, todayStatus,
@@ -109,7 +110,7 @@ async function loadTodos(today: string, workplaces: HomeWorkplace[], employees: 
       id, days: summarizeLeave(grants.filter((g) => g.employee_id === id), logs.uses.filter((u) => u.employee_id === id), today, LEAVE_AHEAD).expiring,
     })).filter((x) => x.days > 0);
   })();
-  const [payrolls, loggedLastMonth, expiring, rates, table] = await Promise.all([payrollsP, loggedP, leaveP, fetchRates(), fetchTaxTable(today)]);
+  const [payrolls, loggedLastMonth, expiring, rates, table, closing] = await Promise.all([payrollsP, loggedP, leaveP, fetchRates(), fetchTaxTable(today), fetchClosings(last)]);
   if (payrolls.error) throw payrolls.error;
   const heads: HomePayroll[] = ((payrolls.data || []) as unknown as Row[]).map((p) => ({
     workplace_id: String(p.workplace_id), month: String(p.month), pay_date: String(p.pay_date ?? ""), status: p.status === "confirmed" ? "confirmed" : "draft",
@@ -119,6 +120,7 @@ async function loadTodos(today: string, workplaces: HomeWorkplace[], employees: 
     today, workplaces, employees, payrolls: heads, loggedLastMonth, expiring,
     rate: { exists: !!rate, checked: !!rate?.checked, min_wage: num(rate?.min_wage) },
     taxTable: !!table,
+    closing: { ready: closing.ready, closed: new Set(closing.closed.map((c) => c.workplace_id)) },
   });
 }
 

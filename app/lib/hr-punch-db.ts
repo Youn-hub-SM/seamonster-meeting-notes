@@ -2,6 +2,7 @@
 //  미리보기와 입력 완료가 같은 plan 을 쓴다 — 입력 완료 때도 파일을 다시 읽어 다시 계산하고, 화면이 보낸 것은 '처리 고르기'뿐이다.
 
 import { hrAudit, hrDb, isHrPending } from "./hr-db";
+import { isDate } from "./hr";
 import { monthRange, summarizeMonth, weekdayOf, type RosterEmployee, type RosterWorkplace, type WorkLog } from "./hr-work";
 import { fetchLogs, fetchRoster, fetchWorkplaces } from "./hr-work-db";
 import { fetchHolidays } from "./hr-holidays-db";
@@ -64,7 +65,7 @@ export function parseNote(body: Row): { ok: true; row: Row } | { ok: false; fiel
   const kind = String(body.kind ?? "both");
   const tin = String(body.in_time ?? "").trim(), tout = String(body.out_time ?? "").trim();
   if (!/^[0-9a-f-]{36}$/i.test(employee_id)) fields.employee_id = "직원을 고르세요";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(work_date)) fields.work_date = "날짜를 입력하세요";
+  if (!isDate(work_date)) fields.work_date = "날짜를 입력하세요";
   if (!(NOTE_KINDS as readonly string[]).includes(kind)) fields.kind = "내용을 고르세요";
   if (tin && !TIME.test(tin)) fields.in_time = "시각은 HH:MM";
   if (tout && !TIME.test(tout)) fields.out_time = "시각은 HH:MM";
@@ -256,7 +257,14 @@ export async function planPunch(sheets: Sheet[], month: string, opts: { overwrit
   const skipped = nameRows.filter((n) => n.skip).length;
   if (skipped > 0) notes.push(`'넣지 않음'으로 둔 이름 ${skipped}명은 건너뜁니다.`);
 
-  const blocked = unmatched.length > 0 ? `짝을 정하지 않은 이름이 ${unmatched.length}명 있습니다. 직원을 고르거나 '넣지 않음'으로 두세요.`
+  // 이 달의 줄이 하나도 없으면(다른 달 파일을 올렸을 때) 파일에 가장 많은 달을 알려 준다
+  const fileMonths = new Map<string, number>();
+  for (const r of read) if (!r.error) fileMonths.set(r.date.slice(0, 7), (fileMonths.get(r.date.slice(0, 7)) || 0) + 1);
+  const topMonth = [...fileMonths.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  const nothing = inMonth.length === 0
+    ? (topMonth && topMonth !== month ? `이 파일은 ${Number(topMonth.slice(0, 4))}년 ${Number(topMonth.slice(5))}월 기록입니다. 달을 ${Number(topMonth.slice(5))}월로 바꾼 뒤 올리세요.` : "이 달에 넣을 줄이 없습니다. 달과 파일을 확인하세요.")
+    : "";
+  const blocked = nothing ? nothing : unmatched.length > 0 ? `짝을 정하지 않은 이름이 ${unmatched.length}명 있습니다. 직원을 고르거나 '넣지 않음'으로 두세요.`
     : doubled.length > 0 ? `한 직원에게 이름이 둘 이상 짝지어져 있습니다(${doubled.map(([id, v]) => `${empOf.get(id)?.name || ""}: ${v.join(", ")}`).join(" / ")}).`
     : counts.open > 0 ? `확인할 줄 ${counts.open}건을 정하세요.` : "";
   const report: PunchReport = {

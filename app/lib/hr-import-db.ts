@@ -7,7 +7,7 @@
 
 import ExcelJS from "exceljs";
 import { readPlainXlsx } from "./hr-xlsx-plain";
-import { hrAudit, hrDb } from "./hr-db";
+import { hrAudit, hrDb, isHrPending } from "./hr-db";
 import { dataKeyReady, rrnHash } from "./hr-crypto";
 import { applyRrn, missingAffiliation, parseEmployeeInput, readEmployees, wagesOf, writeEmployee, type DbResult, type EmployeeInput } from "./hr-employees";
 import { currentWage, numText, type Wage } from "./hr";
@@ -335,6 +335,7 @@ export async function planWork(sheets: Sheet[], month: string): Promise<WorkPlan
   const { from, to } = monthRange(month);
   const roster = await fetchRoster(month);
   const locked = new Set(await confirmedWorkplaces(month));
+  const closed = await closedWorkplaceIds(month);   // 근무대장을 확정한 사업장(hr/010) — 미리보기에서부터 알린다
   const saved = new Map<string, WorkLog>();
   for (const l of await fetchLogs(month, roster.map((e) => e.id))) {
     if (l.work_date < from || l.work_date > to) continue;
@@ -382,6 +383,7 @@ export async function planWork(sheets: Sheet[], month: string): Promise<WorkPlan
     const e = resolve(r.name);
     if (typeof e === "string") { fail(r.sheet, label, e, `who|${r.sheet}|${r.name}`); continue; }
     if (locked.has(e.workplace_id)) { fail(r.sheet, whoOf(e), "급여가 확정된 달입니다. 근무대장을 고치려면 급여 확정을 취소하세요", `lock|${e.id}`); continue; }
+    if (closed.has(e.workplace_id)) { fail(r.sheet, whoOf(e), "근무대장이 확정된 달입니다. 고치려면 [근무대장 확정 취소]를 누르세요", `close|${e.id}`); continue; }
     if (r.date < e.hire_date) { fail(at, whoOf(e), `${r.date} 입사 전 날짜입니다`); continue; }
     if (e.leave_date && r.date > e.leave_date) { fail(at, whoOf(e), `${r.date} 퇴사 뒤 날짜입니다`); continue; }
     let plan = emps.get(e.id);
@@ -415,6 +417,19 @@ export async function planWork(sheets: Sheet[], month: string): Promise<WorkPlan
   if (otherMonth > 0) notes.push(`${month} 밖의 날짜 ${otherMonth}줄은 넣지 않습니다.`);
   if (breakFilled > 0) notes.push(`휴게(분)를 비운 ${breakFilled}일은 직원 정보의 평소 휴게를 넣었습니다.`);
   return { month, emps: out, errors, errorCount, notes };
+}
+
+// 그 달 근무대장을 확정한 사업장(hr/010). 확정 표가 아직 없으면 빈 집합 — 지금까지처럼 돈다.
+//  (hr-punch-db.ts 의 fetchClosings 와 같은 것을 본다. 그 파일이 이 파일을 불러와 여기서는 따로 읽는다.)
+async function closedWorkplaceIds(month: string): Promise<Set<string>> {
+  try {
+    const { data, error } = await hrDb().from("work_closings").select("workplace_id").eq("month", month);
+    if (error) throw error;
+    return new Set(((data || []) as Row[]).map((r) => String(r.workplace_id)));
+  } catch (err) {
+    if (isHrPending(err)) return new Set();
+    throw err;
+  }
 }
 
 // plan 대로 저장한다 — 직원마다 한 달을 한 번에(hr.save_work_logs 한 트랜잭션). 한 사람이 실패해도 나머지는 계속한다.

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
+import { monthRange } from "@/app/lib/hr-work";
 import { NOTE_KINDS, NOTE_KIND_LABEL, dayLabel, type NoteKind, type PunchNote } from "@/app/lib/hr-punch";
 import { HrApiError, errText, hrApi } from "../api";
 
@@ -21,6 +22,7 @@ export default function PunchNotes({ month, today, people, onClose }: { month: s
   const [busy, setBusy] = useState(false);
   const [f, setF] = useState(blank(today.startsWith(month) ? today : `${month}-01`));
   useEscClose(onClose, busy);
+  const range = monthRange(month);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,6 +35,7 @@ export default function PunchNotes({ month, today, people, onClose }: { month: s
   const nameOf = (id: string) => { const p = people.find((x) => x.id === id); return p ? `${p.name}${p.workplace ? ` · ${p.workplace}` : ""}` : ""; };
 
   async function add() {
+    if (f.work_date < range.from || f.work_date > range.to) { setFields({ work_date: "이 달의 날짜를 넣으세요" }); return; }
     setBusy(true); setError(""); setFields({});
     try {
       await hrApi("/api/hr/attendance/notes", "POST", f);
@@ -72,7 +75,7 @@ export default function PunchNotes({ month, today, people, onClose }: { month: s
             </label>
             <label className="b2b-field">
               <span className="b2b-field-label">날짜<span className="req">*</span></span>
-              <input type="date" className="b2b-input" value={f.work_date} onChange={(e) => setF({ ...f, work_date: e.target.value })} />
+              <input type="date" className="b2b-input" value={f.work_date} min={range.from} max={range.to} onChange={(e) => setF({ ...f, work_date: e.target.value })} />
               {fields.work_date && <span className="b2b-field-error">{fields.work_date}</span>}
             </label>
             <label className="b2b-field">
