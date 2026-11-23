@@ -8,7 +8,10 @@
 //    캠페인 하나에 소재가 여럿이고 소재마다 utm_campaign 이 다를 수 있어(옛 이름·새 이름, 메시지 두 개가 한 캠페인) 성과는 '소재 단위'로 가져온다.
 //    같은 utm_campaign 을 여러 캠페인이 쓰기도 한다(장바구니 캠페인이 고객 등급별로 6개) — 그때는 모두 그 메시지의 발송으로 더한다.
 //  ■ 쓰는 곳
-//    ① 주간 성과: syncDatarize 가 일별×소재의 발송·클릭·비용을 crm_send_stats 에 넣는다(batch 'datarize-sync', utm_campaign 칸에 쉼표로).
+//    ① 주간 성과: syncDatarize 가 일별×소재의 발송·비용을 crm_send_stats 에 넣는다(batch 'datarize-sync', utm_campaign 칸에 쉼표로).
+//       ★ 데이터라이즈의 클릭(clicks)은 넣지 않는다 — 링크가 공식몰(seamonster.kr)로 갈 때만 잡힌다(2026-11-24 실측 120일:
+//         공식몰 링크만 있는 소재 클릭률 2.1%, 블로그·폼·가이드 링크만 있는 소재 7,479건 발송에 클릭 9건 — 그 9건도 쿠폰 버튼).
+//         클릭은 종전대로 GA 세션(utm_campaign 일치)으로 센다 — app/lib/crm-stats.ts.
 //    ② 맵과의 차이 점검·드로어의 실제 소재: loadCatalog(캠페인·소재 목록, b2b_settings 에 1시간 보관).
 import { supabaseAdmin } from "./supabase";
 import { getKv, setKv } from "./b2b-settings";
@@ -59,7 +62,7 @@ async function getAll<T>(path: string): Promise<{ rows: T[]; through: string | n
 type RawCampaign = { campaign_id: string; name?: string | null; channel?: string; campaign_type?: string; schedule_type?: string; status?: string; send_days?: number[] | null; send_time?: string | null; audience_name?: string | null; creative_count?: number | null; deleted_at?: string | null };
 type RawLink = { url?: string | null; link_url?: string | null; label?: string | null; type?: string | null };
 type RawCreative = { campaign_id: string; creative_id: string; name?: string | null; format?: string | null; status?: string | null; deleted_at?: string | null; title?: string | null; header?: string | null; message?: string | null; images?: RawLink[] | null; buttons?: RawLink[] | null; items?: { title?: string | null; message?: string | null; images?: RawLink[] | null; buttons?: RawLink[] | null }[] | null };
-type RawStat = { date: string; campaign_id: string; creative_id?: string; channel?: string; sends?: number | null; clicks?: number | null; cost?: number | string | null };
+type RawStat = { date: string; campaign_id: string; creative_id?: string; channel?: string; sends?: number | null; cost?: number | string | null };
 
 export type DtrCampaign = { id: string; name: string; channel: string; type: string; schedule: string; status: string; sendDays: number[]; sendTime: string; audience: string; deleted: boolean };
 export type DtrButton = { label: string; url: string };
@@ -125,7 +128,7 @@ export async function syncDatarize(p: { since: string; until: string }): Promise
     const sent = Number(s.sends) || 0; sends += sent;
     rows.push({
       source: SOURCE_OF[s.channel || ""] || "other", grain: "day", date: s.date, template: key, sent, delivered: null,
-      clicked: s.clicks == null ? null : Number(s.clicks) || 0, cost: s.cost == null ? null : Number(s.cost) || 0,
+      clicked: null, cost: s.cost == null ? null : Number(s.cost) || 0, // 클릭은 GA 로 센다(머리말 ★)
       utm_campaign: cr?.utms.length ? cr.utms.join(",") : null,
       note: [campName.get(s.campaign_id) || s.campaign_id, cr?.name].filter(Boolean).join(" · "), batch: DATARIZE_BATCH,
     });
