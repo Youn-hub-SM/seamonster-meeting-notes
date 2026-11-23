@@ -414,11 +414,13 @@ function PaySlip({ snap, r, wpName, month, payDate }: { snap: PaySnapshot; r: Pa
         <h1>급여명세서</h1>
         <div className="hr-slip-who">{who.map((t, i) => <span key={i}>{t}</span>)}</div>
       </header>
-      <div className="hr-slip-net">
-        <span className="hr-slip-net-label">실수령액<small>{monthTitle(month)}분 · {payDate} 지급</small></span>
-        <i aria-hidden="true" />
-        <strong>{won(r.net_pay)}원</strong>
-      </div>
+      {basis.length > 0 && (
+        <div className="hr-slip-basis">
+          <div className="hr-slip-col-head"><h2>근무 산출근거</h2><span>{monthTitle(month)}</span></div>
+          <dl className="hr-slip-kv">{basis.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+        </div>
+      )}
+      {/* 금액은 종이 아래쪽에 — 두 번 접어 나눠 줄 때 금액이 가장 안쪽에 겹쳐 비치지 않게(2026-11-23 대표) */}
       <div className="hr-slip-cols">
         <div>
           <div className="hr-slip-col-head"><h2>지급 내역</h2><strong>{won(r.pay_total)}원</strong></div>
@@ -430,12 +432,11 @@ function PaySlip({ snap, r, wpName, month, payDate }: { snap: PaySnapshot; r: Pa
           <ul>{items("deduct")}</ul>
         </div>
       </div>
-      {basis.length > 0 && (
-        <div className="hr-slip-basis">
-          <div className="hr-slip-col-head"><h2>근무 산출근거</h2><span>{monthTitle(month)}</span></div>
-          <dl className="hr-slip-kv">{basis.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
-        </div>
-      )}
+      <div className="hr-slip-net">
+        <span className="hr-slip-net-label">실수령액<small>{monthTitle(month)}분 · {payDate} 지급</small></span>
+        <i aria-hidden="true" />
+        <strong>{won(r.net_pay)}원</strong>
+      </div>
     </section>
   );
 }

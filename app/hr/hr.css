@@ -403,17 +403,19 @@
 /* ── 급여명세서(인쇄용 한 장) ────────────────────────────────────────
    위: 제목과 사람 / 실수령액 한 줄 / 가운데: 지급 내역 | 공제 내역(항목 아래 작은 글씨 = 계산 방법) / 아래: 근무 산출근거.
    표의 칸 선 대신 가는 가로줄만 쓴다. 단위는 종이 기준(pt·mm) — 이 장은 인쇄할 때만 보인다(.hr-print-only). */
-.hr-slip { padding: 4mm 3mm 0; color: var(--sm-black); font-size: 10pt; line-height: 1.45; }
+/* 급여명세서 — 위에는 이름·근무 산출근거, 금액(지급·공제 내역과 실수령액)은 종이 맨 아래에 붙인다.
+   두 번 접어 나눠 줄 때 금액이 안쪽에 겹쳐 비치지 않게(2026-11-23 대표). 한 장 높이를 채워야 아래로 내려간다(여백 10mm → 277mm 가운데 270mm) */
+.hr-slip { display: flex; flex-direction: column; box-sizing: border-box; min-height: 270mm; padding: 4mm 3mm 0; color: var(--sm-black); font-size: 10pt; line-height: 1.45; }
 .hr-slip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8mm; }
 .hr-slip-head h1 { margin: 0; font-size: 22pt; font-weight: 600; line-height: 1.2; white-space: nowrap; }
 .hr-slip-who { display: flex; flex-wrap: wrap; justify-content: flex-end; row-gap: 1mm; font-size: 9pt; color: var(--sm-text-mid); }
 .hr-slip-who span + span { margin-left: 3mm; padding-left: 3mm; border-left: 0.5pt solid var(--sm-border-strong); }
-.hr-slip-net { display: flex; align-items: baseline; gap: 4mm; margin: 14mm 0 10mm; }
+.hr-slip-net { display: flex; align-items: baseline; gap: 4mm; margin: 10mm 0 0; }
 .hr-slip-net-label { font-size: 13pt; font-weight: 600; white-space: nowrap; }
 .hr-slip-net-label small { margin-left: 3mm; font-size: 9pt; font-weight: 400; color: var(--sm-text-mid); }
 .hr-slip-net i { flex: 1; align-self: flex-end; margin-bottom: 4pt; border-bottom: 1pt dotted var(--sm-border-strong); }
 .hr-slip-net strong { font-size: 20pt; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.hr-slip-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10mm; align-items: start; }
+.hr-slip-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10mm; align-items: start; margin-top: auto; padding-top: 12mm; }
 .hr-slip-col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4mm; padding-bottom: 2.5mm; border-bottom: 1pt solid var(--sm-black); }
 .hr-slip-col-head h2 { margin: 0; font-size: 11.5pt; font-weight: 600; }
 .hr-slip-col-head strong { font-size: 11.5pt; font-weight: 600; font-variant-numeric: tabular-nums; }
