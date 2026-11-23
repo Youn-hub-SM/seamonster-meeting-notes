@@ -324,6 +324,7 @@ function PayMain() {
       {editRow && b && (
         <LineEditor row={editRow} month={b.month} items={activeItems} readOnly={!!confirmed}
           input={confirmed ? { ...emptyInputs(), memo: editRow.memo } : inputs[editRow.id] || emptyInputs()}
+          canSave={needSave} saving={busy} onSave={() => save(false)}
           onPatch={(fn) => patch(editRow.id, fn)} onClose={() => setEditing(null)} onPrint={() => print(`slip:${editRow.id}`)} />
       )}
 
@@ -432,9 +433,11 @@ function PaySlip({ snap, r, wpName, month, payDate }: { snap: PaySnapshot; r: Pa
 }
 
 // 한 직원의 그달 급여 — 항목별 금액과 계산 방법. 금액 칸을 고치면 그 값이 쓰이고(자동 계산값은 옆에 남는다), 비우면 자동으로 돌아간다.
-function LineEditor({ row, month, items, input, readOnly, onPatch, onClose, onPrint }: {
+//  창 아래 [변경 저장]은 화면 위의 [변경 저장]과 같다(그 달 사업장 전원을 저장한다) — 조금 고칠 때 창을 닫지 않고 바로 저장하려고 둔다.
+function LineEditor({ row, month, items, input, readOnly, canSave, saving, onPatch, onSave, onClose, onPrint }: {
   row: RowView; month: string; items: PayItemDef[]; input: LineInputs; readOnly: boolean;
-  onPatch: (fn: (x: LineInputs) => LineInputs) => void; onClose: () => void; onPrint: () => void;
+  canSave: boolean; saving: boolean;
+  onPatch: (fn: (x: LineInputs) => LineInputs) => void; onSave: () => void; onClose: () => void; onPrint: () => void;
 }) {
   useEscClose(onClose);
   const r = row.result;
@@ -546,7 +549,12 @@ function LineEditor({ row, month, items, input, readOnly, onPatch, onClose, onPr
         <div className="b2b-modal-foot">
           <div className="b2b-modal-foot-right">
             <button type="button" className="b2b-btn-secondary" onClick={onPrint}>명세서 인쇄</button>
-            <button type="button" className="b2b-btn-primary" onClick={onClose}>닫기</button>
+            {readOnly ? <button type="button" className="b2b-btn-primary" onClick={onClose}>닫기</button> : (
+              <>
+                <button type="button" className="b2b-btn-secondary" onClick={onClose}>닫기</button>
+                <button type="button" className="b2b-btn-primary" onClick={onSave} disabled={saving || !canSave}>{saving ? "저장 중..." : "변경 저장"}</button>
+              </>
+            )}
           </div>
         </div>
       </div>
