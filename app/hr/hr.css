@@ -259,6 +259,23 @@
 .hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
 .hr-sec-head .hr-holiday-nav { margin-bottom: 0; }   /* 공휴일 구역 머리의 해 이동·버튼 줄 */
 
+/* 퇴직금 — 직원 고르기와 마지막 근무일, 구간 임금 칸 */
+.hr-sev-pick { flex: 1 1 320px; max-width: 460px; }
+.hr-sev-last { display: inline-flex; align-items: center; gap: var(--sm-space-2); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+.hr-sev-last .b2b-input { width: 160px; }
+.hr-sev-amount { width: 140px; }
+.hr-sev-cands { margin-bottom: var(--sm-space-3); }
+@media print {
+  .hr-sev-print { font-size: 9pt; margin-bottom: 10px; }
+  .hr-sev-print th, .hr-sev-print td { padding: 4px 6px; }
+  .hr-sev-print-note { margin: 4px 0 0; font-size: 9pt; }
+  /* 원천세 집계(가로) — 합계 줄과 상태 글자 */
+  .hr-tax-print { font-size: 8.5pt; }
+  .hr-tax-print th, .hr-tax-print td { padding: 4px 5px; }
+  .hr-tax-print .hr-pay-sum td { background: #f4f4f4; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hr-tax-print .b2b-status-pill { padding: 0; border: none; background: none; color: inherit; font-size: inherit; }
+}
+
 /* 연차 달력(연차 화면의 '달력' 탭) — 한 달, 날짜 칸마다 그날 연차를 쓰는 사람 */
 .hr-cal-wrap { overflow-x: auto; }
 .hr-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 720px; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); overflow: hidden; }

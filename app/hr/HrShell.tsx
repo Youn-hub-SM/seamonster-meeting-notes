@@ -16,6 +16,8 @@ const NAV = [
   { href: "/hr", label: "인사대장", icon: "user" as const, match: (p: string) => p === "/hr" || p.startsWith("/hr/employees") },
   { href: "/hr/work", label: "근무대장", icon: "note" as const, match: (p: string) => p.startsWith("/hr/work") },
   { href: "/hr/pay", label: "급여", icon: "receipt" as const, match: (p: string) => p.startsWith("/hr/pay") },
+  { href: "/hr/tax", label: "원천세", icon: "tag" as const, match: (p: string) => p.startsWith("/hr/tax") },
+  { href: "/hr/severance", label: "퇴직금", icon: "handshake" as const, match: (p: string) => p.startsWith("/hr/severance") },
   { href: "/hr/leave", label: "연차", icon: "ticket" as const, match: (p: string) => p.startsWith("/hr/leave") },
   { href: "/hr/docs", label: "증명서", icon: "pen" as const, match: (p: string) => p.startsWith("/hr/docs") },
   { href: "/hr/stats", label: "통계", icon: "trend" as const, match: (p: string) => p.startsWith("/hr/stats") },
