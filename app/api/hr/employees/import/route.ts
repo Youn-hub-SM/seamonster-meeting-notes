@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { clientIp, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { ImportError, applyEmployees, employeeReport, loadSheets, planEmployees, uploadProblem } from "@/app/lib/hr-import-db";
-import { EMP_XLSX_LABELS } from "@/app/lib/hr-import";
+import { EMP_REQUIRED_LABELS, EMP_XLSX_LABELS } from "@/app/lib/hr-import";
+import { markRequired } from "@/app/lib/hr-xlsx-style";
 import { EMP_TYPES } from "@/app/lib/hr";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ async function template(): Promise<NextResponse> {
   ws.addRow(EMP_XLSX_LABELS);
   ws.getRow(1).font = { bold: true };
   ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+  markRequired(ws, 1, EMP_REQUIRED_LABELS);   // 올릴 때 꼭 있어야 하는 칸은 노랗게
   EMP_XLSX_LABELS.forEach((l, i) => {
     const c = ws.getColumn(i + 1);
     c.width = ["주소", "이력", "메모", "퇴사 사유"].includes(l) ? 30 : ["주민등록번호", "임금 적용 시작일", "소정근로 요일"].includes(l) ? 18 : 13;
@@ -30,7 +32,7 @@ async function template(): Promise<NextResponse> {
   help.getRow(1).font = { bold: true };
   const rows: [string, string][] = [
     ["한 줄", "한 사람. 머리 줄(칸 이름)은 지우지 않는다. 칸의 순서는 바꿔도 되고, 쓰지 않는 칸은 지워도 된다"],
-    ["새 직원에 꼭 넣는 칸", "성명, 입사일, 시급(월급제는 월급)"],
+    ["새 직원에 꼭 넣는 칸(노란 칸)", "성명, 입사일, 시급(월급제는 월급 — 둘 가운데 하나)"],
     ["이미 있는 직원", "주민등록번호 → 성명과 입사일 순으로 같은 사람을 찾아 고친다. 빈 칸은 건드리지 않는다"],
     ["사업장 이름", "[사업장]에 등록한 이름 그대로. 사업장이 하나면 비워도 된다"],
     ["소속 이름", "[사업장 수정]의 소속 목록에 있는 이름 그대로(예: 파도소리). 소속을 쓰지 않으면 비운다"],

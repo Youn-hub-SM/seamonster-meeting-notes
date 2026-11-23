@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
+import { WORK_REQUIRED_LABELS } from "@/app/lib/hr-import";
+import { markRequired } from "@/app/lib/hr-xlsx-style";
 import { HR_PENDING_002, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { fetchLogs, fetchRoster, fetchWorkplaces } from "@/app/lib/hr-work-db";
 import { LEAVE_PART_LABEL, WORK_KIND_LABEL, isMonth, monthRange, summarizeMonth, weekdayOf } from "@/app/lib/hr-work";
@@ -55,6 +57,7 @@ export async function POST(req: NextRequest) {
       ws.getRow(1).font = { bold: true };
       ws.addRow(["날짜", "요일", "종류", "출근", "퇴근", "휴게(분)", "근무 시간", "야간", "연장", "연차", "비고"]);
       head(ws, 2);
+      markRequired(ws, 2, WORK_REQUIRED_LABELS);   // 올릴 때 꼭 있어야 하는 칸(날짜·종류)은 노랗게
       for (const d of days) {
         const l = byDate.get(d);
         ws.addRow([d, WEEKDAYS[weekdayOf(d) - 1], l ? WORK_KIND_LABEL[l.kind] : "", l?.start_time || "", l?.end_time || "",

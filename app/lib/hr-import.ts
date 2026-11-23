@@ -138,6 +138,13 @@ export const EMP_XLSX_COLS: EmpCol[] = [
   { label: "메모", key: "memo", kind: "text" },
 ];
 export const EMP_XLSX_LABELS = EMP_XLSX_COLS.map((c) => c.label);
+// 올릴 때 꼭 있어야 하는 칸 — 내려받는 파일에서 이 칸의 머리 글자를 칠한다(hr-xlsx-style.ts markRequired).
+//  인사대장: 새 직원은 성명·입사일·임금(시급 또는 월급 가운데 하나)이 있어야 등록된다.
+//  근무대장: 날짜가 없으면 그 줄을 읽지 못하고, 종류(또는 출근·퇴근·근무 시간)가 없으면 내용 없는 줄로 건너뛴다.
+//  급여대장: 성명으로 직원을 찾는다(금액 칸은 고친 것만 반영하므로 필수가 아니다).
+export const EMP_REQUIRED_LABELS = ["성명", "입사일", "시급", "월급"] as const;
+export const WORK_REQUIRED_LABELS = ["날짜", "종류"] as const;
+export const PAY_REQUIRED_LABELS = ["성명"] as const;
 // 저장 칸 이름 → 화면의 칸 이름(오류·바뀐 칸을 말할 때)
 export const EMP_KEY_LABEL: Record<string, string> = {
   ...Object.fromEntries(EMP_XLSX_COLS.filter((c) => c.key).map((c) => [c.key, c.label])),

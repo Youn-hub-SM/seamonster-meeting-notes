@@ -4,7 +4,8 @@ import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/h
 import { readEmployees, toEmployee, wagesOf } from "@/app/lib/hr-employees";
 import { decryptRrn } from "@/app/lib/hr-crypto";
 import { PAY_TYPE_LABEL, currentWage, formatRrn, hasLeftOn, todayKst, workDaysText } from "@/app/lib/hr";
-import { EMP_XLSX_LABELS, INS_BASIS_TEXT, LEAVE_BASIS_TEXT } from "@/app/lib/hr-import";
+import { EMP_REQUIRED_LABELS, EMP_XLSX_LABELS, INS_BASIS_TEXT, LEAVE_BASIS_TEXT } from "@/app/lib/hr-import";
+import { markRequired } from "@/app/lib/hr-xlsx-style";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
     ws.addRow(HEAD);
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+    markRequired(ws, 1, EMP_REQUIRED_LABELS);   // 올릴 때 꼭 있어야 하는 칸은 노랗게
     const yn = (b: boolean) => (b ? "가입" : "제외");
     for (const r of rows) {
       const e = toEmployee(r, wages.get(String(r.id)) || []);

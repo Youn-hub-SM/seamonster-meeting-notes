@@ -259,6 +259,16 @@
 .hr-sec-head h2 { margin: 0; font-size: var(--sm-fs-xl); font-weight: 600; line-height: var(--sm-lh-heading); }
 .hr-sec-head .hr-holiday-nav { margin-bottom: 0; }   /* 공휴일 구역 머리의 해 이동·버튼 줄 */
 
+/* 이체 파일 창(급여) — 직원을 골라 은행 급여이체 엑셀을 만든다 */
+.hr-bank-list { max-height: 46vh; overflow: auto; }
+.hr-bank-check { width: 36px; text-align: center; }
+.hr-bank-off > td { color: var(--sm-text-mid); }
+.hr-bank-search { width: 180px; }
+.hr-bank-labels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sm-space-3); margin-top: var(--sm-space-3); }
+@media (max-width: 640px) { .hr-bank-labels { grid-template-columns: minmax(0, 1fr); } }
+.hr-bank-sum { font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+.hr-bank-sum strong { color: var(--sm-black); font-variant-numeric: tabular-nums; }
+
 /* 세콤 기록 넣기(근무대장) — 보정 표, 이름 짝, 기준, 근무대장 확정 줄, 미리 적기 창 */
 .hr-punch-opt { display: inline-flex; align-items: center; gap: var(--sm-space-1); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
 .hr-punch-settings { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2) var(--sm-space-5); margin: var(--sm-space-3) 0; font-size: var(--sm-fs-base); color: var(--sm-text-mid); }

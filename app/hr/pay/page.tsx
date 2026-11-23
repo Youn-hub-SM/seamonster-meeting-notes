@@ -16,6 +16,7 @@ import {
   type LineInputs, type PayBundle, type PayItemDef, type PayLineItem, type PayResult, type PaySnapshot, type TaxTable,
 } from "@/app/lib/hr-pay";
 import { HrApiError, errText, hrApi, hrDownload } from "../api";
+import BankExport from "./BankExport";
 import ExcelImport from "../ExcelImport";
 
 type RowView = { id: string; snap: PaySnapshot; result: PayResult; memo: string };
@@ -59,6 +60,7 @@ function PayMain() {
   const [aff, setAff] = useState("");                               // 소속으로 좁혀 보기("" = 모든 소속)
   const [importFile, setImportFile] = useState<File | null>(null);  // 엑셀 올리기 — 고른 파일(있으면 미리보기 창이 열린다)
   const importRef = useRef<HTMLInputElement>(null);
+  const [bankOpen, setBankOpen] = useState(false);                  // 이체 파일 창
 
   const adopt = useCallback((j: PayBundle) => {
     const wp = j.workplaces.find((w) => w.id === j.workplace_id);
@@ -195,6 +197,11 @@ function PayMain() {
     if (needSave) { toast.error("변경을 저장한 뒤 올리세요"); return; }
     setEditing(null); importRef.current?.click();
   }
+  // 이체 파일 — 저장한 급여의 실수령액으로 은행 급여이체 엑셀을 만든다(직원을 골라서)
+  function openBank() {
+    if (needSave) { toast.error("변경을 저장한 뒤 만드세요"); return; }
+    setEditing(null); setBankOpen(true);
+  }
   function print(mode: string) {
     if (needSave) { toast.error("변경을 저장한 뒤 인쇄하세요"); return; }
     setEditing(null); setPrintMode(mode);
@@ -217,6 +224,7 @@ function PayMain() {
         <div className="b2b-page-actions">
           <Link href="/hr/pay/items" prefetch={false} className="b2b-btn-secondary">급여 항목</Link>
           <button type="button" className="b2b-btn-secondary" onClick={excel} disabled={busy || rows.length === 0}>엑셀 내려받기</button>
+          <button type="button" className="b2b-btn-secondary" onClick={openBank} disabled={busy || rows.length === 0}>이체 파일</button>
           {!confirmed && <button type="button" className="b2b-btn-secondary" onClick={openImport} disabled={busy || gate || rows.length === 0}>엑셀 올리기</button>}
           <button type="button" className="b2b-btn-secondary" onClick={() => print("ledger")} disabled={busy || rows.length === 0}>급여대장 인쇄</button>
           <button type="button" className="b2b-btn-secondary" onClick={() => print("slips")} disabled={busy || rows.length === 0}>명세서 인쇄</button>
@@ -329,6 +337,7 @@ function PayMain() {
           onClose={() => setImportFile(null)}
           onDone={(r) => { load(); toast.success(`${r.counts.update}명의 급여를 고쳐 저장했습니다`); }} />
       )}
+      {bankOpen && b && <BankExport workplaceId={b.workplace_id} month={b.month} affiliation={affOn} onClose={() => setBankOpen(false)} />}
       {editRow && b && (
         <LineEditor row={editRow} month={b.month} items={activeItems} readOnly={!!confirmed}
           input={confirmed ? { ...emptyInputs(), memo: editRow.memo } : inputs[editRow.id] || emptyInputs()}

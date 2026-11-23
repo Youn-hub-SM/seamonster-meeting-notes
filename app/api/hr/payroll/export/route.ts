@@ -4,6 +4,8 @@ import { hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { HR_PENDING_003, UUID_RE, fetchPayWorkplaces, fetchPayroll } from "@/app/lib/hr-pay-db";
 import { SYSTEM_DEDUCT, SYSTEM_LABEL, SYSTEM_PAY, itemAmount, type PayResult } from "@/app/lib/hr-pay";
 import { isMonth } from "@/app/lib/hr-work";
+import { PAY_REQUIRED_LABELS } from "@/app/lib/hr-import";
+import { markRequired } from "@/app/lib/hr-xlsx-style";
 import { fetchAffiliationOf } from "@/app/lib/hr-work-db";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +62,7 @@ export async function POST(req: NextRequest) {
     ws.addRow(head);
     ws.getRow(2).font = { bold: true };
     ws.getRow(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+    markRequired(ws, 2, PAY_REQUIRED_LABELS);   // 올릴 때 꼭 있어야 하는 칸(성명)은 노랗게
     const totals: number[] = [];
     for (const l of lines) {
       const s = l.snapshot, vals = rowOf(l.result!);
