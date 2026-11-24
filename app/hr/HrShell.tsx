@@ -51,7 +51,7 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
     <FeedbackProvider>
       <div className="hr-shell">
         <aside className="hr-sb">
-          <Link href="/hr" className="hr-brand">급여·연차</Link>
+          <Link href="/hr" className="hr-brand">파도소리 HR</Link>
           <nav className="hr-nav">
             {NAV.map((m) => (
               <Link key={m.href} href={m.href} prefetch={false} className={`hr-nav-item ${m.match(pathname) ? "is-active" : ""}`}>
