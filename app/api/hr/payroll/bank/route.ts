@@ -4,12 +4,43 @@ import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/h
 import { HR_PENDING_003, UUID_RE, fetchPayWorkplaces, fetchPayroll } from "@/app/lib/hr-pay-db";
 import { isMonth } from "@/app/lib/hr-work";
 import { fetchAffiliationOf } from "@/app/lib/hr-work-db";
-import { BANK_AMOUNT_FMT, BANK_SHEET, bankLabels, bankRowOf, cleanLabels, type BankLine, type BankRow, type BankSource } from "@/app/lib/hr-bank";
+import {
+  BANK_AMOUNT_FMT, BANK_SHEET, KB_BANKS, KB_BANKS_PER_ROW, KB_BANK_TABLE_ROW, KB_BANK_TITLE, KB_NOTE_LINES, KB_NOTE_TITLE, KB_RECV_LINES, KB_RECV_TITLE,
+  bankLabels, bankRowOf, cleanLabels, type BankLine, type BankRow, type BankSource,
+} from "@/app/lib/hr-bank";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type Row = Record<string, unknown>;
+
+// 양식 오른쪽 구역(I~V열): 유의사항 · 받는분 통장표시 예시 · 주요 은행 코드 표. 글은 hr-bank.ts 에 양식 그대로 있다.
+function writeKbNotes(ws: ExcelJS.Worksheet): void {
+  const BLUE = "FFEFF3FC", YELLOW = "FFFFF5CC";
+  const fill = (argb: string): ExcelJS.Fill => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+  const put = (addr: string, text: string, o: { bold?: boolean; size?: number; fill?: string; red?: boolean; center?: boolean } = {}) => {
+    const c = ws.getCell(addr);
+    c.value = text; c.numFmt = "@";
+    c.font = { size: o.size ?? 10, bold: !!o.bold, ...(o.red ? { color: { argb: "FFFF0000" } } : {}) };
+    if (o.fill) c.fill = fill(o.fill);
+    c.alignment = { vertical: "middle", horizontal: o.center ? "center" : "left" };
+  };
+  put("I1", KB_NOTE_TITLE, { bold: true, size: 9, fill: BLUE });
+  ws.mergeCells("I1:V1");
+  for (const [row, col, text] of KB_NOTE_LINES) put(`${col}${row}`, text, { size: col === "J" ? 9 : 10, red: row === 7 && col === "L" });
+  put("I11", KB_RECV_TITLE, { bold: true, size: 9, fill: YELLOW });
+  ws.mergeCells("I11:V11");
+  KB_RECV_LINES.forEach((t, i) => {
+    put(`I${12 + i}`, t, { fill: YELLOW });
+    for (let c = 10; c <= 22; c++) ws.getRow(12 + i).getCell(c).fill = fill(YELLOW);
+  });
+  put("I15", KB_BANK_TITLE, { bold: true, size: 9, fill: BLUE });
+  Object.entries(KB_BANKS).forEach(([name, code], i) => {
+    const row = ws.getRow(KB_BANK_TABLE_ROW + Math.floor(i / KB_BANKS_PER_ROW)), col = 9 + (i % KB_BANKS_PER_ROW) * 2;
+    put(row.getCell(col).address, name, { center: true });
+    put(row.getCell(col + 1).address, code, { center: true });
+  });
+}
 
 // POST /api/hr/payroll/bank — 급여 이체 파일(국민은행 급여이체 엑셀)
 //   { workplace_id, month }                                        → 목록: 직원마다 은행·가린 계좌·예금주·실수령액과 이체할 수 없는 까닭
@@ -61,12 +92,15 @@ export async function POST(req: NextRequest) {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet(BANK_SHEET);
     // 은행 양식 그대로: 머리 줄 없이 1줄부터. 은행·계좌·예금주·메모는 글자 서식(계좌의 앞자리 0 이 지워지지 않게), 금액만 숫자
-    ws.columns = [{ width: 11 }, { width: 22 }, { width: 15 }, { width: 12 }, { width: 10 }, { width: 13 }, { width: 13 }];
+    //  오른쪽(I~V열)에는 양식의 유의사항과 은행 코드 표를 그대로 둔다 — 은행 이름이 틀린 줄을 표를 보고 고치려는 것(대표)
+    ws.columns = [{ width: 11 }, { width: 22 }, { width: 15 }, { width: 12 }, { width: 10 }, { width: 13 }, { width: 13 }, { width: 3 },
+      ...Array.from({ length: 14 }, (_, i) => ({ width: i === 0 ? 7.6 : i % 2 === 1 ? 6.1 : 8.6 }))];
     for (const b of picked) {
       const l = b.line as BankLine;
       const row = ws.addRow([l.bank, l.account, l.amount, l.holder, labels.recv, labels.mine, labels.memo]);
       row.eachCell({ includeEmpty: true }, (c, col) => { c.numFmt = col === 3 ? BANK_AMOUNT_FMT : "@"; });
     }
+    writeKbNotes(ws);
     const total = picked.reduce((t, b) => t + b.row.amount, 0);
     const buf = Buffer.from(await wb.xlsx.writeBuffer());
     // 이력에는 사람 수·합계만 남긴다(계좌번호를 싣지 않는다)
