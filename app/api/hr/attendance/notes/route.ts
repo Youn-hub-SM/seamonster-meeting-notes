@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/hr-db";
 import { isMonth, monthRange } from "@/app/lib/hr-work";
-import { HR_PENDING_010, fetchNotes, parseNote } from "@/app/lib/hr-punch-db";
+import { HR_PENDING_010, HR_PENDING_011, fetchNotes, parseNote } from "@/app/lib/hr-punch-db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/hr/attendance/notes — 미리 적기. { employee_id, work_date, kind, in_time?, out_time?, memo? }
-//  "오늘 못 찍었어요"를 들은 날 적어 둔다. 같은 직원·같은 날에 이미 있으면 고친다. 세콤 파일을 넣을 때 그날 줄에 붙는다.
+//  "오늘 못 찍었어요"·조퇴·결근·병가를 들은 날 적어 둔다(kind: in·out·both·early·absent·sick·etc). 같은 직원·같은 날에 이미 있으면 고친다. 세콤 파일을 넣을 때 그날 줄에 붙는다.
 export async function POST(req: NextRequest) {
   const who = await requireHr(req);
   if (who.res) return who.res;
@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     await hrAudit({ actor: who.name, action: "punch_note", ip: clientIp(req), targetType: "employee", targetId: String(parsed.row.employee_id), targetName: String((emp.data as { name?: string }).name ?? ""), detail: { work_date: parsed.row.work_date, kind: parsed.row.kind, in_time: parsed.row.in_time, out_time: parsed.row.out_time } });
     return hrJson({ ok: true });
   } catch (err) {
+    // hr/011 전에는 DB 가 조퇴·결근·병가를 받지 않는다(종류 제약 23514) — 무엇을 적용하면 되는지 알린다
+    if (String((err as { code?: string })?.code ?? "") === "23514") return hrJson({ ok: false, pending: true, error: HR_PENDING_011 }, 503);
     return hrError(err, "저장하지 못했습니다.", HR_PENDING_010);
   }
 }

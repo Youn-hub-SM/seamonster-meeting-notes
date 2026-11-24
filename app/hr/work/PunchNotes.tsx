@@ -1,13 +1,13 @@
 "use client";
 
-// 미리 적기 — "오늘 못 찍었어요"를 들은 날 적어 두는 창. 세콤 파일을 넣을 때 그날 줄에 붙어, 빈 시각을 이 시각으로 채우자고 나온다.
+// 미리 적기 — "오늘 못 찍었어요"·조퇴·결근·병가를 들은 날 적어 두는 창. 세콤 파일을 넣을 때 그날 줄에 붙어, 빈 시각을 이 시각으로 채우거나 결근을 기본으로 고르자고 나온다.
 //  근무대장에 바로 들어가는 것이 아니다(근무대장은 파일을 넣고 보정할 때 채워진다).
 
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/app/components/Feedback";
 import { useEscClose } from "@/app/lib/use-esc";
 import { monthRange } from "@/app/lib/hr-work";
-import { NOTE_KINDS, NOTE_KIND_LABEL, dayLabel, type NoteKind, type PunchNote } from "@/app/lib/hr-punch";
+import { NOTE_KINDS, NOTE_KIND_LABEL, dayLabel, noteIsAway, type NoteKind, type PunchNote } from "@/app/lib/hr-punch";
 import { HrApiError, errText, hrApi } from "../api";
 
 type Person = { id: string; name: string; workplace: string };
@@ -23,6 +23,7 @@ export default function PunchNotes({ month, today, people, onClose }: { month: s
   const [f, setF] = useState(blank(today.startsWith(month) ? today : `${month}-01`));
   useEscClose(onClose, busy);
   const range = monthRange(month);
+  const away = noteIsAway(f.kind);   // 결근·병가는 나오지 않은 날이라 시각을 받지 않는다
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,18 +81,18 @@ export default function PunchNotes({ month, today, people, onClose }: { month: s
             </label>
             <label className="b2b-field">
               <span className="b2b-field-label">내용</span>
-              <select className="b2b-input" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as NoteKind })}>
+              <select className="b2b-input" value={f.kind} onChange={(e) => { const kind = e.target.value as NoteKind; setF({ ...f, kind, ...(noteIsAway(kind) ? { in_time: "", out_time: "" } : {}) }); }}>
                 {NOTE_KINDS.map((k) => <option key={k} value={k}>{NOTE_KIND_LABEL[k]}</option>)}
               </select>
             </label>
             <label className="b2b-field">
               <span className="b2b-field-label">실제 출근</span>
-              <input type="time" className="b2b-input" value={f.in_time} onChange={(e) => setF({ ...f, in_time: e.target.value })} />
+              <input type="time" className="b2b-input" value={f.in_time} disabled={away} onChange={(e) => setF({ ...f, in_time: e.target.value })} />
               {fields.in_time && <span className="b2b-field-error">{fields.in_time}</span>}
             </label>
             <label className="b2b-field">
               <span className="b2b-field-label">실제 퇴근</span>
-              <input type="time" className="b2b-input" value={f.out_time} onChange={(e) => setF({ ...f, out_time: e.target.value })} />
+              <input type="time" className="b2b-input" value={f.out_time} disabled={away} onChange={(e) => setF({ ...f, out_time: e.target.value })} />
               {fields.out_time && <span className="b2b-field-error">{fields.out_time}</span>}
             </label>
             <label className="b2b-field hr-punch-memo">

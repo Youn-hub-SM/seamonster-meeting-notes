@@ -3,7 +3,7 @@
 // 급여·연차 창 전용 셸 — 업무도우미 셸(AppShell)은 /hr 아래에서 빠지고(AppShell 참조) 이 셸이 감싼다.
 // 로그인부터 따로다: 쿠키 hr_auth, 로그인 화면 /hr/login. 업무도우미로 가는 링크·이름·로고를 두지 않는다.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/app/components/Icon";
@@ -40,7 +40,17 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
     return () => mo.disconnect();
   }, [pathname]);
 
-  if (pathname === "/hr/login") return <>{children}</>;
+  // 로그인한 이름(로그아웃 옆에 보인다) — 쿠키는 화면에서 읽을 수 없어 서버에 한 번 묻는다. 못 받아도 화면은 그대로 돈다.
+  const onLogin = pathname === "/hr/login";
+  const [who, setWho] = useState("");
+  useEffect(() => {
+    if (onLogin) return;
+    let alive = true;
+    fetch("/api/hr/auth").then((r) => (r.ok ? r.json() : null)).then((j) => { if (alive && j && typeof j.name === "string") setWho(j.name); }).catch(() => {});
+    return () => { alive = false; };
+  }, [onLogin]);
+
+  if (onLogin) return <>{children}</>;
 
   async function logout() {
     await fetch("/api/hr/auth", { method: "DELETE" }).catch(() => {});
@@ -61,6 +71,7 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <div className="hr-sb-foot">
+            {who && <span className="hr-sb-who" title={who}>{who}</span>}
             <button type="button" onClick={logout}>로그아웃</button>
           </div>
         </aside>

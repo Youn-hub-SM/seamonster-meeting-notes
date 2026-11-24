@@ -11,12 +11,14 @@ import { confirmedWorkplaces } from "./hr-pay-db";
 import { ImportError } from "./hr-import-db";
 import { sameWorkLog, type Sheet } from "./hr-import";
 import {
-  NOTE_KINDS, PUNCH_DEFAULTS, cleanSettings, decisionLog, planDay, readPunchSheet,
+  NOTE_KINDS, PUNCH_DEFAULTS, cleanSettings, decisionLog, noteIsAway, planDay, readPunchSheet,
   type NoteKind, type PunchCheck, type PunchDecision, type PunchNameRow, type PunchNote, type PunchReport, type PunchRow, type PunchSettings,
 } from "./hr-punch";
 
 type Row = Record<string, unknown>;
 export const HR_PENDING_010 = "DB 준비 전입니다. supabase/migrations/hr/010_attendance.sql 을 적용하세요.";
+// 미리 적기의 조퇴·결근·병가는 hr/011 이 종류 제약을 넓힌 뒤에 저장된다
+export const HR_PENDING_011 = "DB 준비 전입니다. supabase/migrations/hr/011_punch_note_kinds.sql 을 적용하세요. 그 전에는 조퇴·결근·병가를 적어 둘 수 없습니다.";
 const PAGE = 1000;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -70,7 +72,9 @@ export function parseNote(body: Row): { ok: true; row: Row } | { ok: false; fiel
   if (tin && !TIME.test(tin)) fields.in_time = "시각은 HH:MM";
   if (tout && !TIME.test(tout)) fields.out_time = "시각은 HH:MM";
   if (Object.keys(fields).length > 0) return { ok: false, fields };
-  return { ok: true, row: { employee_id, work_date, kind, in_time: tin || null, out_time: tout || null, memo: String(body.memo ?? "").trim().slice(0, 200) } };
+  // 결근·병가는 나오지 않은 날이라 시각을 받지 않는다(넘어와도 버린다)
+  const away = noteIsAway(kind as NoteKind);
+  return { ok: true, row: { employee_id, work_date, kind, in_time: away ? null : tin || null, out_time: away ? null : tout || null, memo: String(body.memo ?? "").trim().slice(0, 200) } };
 }
 
 // ── 세콤 원본 ───────────────────────────────────────────────────────
@@ -221,7 +225,9 @@ export async function planPunch(sheets: Sheet[], month: string, opts: { overwrit
         sched: { start: e.work_start, end: e.work_end, break_min: e.break_min },
       });
     } else counts.auto++;
-    const memo = plan.status === "check" && decision?.action !== "skip" ? `세콤: ${plan.issues.join(", ")}`.slice(0, 200) : "";
+    // 근무대장 메모: 확인한 까닭. 조퇴·결근·병가를 미리 적어 둔 날은 그때 적은 메모도 같이 남긴다
+    const noteMemo = plan.note && (plan.note.kind === "early" || noteIsAway(plan.note.kind)) && plan.note.memo ? ` (${plan.note.memo})` : "";
+    const memo = plan.status === "check" && decision?.action !== "skip" ? `세콤: ${plan.issues.join(", ")}${noteMemo}`.slice(0, 200) : "";
     const made = decisionLog(r.date, decision, e, memo);
     if (!made.ok) { counts.open++; continue; }
     if (!fresh.has(e.id)) fresh.set(e.id, new Map());

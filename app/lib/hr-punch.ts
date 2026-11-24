@@ -84,9 +84,12 @@ export function readPunchSheet(grid: Grid): PunchRow[] | null {
 
 // ── 하루의 처리 ─────────────────────────────────────────────────────
 export type PunchEmployee = { id: string; name: string; work_days: number[]; work_start: string; work_end: string; break_min: number; daily_hours: number };
-export const NOTE_KINDS = ["in", "out", "both", "etc"] as const;
+// 미리 적기의 종류. early·absent·sick 은 2026-11-25 추가(hr/011 이 DB 제약을 넓힌다 — 그 전에는 이 셋만 저장이 거절된다)
+export const NOTE_KINDS = ["in", "out", "both", "early", "absent", "sick", "etc"] as const;
 export type NoteKind = (typeof NOTE_KINDS)[number];
-export const NOTE_KIND_LABEL: Record<NoteKind, string> = { in: "출근 못 찍음", out: "퇴근 못 찍음", both: "둘 다 못 찍음", etc: "기타" };
+export const NOTE_KIND_LABEL: Record<NoteKind, string> = { in: "출근 못 찍음", out: "퇴근 못 찍음", both: "둘 다 못 찍음", early: "조퇴", absent: "결근", sick: "병가", etc: "기타" };
+// 나오지 않은 날을 적는 종류 — 시각을 받지 않는다
+export const noteIsAway = (k: NoteKind | null | undefined): boolean => k === "absent" || k === "sick";
 export type PunchNote = { id: string; employee_id: string; work_date: string; kind: NoteKind; in_time: string | null; out_time: string | null; memo: string; created_by?: string };
 
 export const PUNCH_ACTIONS = ["work", "holiday_work", "leave", "absent", "unpaid", "paid_holiday", "skip"] as const;
@@ -173,8 +176,13 @@ export function planDay(a: {
     if (!a.scheduled) return { ...base, status: "none", issues: [], proposal: null, actions: [] };
     if (a.off) return { ...base, status: "auto", issues: [], proposal: { action: a.off }, actions: [a.off] };
     const actions: PunchAction[] = ["work", "leave", "absent", "unpaid", "skip"];
-    if (note && note.in_time && note.out_time) {
-      const f = fitTimes(e, note.in_time, note.out_time, settings);
+    // 미리 적은 결근 → 결근이 기본. 병가는 회사마다 연차·무급·결근으로 달리 처리하므로 기본을 주지 않고 고르게 한다.
+    if (note?.kind === "absent") return { ...base, status: "check", issues: ["안 찍힘 · 미리 적음: 결근"], proposal: { action: "absent" }, actions };
+    if (note?.kind === "sick") return { ...base, status: "check", issues: ["안 찍힘 · 미리 적음: 병가"], proposal: null, actions };
+    // 조퇴를 시각과 함께 적어 두었는데 출근도 안 찍힌 날: 출근은 소정 시각으로 본다
+    const noteIn = note?.in_time || (note?.kind === "early" && note.out_time && isTime(e.work_start) ? e.work_start : "");
+    if (note && noteIn && note.out_time) {
+      const f = fitTimes(e, noteIn, note.out_time, settings);
       return { ...base, status: "check", issues: ["안 찍힘 · 미리 적은 시각으로", ...fitIssues(f)], proposal: workOf(e, f), actions };
     }
     return { ...base, status: "check", issues: ["안 찍힘"], proposal: null, actions };
@@ -191,18 +199,23 @@ export function planDay(a: {
   }
 
   const actions: PunchAction[] = ["work", "leave", "absent", "unpaid", "skip"];
+  // 결근·병가라고 적어 둔 날에 찍힌 기록이 있다 — 어느 쪽이 맞는지 보게 한다
+  const awayIssue = note && noteIsAway(note.kind) ? [`미리 적음: ${NOTE_KIND_LABEL[note.kind]} — 찍힌 기록이 있음`] : [];
   if (!a.in || !a.out) {
     // 한쪽만 찍힘: 빈 쪽은 미리 적은 시각, 없으면 소정 시각
     const fillIn = a.in || note?.in_time || (isTime(e.work_start) ? e.work_start : "");
-    const fillOut = a.out || note?.out_time || (isTime(e.work_end) ? e.work_end : "");
-    const issue = `${a.in ? "퇴근" : "출근"} 안 찍힘${(a.in ? note?.out_time : note?.in_time) ? " · 미리 적은 시각으로" : ""}`;
-    if (!isTime(fillIn) || !isTime(fillOut)) return { ...base, status: "check", issues: [issue], proposal: { action: "work", start: fillIn, end: fillOut }, actions };
+    //  조퇴라고 적어 둔 날에 퇴근이 안 찍혔으면 소정 퇴근으로 채우지 않는다(조퇴 시각을 넣게 한다)
+    const earlyNoTime = note?.kind === "early" && !a.out && !note.out_time;
+    const fillOut = a.out || note?.out_time || (!earlyNoTime && isTime(e.work_end) ? e.work_end : "");
+    const issue = `${a.in ? "퇴근" : "출근"} 안 찍힘${(a.in ? note?.out_time : note?.in_time) ? " · 미리 적은 시각으로" : ""}${earlyNoTime ? " · 미리 적음: 조퇴(조퇴한 시각을 넣으세요)" : ""}`;
+    if (!isTime(fillIn) || !isTime(fillOut)) return { ...base, status: "check", issues: [issue, ...awayIssue], proposal: { action: "work", start: fillIn, end: fillOut }, actions };
     const f = fitTimes(e, fillIn, fillOut, settings);
-    return { ...base, status: "check", issues: [issue, ...(f.reversed ? ["찍힌 시각이 소정 근무 시간 밖"] : fitIssues(f))], proposal: workOf(e, f), actions };
+    return { ...base, status: "check", issues: [issue, ...(f.reversed ? ["찍힌 시각이 소정 근무 시간 밖"] : fitIssues(f)), ...awayIssue], proposal: workOf(e, f), actions };
   }
 
   const f = fitTimes(e, a.in, a.out, settings);
-  const issues = fitIssues(f);
+  // 미리 적은 것과 찍힌 것이 어긋나면 자동으로 넣지 않고 확인하게 한다
+  const issues = [...fitIssues(f), ...awayIssue, ...(note?.kind === "early" && sane(f) && !f.early ? ["미리 적음: 조퇴 — 찍힌 퇴근은 조퇴가 아님"] : [])];
   return { ...base, status: issues.length ? "check" : "auto", issues, proposal: workOf(e, f), actions };
 }
 

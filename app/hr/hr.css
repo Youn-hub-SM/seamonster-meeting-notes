@@ -29,9 +29,10 @@
 .hr-nav-item svg { flex: 0 0 auto; }
 .hr-sb-foot {
   margin-top: auto; padding: var(--sm-space-3) 10px 0; border-top: 1px solid var(--sm-border-light);
-  display: flex; flex-direction: column; gap: var(--sm-space-2);
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: var(--sm-space-2);
   font-size: var(--sm-fs-xs); color: var(--sm-text-mid);
 }
+.hr-sb-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sm-black); font-weight: 500; }
 .hr-sb-foot button {
   background: none; border: none; padding: 0; font: inherit; line-height: var(--sm-lh-ui);
   cursor: pointer; color: var(--sm-text-mid); text-align: left; text-decoration: underline; text-underline-offset: 2px;
