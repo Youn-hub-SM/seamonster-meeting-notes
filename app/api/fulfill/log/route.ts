@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID, createHash } from "node:crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { normalizeHistory, normalizeBoxCats } from "@/app/lib/fulfill-rates";
-import { cleanBoxes, cleanEntries, cleanRecordEntries, recordTotals, mergeDeliveryRow, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
+import { normalizeHistory, normalizeBoxCats, ratesFor } from "@/app/lib/fulfill-rates";
+import { cleanBoxes, cleanEntries, cleanRecordEntries, recordTotals, mergeDeliveryRow, feeFromBoxes, recordSigText, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 // 자동 기록 내용 서명 — 같은 날짜에 같은 서명이 이미 있으면 '같은 파일을 두 번 기록'으로 판정.
 function recordSig(bn: Record<string, number>, bg: Record<string, number>, fn: number, fg: number): string {
-  const norm = (o: Record<string, number>) => Object.entries(o).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join(",");
-  return createHash("sha1").update(`${norm(bn)}|${norm(bg)}|${fn}|${fg}`).digest("hex").slice(0, 16);
+  return createHash("sha1").update(recordSigText(bn, bg, fn, fg)).digest("hex").slice(0, 16);
 }
 
 export const runtime = "nodejs";
@@ -127,7 +126,22 @@ export async function POST(req: NextRequest) {
       // 자동칸 기록 — 배치 이력(record_entries)에 1건 추가하고 자동 합계 = 이력 합으로 재계산.
       //  같은 날짜에 같은 내용(sig)이 이미 있으면 중복으로 차단(force 로 강행). 078 미적용이면 구방식 폴백.
       const bxN = sanitizeBoxes(b.boxes_normal), bxG = sanitizeBoxes(b.boxes_guar);
-      const bfN = Math.round(Number(b.base_fee_normal) || 0), bfG = Math.round(Number(b.base_fee_guar) || 0);
+      let bfN = Math.round(Number(b.base_fee_normal) || 0), bfG = Math.round(Number(b.base_fee_guar) || 0);
+      // 화면이 보낸 운임은 처리일(오늘)의 단가로 계산한 값이다. 기록하는 날짜의 단가가 오늘과 다르면(단가가 바뀐 날을 넘겨 기록)
+      //  그 날짜의 단가로 박스 수에서 다시 계산한다(2026-11-24). 단가를 읽지 못하거나 무게를 모르는 박스 종류가 있으면 보낸 값 그대로.
+      {
+        const { data: rr, error: re } = await sb.from("b2b_settings").select("value").eq("key", "fulfill_rates").maybeSingle();
+        if (!re) {
+          const hist = normalizeHistory(rr?.value ?? {});
+          const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+          const forDate = ratesFor(hist, log_date);
+          if (forDate !== ratesFor(hist, today)) {
+            const cats = normalizeBoxCats((rr?.value as { boxCats?: unknown })?.boxCats);
+            const n = feeFromBoxes(bxN, forDate.boxTiers, cats), g = feeFromBoxes(bxG, forDate.boxTiers, cats, forDate.guarSurcharge);
+            if (!n.unknown.length && !g.unknown.length) { bfN = n.fee; bfG = g.fee; }
+          }
+        }
+      }
       const gxf = Math.round(Number(b.guar_extra_fee) || 0); // 도착보장 추가운임(구버전 호환 — 현재 0)
       const sig = recordSig(bxN, bxG, bfN, bfG);
       const mode = b.mode === "add" ? "add" as const : "replace" as const;

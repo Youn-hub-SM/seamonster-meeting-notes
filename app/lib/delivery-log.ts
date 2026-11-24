@@ -55,6 +55,49 @@ export function manualFeeDelta(manual: BoxCounts, tiers: RateVersion["boxTiers"]
   return sum;
 }
 
+// ── 박스 수로 기본운임 다시 계산(2026-11-24 대표: "11월 1일부터 택배비가 바뀌어 단가를 고쳤는데 반영이 안 됐다") ──
+//  발주처리에서 기록한 기본운임은 기록할 때의 단가로 저장된다 — 단가를 나중에(적용 시작일을 과거로) 넣으면 그 사이 기록은 옛 단가로 남는다.
+//  기록에는 박스 종류별 개수가 있고 박스 종류 하나는 운임 구간 하나에만 속하므로(validateBoxCats), 개수 × 그 날짜 단가로 정확히 다시 계산할 수 있다.
+//  perBox = 박스당 더하는 값(도착보장 가산). unknown = 무게를 알 수 없는 박스 종류(설정에서 이름이 바뀐 옛 종류) — 있으면 다시 계산하지 않는다.
+export function feeFromBoxes(boxes: BoxCounts, tiers: RateVersion["boxTiers"], cats: BoxCat[] = DEFAULT_BOX_CATS, perBox = 0): { fee: number; unknown: string[] } {
+  const w = { ...boxCatWeights(DEFAULT_BOX_CATS), ...boxCatWeights(cats) };
+  let fee = 0; const unknown: string[] = [];
+  for (const [c, cnt] of Object.entries(boxes)) {
+    if (!cnt) continue;
+    if (w[c] == null) { unknown.push(c); continue; }
+    fee += cnt * (baseFeeOf(w[c], tiers) + perBox);
+  }
+  return { fee, unknown };
+}
+// 자동 기록 내용 서명 — 같은 날짜에 같은 서명이 이미 있으면 '같은 파일을 두 번 기록'으로 판정(운임이 바뀌면 서명도 바뀐다)
+export function recordSigText(bn: BoxCounts, bg: BoxCounts, fn: number, fg: number): string {
+  const norm = (o: BoxCounts) => Object.entries(o).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join(",");
+  return `${norm(bn)}|${norm(bg)}|${fn}|${fg}`;
+}
+// 그 날짜의 자동 기록(이력 또는 옛 방식의 칸 값)을 그 날짜 단가로 다시 계산한다. 바꿀 것이 없으면 changed = false.
+export type RecalcDay = { cur_normal: number; cur_guar: number; new_normal: number; new_guar: number; changed: boolean; unknown: string[]; entries: RecordEntry[] | null };
+export function recalcDay(row: Record<string, unknown>, rates: FulfillRatesLike, cats: BoxCat[], sigOf: (bn: BoxCounts, bg: BoxCounts, fn: number, fg: number) => string): RecalcDay {
+  const cur_normal = Math.round(Number(row.base_fee_normal) || 0), cur_guar = Math.round(Number(row.base_fee_guar) || 0);
+  const entries = cleanRecordEntries(row.record_entries);
+  const unknown: string[] = [];
+  const calc = (bn: BoxCounts, bg: BoxCounts) => {
+    const n = feeFromBoxes(bn, rates.boxTiers, cats), g = feeFromBoxes(bg, rates.boxTiers, cats, rates.guarSurcharge);
+    for (const u of [...n.unknown, ...g.unknown]) if (!unknown.includes(u)) unknown.push(u);
+    return { n: n.fee, g: g.fee };
+  };
+  if (entries.length) {
+    const next = entries.map((e) => { const f = calc(e.boxes_normal, e.boxes_guar); return { ...e, base_fee_normal: f.n, base_fee_guar: f.g, sig: sigOf(e.boxes_normal, e.boxes_guar, f.n, f.g) }; });
+    const t = recordTotals(next);
+    if (unknown.length) return { cur_normal, cur_guar, new_normal: cur_normal, new_guar: cur_guar, changed: false, unknown, entries: null };
+    return { cur_normal, cur_guar, new_normal: t.base_fee_normal, new_guar: t.base_fee_guar, changed: t.base_fee_normal !== cur_normal || t.base_fee_guar !== cur_guar, unknown, entries: next };
+  }
+  // 이력이 없는 옛 기록 — 칸에 쌓인 박스 수로
+  const f = calc(cleanBoxes(row.boxes_normal), cleanBoxes(row.boxes_guar));
+  if (unknown.length) return { cur_normal, cur_guar, new_normal: cur_normal, new_guar: cur_guar, changed: false, unknown, entries: null };
+  return { cur_normal, cur_guar, new_normal: f.n, new_guar: f.g, changed: f.n !== cur_normal || f.g !== cur_guar, unknown, entries: null };
+}
+type FulfillRatesLike = { boxTiers: RateVersion["boxTiers"]; guarSurcharge: number };
+
 // 직접수정 내역 1건 — 왜 고쳤는지(note)까지 기록
 export type ManualEntry = {
   id: string;

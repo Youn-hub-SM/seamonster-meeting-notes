@@ -501,6 +501,16 @@ export async function logOrderCancel(action: "apply" | "revert", p: { kind: stri
     actor,
   });
 }
+// 배송일지 운임 다시 계산(온라인 발주 › 배송일지, 2026-11-24) — 저장된 기본운임을 그 날짜 단가로 바꾼 기록. 알림은 보내지 않는다.
+export async function logFulfillRecalc(p: { from: string; to: string; days: number; before: number; after: number }, actor: string | null): Promise<void> {
+  await recordActivity({
+    event_type: "fulfill.fee_recalc",
+    summary: `배송일지 운임 다시 계산 · ${p.from}~${p.to} · ${p.days}일 · ${p.before.toLocaleString("ko-KR")}원 → ${p.after.toLocaleString("ko-KR")}원`,
+    meta: { from: p.from, to: p.to, days: p.days, before: p.before, after: p.after },
+    notify: false,
+    actor,
+  });
+}
 export async function logSalesUpload(filename: string, inserted: number, skipped: number): Promise<void> {
   await recordActivity({
     event_type: "sales.upload",

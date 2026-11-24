@@ -141,7 +141,7 @@ export default function FulfillSection({ onDirty }: SectionProps) {
             {boxErrs.length > 0 && <div className="b2b-error" style={{ marginTop: "var(--sm-space-2)" }}>{boxErrs.length === 1 ? boxErrs[0] : <ul>{boxErrs.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>}
           </SetCard>
 
-          <SetCard title="택배 단가" desc="적용 시작일마다 단가를 둡니다. 각 날짜의 배송일지는 그날 유효한 단가로 계산되고, 이미 기록된 기본운임·도착보장 운임은 바뀌지 않습니다."
+          <SetCard title="택배 단가" desc="적용 시작일마다 단가를 둡니다. 각 날짜의 배송일지는 그날 유효한 단가로 계산되고, 이미 기록된 기본운임·도착보장 운임은 바뀌지 않습니다. 지난 날짜부터 적용하려면 저장한 뒤 배송일지의 [운임 다시 계산]을 누르세요."
             actions={<button type="button" className="b2b-btn-secondary" onClick={() => setR((x) => {
               const base = x.history[x.history.length - 1] ?? { ...DEFAULT_RATES, effectiveFrom: DEFAULT_EFFECTIVE };
               return { ...x, history: [...x.history, { ...base, boxTiers: base.boxTiers.map((t) => ({ ...t })), supplies: base.supplies.map((s) => ({ ...s })), effectiveFrom: kstToday() }] };

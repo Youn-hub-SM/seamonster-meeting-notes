@@ -8,6 +8,7 @@ import { unionCategories } from "@/app/lib/delivery-log";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
 import { mergeCounts, manualFeeDelta, sumCounts, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
 import { won, wonText, qty, qtyText, dateShort, dateTime, dateRange } from "@/app/lib/format";
+import RecalcModal from "./RecalcModal";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -50,6 +51,7 @@ export default function DeliveryLogPage() {
   const [to, setTo] = useState("");
   const [preset, setPreset] = useState("");
   const [newDate, setNewDate] = useState(kstToday());
+  const [showRecalc, setShowRecalc] = useState(false); // 운임 다시 계산 창(관리자) — 단가를 나중에 넣었을 때 이미 기록된 운임을 그 날짜 단가로
   const applyPreset = (p: { key: string; range: () => { from: string; to: string } }) => { const r = p.range(); setFrom(r.from); setTo(r.to); setPreset(p.key); };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -270,6 +272,7 @@ export default function DeliveryLogPage() {
 
   return (
     <>
+      {showRecalc && <RecalcModal onClose={() => setShowRecalc(false)} onApplied={load} />}
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">배송일지</h1>
@@ -281,6 +284,7 @@ export default function DeliveryLogPage() {
             <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
             <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계 보기</Link>
             <Link className="b2b-btn-secondary" href="/b2b/settings?s=fulfill">설정 열기</Link>
+            <button className="b2b-btn-secondary" onClick={() => setShowRecalc(true)}>운임 다시 계산</button>
             <a className="b2b-btn-secondary" href={exportHref()} style={rows.length ? undefined : { pointerEvents: "none", opacity: 0.5 }} title="현재 기간을 엑셀로 내려받기">엑셀 내려받기</a>
           </div>
           {/* 새로고침 — 모바일에서도 유일하게 남는 버튼(아이콘형) */}
