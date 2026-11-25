@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useConfirm, type ConfirmOptions } from "@/app/components/Feedback";
 import { qty, qtyText, dateTime } from "@/app/lib/format";
-import { CUSTOMER_KIND_COLOR, type CustomerKind } from "@/app/lib/customer-kind";
 
 type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
@@ -16,7 +15,7 @@ type Result = {
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
   messageWarnings?: { rowNo: number; orderNo: string; name: string; msg: string }[];
-  customerFlags?: { rowNo: number; orderNo: string; name: string; kind: CustomerKind; memo: string; matchedBy: string; customerId: string }[]; // 단골·블랙 고객 주문(156)
+  customerFlags?: { rowNo: number; orderNo: string; name: string; memo: string; matchedBy: string; customerId: string }[]; // 지켜봐야 할 고객의 주문(156)
   customersMissing?: boolean;      // 156 미적용 — 고객 확인 없이 진행(화면 안내)
   unmatched: string[];
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[];
@@ -78,7 +77,8 @@ export default function FulfillPage() {
   const [keywords, setKeywords] = useState("");
   const [rowOrder, setRowOrder] = useState<"label" | "input">("label"); // CN 파일 행 순서 — 정리 순서(기본) / 올린 순서 그대로(순서대로 발송할 때). 이 브라우저에 기억
   const [msgAck, setMsgAck] = useState(false);
-  const [custAck, setCustAck] = useState(false);     // 단골·블랙 고객 확인
+  const [custAck, setCustAck] = useState(false);     // 지켜봐야 할 고객 확인
+  const [custAlert, setCustAlert] = useState(false); // 지켜봐야 할 고객 안내창 — 주문을 올렸을 때 그 고객의 주문이 있으면 띄운다
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [res, setRes] = useState<Result | null>(null);
@@ -185,13 +185,14 @@ export default function FulfillPage() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setCustAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setLoading(true);
+    setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setCustAck(false); setCustAlert(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setLoading(true);
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("keywords", keywords); fd.append("rowOrder", rowOrder);
       const j = await (await fetch("/api/fulfill/generate", { method: "POST", body: fd })).json();
       if (!j.ok) throw new Error(j.error || "발주 파일을 만들지 못했습니다. 주문 엑셀을 다시 올리세요.");
       setRes(j as Result);
+      setCustAlert(((j as Result).customerFlags?.length ?? 0) > 0);
     } catch (err) { setError(err instanceof Error ? err.message : "발주 파일을 만들지 못했습니다. 주문 엑셀을 다시 올리세요."); }
     setLoading(false);
     if (fileRef.current) fileRef.current.value = "";
@@ -313,15 +314,14 @@ export default function FulfillPage() {
 
   async function reset() {
     if (!(await okToLeave())) return;
-    setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setCustAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setError("");
+    setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setCustAck(false); setCustAlert(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setError("");
     void loadSide();
   }
 
   const msgWarns = res?.messageWarnings ?? [];
   const custFlags = res?.customerFlags ?? [];
-  // 배송메시지 줄에도 구분을 붙인다 — 같은 이름이면 메시지 옆에서 바로 보이게(주문번호 기준, 없으면 이름)
-  const custByOrder = new Map<string, CustomerKind>();
-  for (const f of custFlags) { const k = f.orderNo || f.name; if (!custByOrder.has(k) || f.kind === "블랙") custByOrder.set(k, f.kind); }
+  // 배송메시지 줄에도 표시를 붙인다 — 같은 이름이면 메시지 옆에서 바로 보이게(주문번호 기준, 없으면 이름)
+  const custOrders = new Set(custFlags.map((f) => f.orderNo || f.name));
   // 완전히 같은 문장(공백 차이만 무시)은 한 줄로 합쳐 "윤현석 등 3명 · 문 앞" 으로 보인다 —
   //  표준 문구가 수십 줄 반복되는 것을 접어 훑는 시간을 줄인다. 이름은 중복 제거해 센다.
   const msgGroups = (() => {
@@ -329,8 +329,7 @@ export default function FulfillPage() {
     for (const w of msgWarns) {
       const key = w.msg.replace(/\s+/g, "");
       const g = m.get(key);
-      const kind = custByOrder.get(w.orderNo || w.name);
-      const nm = (w.name || "(이름?)") + (kind ? `[${kind}]` : "");
+      const nm = (w.name || "(이름?)") + (custOrders.has(w.orderNo || w.name) ? "[지켜봐야 할 고객]" : "");
       if (!g) m.set(key, { msg: w.msg, names: [nm] });
       else if (!g.names.includes(nm)) g.names.push(nm);
     }
@@ -496,16 +495,15 @@ export default function FulfillPage() {
             </div>
           )}
           {res.customersMissing && (
-            <div className="sm-warn">단골·블랙 고객 확인이 꺼져 있습니다 — supabase/migrations/156_fulfill_customers.sql 을 적용하면 등록 고객의 주문이 여기 뜹니다.</div>
+            <div className="sm-warn">지켜봐야 할 고객 확인이 꺼져 있습니다 — supabase/migrations/156_fulfill_customers.sql 을 적용하면 등록 고객의 주문이 여기 뜹니다.</div>
           )}
           {custFlags.length > 0 && (
-            // 단골·블랙 고객(156) — 등록 고객의 주문. 블랙이 위. 체크해야 다운로드가 풀린다(주소·메시지와 같은 규칙)
-            <div className={custFlags.some((f) => f.kind === "블랙") ? "b2b-error" : "sm-success"} style={{ lineHeight: 1.6 }}>
-              <strong>단골·블랙 고객 {qtyText(custFlags.length, "건")}</strong> — 메모를 읽고 발송 전에 처리하세요. <Link className="sm-link" href="/fulfill/customers">고객 목록</Link>
+            // 지켜봐야 할 고객(156) — 등록 고객의 주문. 체크해야 다운로드가 풀린다(주소·메시지와 같은 규칙). 안내창에서 확인하면 체크돼 있다
+            <div className="b2b-error" style={{ lineHeight: 1.6 }}>
+              <strong>지켜봐야 할 고객 {qtyText(custFlags.length, "건")}</strong> — 메모를 읽고 발송 전에 처리하세요. <Link className="sm-link" href="/fulfill/customers">고객 목록</Link>
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, maxHeight: 300, overflowY: "auto" }}>
                 {custFlags.map((f, i) => (
                   <li key={i}>
-                    <span className="b2b-status-pill" style={{ background: CUSTOMER_KIND_COLOR[f.kind].bg, color: CUSTOMER_KIND_COLOR[f.kind].fg, border: `1px solid ${CUSTOMER_KIND_COLOR[f.kind].border}`, marginRight: 6 }}>{f.kind}</span>
                     <strong>{f.name || "(이름?)"}</strong>{f.orderNo ? <span className="sm-faint"> · {f.orderNo}</span> : null}
                     {f.memo ? <> — {f.memo}</> : null}
                     <span className="sm-faint"> ({f.matchedBy})</span>
@@ -689,6 +687,31 @@ export default function FulfillPage() {
               </button>
             </span>
           ) : null}
+        </div>
+      )}
+      {custAlert && res && custFlags.length > 0 && (
+        // 지켜봐야 할 고객 안내창(2026-11-25 대표: "수집 시 안내창을 강하게") — 주문을 올리자마자 뜬다. 바깥을 눌러도 닫히지 않고 [확인했습니다]로만 닫는다.
+        //  닫으면 ② 화면 카드의 확인 체크가 켜진다(다운로드 조건은 그대로 custAck).
+        <div className="b2b-modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="ff-watch-title">
+          <div className="b2b-modal" style={{ maxWidth: 560, border: "2px solid var(--sm-danger)", overflow: "hidden" }}>
+            <div className="b2b-modal-head" style={{ background: "var(--sm-danger)", borderBottom: "none" }}>
+              <h2 className="b2b-modal-title" id="ff-watch-title" style={{ color: "var(--sm-white)", fontSize: "var(--sm-fs-xl)" }}>지켜봐야 할 고객의 주문 {qtyText(custFlags.length, "건")}</h2>
+            </div>
+            <div className="b2b-modal-body">
+              <p style={{ margin: "0 0 var(--sm-space-3)", fontWeight: 600 }}>이 파일에 지켜봐야 할 고객의 주문이 있습니다. 메모를 읽고 발송 전에 처리하세요.</p>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "var(--sm-space-2)" }}>
+                {custFlags.map((f, i) => (
+                  <li key={i} style={{ padding: "var(--sm-space-3)", border: "1px solid var(--sm-danger-border)", borderLeft: "4px solid var(--sm-danger)", borderRadius: "var(--sm-radius)", lineHeight: "var(--sm-lh-body)" }}>
+                    <div><strong style={{ fontSize: "var(--sm-fs-lg)" }}>{f.name || "(이름?)"}</strong>{f.orderNo ? <span className="sm-faint"> · {f.orderNo}</span> : null}<span className="sm-faint"> · {f.matchedBy}</span></div>
+                    <div style={{ whiteSpace: "pre-wrap", fontWeight: 600, color: f.memo ? "var(--sm-danger)" : "var(--sm-text-mid)" }}>{f.memo || "메모 없음"}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="b2b-modal-foot"><Link className="sm-link" href="/fulfill/customers">고객 목록</Link><div className="b2b-modal-foot-right">
+              <button className="b2b-btn-danger" style={{ background: "var(--sm-danger)", color: "var(--sm-white)", borderColor: "var(--sm-danger)" }} autoFocus onClick={() => { setCustAlert(false); setCustAck(true); }}>확인했습니다</button>
+            </div></div>
+          </div>
         </div>
       )}
     </div>

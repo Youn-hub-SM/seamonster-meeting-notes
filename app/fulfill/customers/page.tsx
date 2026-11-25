@@ -4,15 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { qtyText } from "@/app/lib/format";
-import { CUSTOMER_KINDS, CUSTOMER_KIND_COLOR, type CustomerKind } from "@/app/lib/customer-kind";
 
-// 단골·블랙 고객 — 택배 발주처리 ② 단계에서 이 고객의 주문이 '단골·블랙 고객' 카드로 떠서 확인(체크)해야 CN 파일을 받을 수 있다.
+// 지켜봐야 할 고객(2026-11-25 대표: 옛 이름 '단골·블랙 고객', 구분은 두지 않는다) — 택배 발주처리에서 주문을 올리면 이 고객의 주문이 안내창으로 뜨고, 확인해야 CN 파일을 받을 수 있다.
 //  등록 기준: 전화(숫자만 저장) → 이름+주소 일부 → 이름만. 메모는 발주 화면에 그대로 보인다.
 //  표: fulfill_customers(migration 156). API: /api/fulfill/customers.
 
-type Customer = { id: string; kind: CustomerKind; name: string; phone_digits: string; address: string; memo: string; active: boolean; created_by: string | null; created_at: string; updated_at: string };
-type Draft = { kind: CustomerKind; name: string; phone: string; address: string; memo: string };
-const EMPTY: Draft = { kind: "블랙", name: "", phone: "", address: "", memo: "" };
+type Customer = { id: string; name: string; phone_digits: string; address: string; memo: string; active: boolean; created_by: string | null; created_at: string; updated_at: string };
+type Draft = { name: string; phone: string; address: string; memo: string };
+const EMPTY: Draft = { name: "", phone: "", address: "", memo: "" };
 
 function fmtPhone(d: string): string {
   if (!d) return "";
@@ -21,11 +20,6 @@ function fmtPhone(d: string): string {
   return d;
 }
 const fmtDate = (iso: string) => (iso ? iso.slice(0, 10) : "");
-
-function KindPill({ kind }: { kind: CustomerKind }) {
-  const c = CUSTOMER_KIND_COLOR[kind];
-  return <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>{kind}</span>;
-}
 
 export default function CustomersPage() {
   const toast = useToast();
@@ -39,7 +33,6 @@ export default function CustomersPage() {
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
-  const [kindFilter, setKindFilter] = useState<"" | CustomerKind>("");
   const [showInactive, setShowInactive] = useState(false);
 
   const load = useCallback(async () => {
@@ -56,7 +49,7 @@ export default function CustomersPage() {
 
   function startEdit(c: Customer) {
     setEditId(c.id);
-    setDraft({ kind: c.kind, name: c.name, phone: fmtPhone(c.phone_digits), address: c.address, memo: c.memo });
+    setDraft({ name: c.name, phone: fmtPhone(c.phone_digits), address: c.address, memo: c.memo });
     setFieldErr({});
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -78,7 +71,7 @@ export default function CustomersPage() {
       }
       const c = j.customer as Customer;
       setList((ls) => (editId ? ls.map((x) => (x.id === c.id ? c : x)) : [c, ...ls]));
-      toast.success(editId ? "고객 정보를 저장했습니다" : `${c.kind} 고객을 등록했습니다`);
+      toast.success(editId ? "고객 정보를 저장했습니다" : `'${c.name}' 고객을 등록했습니다`);
       cancelEdit();
       setError("");
     } catch (e) { setError(e instanceof Error ? e.message : "저장하지 못했습니다. 다시 누르세요."); }
@@ -99,7 +92,7 @@ export default function CustomersPage() {
   }
 
   async function remove(c: Customer) {
-    const ok = await confirm({ title: `${c.kind} '${c.name}' 삭제`, body: "목록에서 지워지고 발주처리 확인 카드에 더는 뜨지 않습니다. 잠시 끄려면 삭제 대신 '사용'을 끄세요.", action: "고객 삭제" });
+    const ok = await confirm({ title: `'${c.name}' 삭제`, body: "목록에서 지워지고 발주처리 안내창에 더는 뜨지 않습니다. 잠시 끄려면 삭제 대신 '사용'을 끄세요.", action: "고객 삭제" });
     if (!ok) return;
     try {
       const j = await (await fetch(`/api/fulfill/customers?id=${encodeURIComponent(c.id)}`, { method: "DELETE" })).json();
@@ -114,18 +107,14 @@ export default function CustomersPage() {
     const kw = q.trim().toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
     return list.filter((c) => {
       if (!showInactive && !c.active) return false;
-      if (kindFilter && c.kind !== kindFilter) return false;
       if (kw) {
         const hay = `${c.name}${c.phone_digits}${c.address}${c.memo}`.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
         if (!hay.includes(kw)) return false;
       }
       return true;
     });
-  }, [list, q, kindFilter, showInactive]);
-  const counts = useMemo(() => ({
-    블랙: list.filter((c) => c.active && c.kind === "블랙").length,
-    단골: list.filter((c) => c.active && c.kind === "단골").length,
-  }), [list]);
+  }, [list, q, showInactive]);
+  const activeCount = useMemo(() => list.filter((c) => c.active).length, [list]);
 
   const set = (k: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setDraft((d) => ({ ...d, [k]: e.target.value }));
@@ -136,7 +125,7 @@ export default function CustomersPage() {
     <div className="b2b-container" style={{ maxWidth: 960 }}>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">단골·블랙 고객</h1>
+          <h1 className="b2b-page-title">지켜봐야 할 고객</h1>
         </div>
         <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill">발주처리</Link></div>
       </header>
@@ -146,14 +135,7 @@ export default function CustomersPage() {
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">{editId ? "고객 수정" : "고객 등록"}</span></div>
-        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 1fr", gap: 10 }}>
-          <label className="b2b-field" style={{ margin: 0 }}>
-            <span className="b2b-field-label">구분</span>
-            <select className="b2b-input" value={draft.kind} onChange={set("kind")} aria-invalid={fieldErr.kind ? "true" : undefined}>
-              {CUSTOMER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-            </select>
-            {fieldErr.kind && <div className="b2b-field-error">{fieldErr.kind}</div>}
-          </label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <label className="b2b-field" style={{ margin: 0 }}>
             <span className="b2b-field-label">이름</span>
             <input className="b2b-input" value={draft.name} onChange={set("name")} placeholder="홍길동" aria-invalid={fieldErr.name ? "true" : undefined} />
@@ -172,7 +154,7 @@ export default function CustomersPage() {
             {fieldErr.address && <div className="b2b-field-error">{fieldErr.address}</div>}
           </label>
           <label className="b2b-field" style={{ margin: 0 }}>
-            <span className="b2b-field-label">메모 <span className="opt">발주 화면에 그대로 보인다</span></span>
+            <span className="b2b-field-label">메모 <span className="opt">발주처리 안내창에 그대로 보인다</span></span>
             <input className="b2b-input" value={draft.memo} onChange={set("memo")} placeholder="반품 3회 — 발송 전 전화 확인" aria-invalid={fieldErr.memo ? "true" : undefined} />
             {fieldErr.memo && <div className="b2b-field-error">{fieldErr.memo}</div>}
           </label>
@@ -186,14 +168,10 @@ export default function CustomersPage() {
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">고객 목록 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>블랙 {qtyText(counts.블랙)} · 단골 {qtyText(counts.단골)}</span></span>
+          <span className="b2b-card-title">고객 목록 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>사용 중 {qtyText(activeCount, "명")}</span></span>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
           <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" aria-label="이름·전화·주소·메모 검색" style={{ flex: "1 1 220px" }} />
-          <select className="b2b-input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value as "" | CustomerKind)} aria-label="구분" style={{ width: 110 }}>
-            <option value="">전체</option>
-            {CUSTOMER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-          </select>
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> 사용 안 함 표시
           </label>
@@ -201,15 +179,14 @@ export default function CustomersPage() {
         {!loaded ? (
           <div className="b2b-loading">불러오는 중...</div>
         ) : shown.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>{list.length === 0 ? "등록된 고객이 없습니다. 위에서 고객을 등록하세요." : "조건에 맞는 고객이 없습니다. 검색어·구분을 지우세요."}</div>
+          <div className="b2b-empty" style={{ padding: 18 }}>{list.length === 0 ? "등록된 고객이 없습니다. 위에서 고객을 등록하세요." : "조건에 맞는 고객이 없습니다. 검색어를 지우세요."}</div>
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
-              <thead><tr><th style={{ width: 70 }}>구분</th><th>이름</th><th>전화</th><th>주소 일부</th><th>메모</th><th style={{ width: 110 }}>등록</th><th style={{ width: 60 }}>사용</th><th style={{ width: 130 }}></th></tr></thead>
+              <thead><tr><th>이름</th><th>전화</th><th>주소 일부</th><th>메모</th><th style={{ width: 110 }}>등록</th><th style={{ width: 60 }}>사용</th><th style={{ width: 130 }}></th></tr></thead>
               <tbody>
                 {shown.map((c) => (
                   <tr key={c.id} style={{ opacity: c.active ? 1 : 0.55 }}>
-                    <td><KindPill kind={c.kind} /></td>
                     <td><strong>{c.name}</strong></td>
                     <td className="sm-faint">{fmtPhone(c.phone_digits) || "-"}</td>
                     <td className="sm-faint">{c.address || "-"}</td>
@@ -228,7 +205,7 @@ export default function CustomersPage() {
             </table>
           </div>
         )}
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>발주처리 ② 단계에서 찾는 순서: 전화 일치 → 이름이 같고 주소 일부가 주문 주소에 포함 → 이름만(주소를 안 적었고, 전화를 안 적었거나 주문에 전화가 없을 때). 전화는 숫자만 저장됩니다.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>발주처리에서 찾는 순서: 전화 일치 → 이름이 같고 주소 일부가 주문 주소에 포함 → 이름만(주소를 안 적었고, 전화를 안 적었거나 주문에 전화가 없을 때). 전화는 숫자만 저장됩니다.</p>
       </section>
     </div>
   );

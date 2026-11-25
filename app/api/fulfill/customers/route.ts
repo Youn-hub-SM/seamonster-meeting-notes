@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession } from "@/app/lib/b2b-auth";
-import { CUSTOMER_KINDS, customerPhoneDigits, type CustomerKind, type FlaggedCustomer } from "@/app/lib/fulfill-customers";
+import { LEGACY_KIND, customerPhoneDigits, type FlaggedCustomer } from "@/app/lib/fulfill-customers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 단골·블랙 고객 메모(fulfill_customers, migration 156)
+// 지켜봐야 할 고객(fulfill_customers, migration 156) — 2026-11-25 구분(단골·블랙)을 없앴다. 표의 kind 칸은 등록할 때 LEGACY_KIND 로만 채운다.
 //  · GET: 전체 목록(사용 안 함 포함)
-//  · POST: 등록 { kind, name, phone?, address?, memo? }
-//  · PUT: 수정 { id, kind?, name?, phone?, address?, memo?, active? }
+//  · POST: 등록 { name, phone?, address?, memo? }
+//  · PUT: 수정 { id, name?, phone?, address?, memo?, active? }
 //  · DELETE ?id=: 삭제
 //  전화는 숫자만 저장(매출 PII 와 같은 정규화) — 9자리 미만·마스킹 번호는 오류. 표 없음(156 미적용)은 missing=true 로 알린다.
 
@@ -17,17 +17,12 @@ const missingTable = (e: { code?: string; message?: string } | null) =>
   !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table|schema cache/i.test(e.message || ""));
 const MISSING_MSG = "supabase/migrations/156_fulfill_customers.sql 을 먼저 적용하세요 (fulfill_customers 표 없음)";
 
-type Body = { id?: string; kind?: string; name?: string; phone?: string; address?: string; memo?: string; active?: boolean };
+type Body = { id?: string; name?: string; phone?: string; address?: string; memo?: string; active?: boolean };
 
 // 입력 검사 — 빈 필수칸은 지시문, 규칙 위반은 서술문(디자인 결정 3차)
 function parse(body: Body, partial: boolean): { values: Partial<FlaggedCustomer>; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   const values: Partial<FlaggedCustomer> = {};
-  if (!partial || body.kind !== undefined) {
-    const kind = String(body.kind ?? "").trim() as CustomerKind;
-    if (!CUSTOMER_KINDS.includes(kind)) errors.kind = "구분을 고르세요(단골·블랙)";
-    else values.kind = kind;
-  }
   if (!partial || body.name !== undefined) {
     const name = String(body.name ?? "").trim();
     if (!name) errors.name = "이름을 입력하세요";
@@ -58,7 +53,7 @@ function parse(body: Body, partial: boolean): { values: Partial<FlaggedCustomer>
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const { data, error } = await sb.from("fulfill_customers").select("*").order("kind", { ascending: true }).order("name", { ascending: true });
+    const { data, error } = await sb.from("fulfill_customers").select("*").order("name", { ascending: true });
     if (error) {
       if (missingTable(error)) return NextResponse.json({ ok: true, customers: [], missing: true });
       throw error;
@@ -69,7 +64,7 @@ export async function GET() {
   }
 }
 
-// 같은 전화가 이미 사용 중인 다른 고객에 등록돼 있으면 막는다(한 사람이 단골이면서 블랙일 수 없다)
+// 같은 전화가 이미 사용 중인 다른 고객에 등록돼 있으면 막는다(한 사람을 두 번 등록하면 안내창에 두 줄로 뜬다)
 async function phoneInUse(sb: ReturnType<typeof supabaseAdmin>, digits: string, exceptId: string | null): Promise<FlaggedCustomer | null> {
   if (!digits) return null;
   let q = sb.from("fulfill_customers").select("*").eq("phone_digits", digits).eq("active", true).limit(1);
@@ -86,9 +81,9 @@ export async function POST(req: NextRequest) {
     if (Object.keys(errors).length) return NextResponse.json({ ok: false, error: "입력을 확인하세요", fields: errors }, { status: 400 });
     const sb = supabaseAdmin();
     const dup = await phoneInUse(sb, values.phone_digits || "", null).catch((e) => { if (missingTable(e)) return null; throw e; });
-    if (dup) return NextResponse.json({ ok: false, error: `이미 등록된 전화번호입니다 — ${dup.kind} '${dup.name}'. 그 고객을 수정하세요.`, fields: { phone: `${dup.kind} '${dup.name}'에 등록된 번호` } }, { status: 400 });
+    if (dup) return NextResponse.json({ ok: false, error: `이미 등록된 전화번호입니다 — '${dup.name}'. 그 고객을 수정하세요.`, fields: { phone: `'${dup.name}'에 등록된 번호` } }, { status: 400 });
     const by = await verifySession(req.cookies.get("b2b_auth")?.value);
-    const { data, error } = await sb.from("fulfill_customers").insert({ ...values, created_by: by }).select("*").single();
+    const { data, error } = await sb.from("fulfill_customers").insert({ ...values, kind: LEGACY_KIND, created_by: by }).select("*").single();
     if (error) {
       if (missingTable(error)) return NextResponse.json({ ok: false, error: MISSING_MSG }, { status: 400 });
       throw error;
@@ -109,7 +104,7 @@ export async function PUT(req: NextRequest) {
     const sb = supabaseAdmin();
     if (values.phone_digits) {
       const dup = await phoneInUse(sb, values.phone_digits, id);
-      if (dup) return NextResponse.json({ ok: false, error: `이미 등록된 전화번호입니다 — ${dup.kind} '${dup.name}'.`, fields: { phone: `${dup.kind} '${dup.name}'에 등록된 번호` } }, { status: 400 });
+      if (dup) return NextResponse.json({ ok: false, error: `이미 등록된 전화번호입니다 — '${dup.name}'.`, fields: { phone: `'${dup.name}'에 등록된 번호` } }, { status: 400 });
     }
     const { data, error } = await sb.from("fulfill_customers").update({ ...values, updated_at: new Date().toISOString() }).eq("id", id).select("*").maybeSingle();
     if (error) {

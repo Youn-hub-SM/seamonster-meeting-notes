@@ -1,4 +1,6 @@
-// 단골·블랙 고객 메모(fulfill_customers, migration 156) — 택배 발주처리 ② 단계에서 그 고객의 주문을 찾아 확인(체크)을 받는다.
+// 지켜봐야 할 고객(fulfill_customers, migration 156) — 택배 발주처리에서 주문을 올리면 그 고객의 주문을 찾아 안내창을 띄우고 확인을 받는다.
+//  2026-11-25 대표: 이름을 '단골·블랙 고객'에서 '지켜봐야 할 고객'으로, 구분은 두지 않는다. 표의 kind 칸(단골|블랙 check)은 남아 있어
+//  새로 등록할 때 LEGACY_KIND 를 채우기만 하고 읽지 않는다(마이그레이션 없이 바꿨다 — 칸을 지우려면 본 번호열에 새 마이그레이션).
 //  매칭 순서(주문 한 행 기준): ① 전화 일치(등록 전화 = 주문 전화 1·2 중 하나, 숫자만 비교)
 //   ② 이름 일치 + 등록 주소가 주문 주소에 포함(공백 무시)
 //   ③ 이름 일치만 — 등록 주소가 없고, 등록 전화가 없거나 주문 전화가 없을 때(네이버 050 안심번호·마스킹 번호).
@@ -8,13 +10,13 @@
 import type { supabaseAdmin } from "./supabase";
 import { normalizePhoneDigits } from "./sales-normalize";
 
-import { CUSTOMER_KINDS, type CustomerKind } from "./customer-kind";
-export { CUSTOMER_KINDS, type CustomerKind };
+/** 표의 kind 칸(not null · check)을 채우는 값 — 화면·판정 어디에서도 읽지 않는다 */
+export const LEGACY_KIND = "블랙";
 export type FlaggedCustomer = {
-  id: string; kind: CustomerKind; name: string; phone_digits: string; address: string; memo: string;
+  id: string; name: string; phone_digits: string; address: string; memo: string;
   active: boolean; created_by: string | null; created_at: string; updated_at: string;
 };
-export type CustomerFlag = { rowNo: number; orderNo: string; name: string; kind: CustomerKind; memo: string; matchedBy: string; customerId: string };
+export type CustomerFlag = { rowNo: number; orderNo: string; name: string; memo: string; matchedBy: string; customerId: string };
 export type CustomerIdx = { orderNo: number; name: number; addr: number; phone1: number; phone2: number };
 
 type Sb = ReturnType<typeof supabaseAdmin>;
@@ -36,9 +38,9 @@ const missingTable = (e: { code?: string; message?: string } | null) =>
   !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table|schema cache/i.test(e.message || ""));
 
 /** 사용 중인 고객 목록. 표가 없으면(156 미적용) missing=true 로 빈 목록, 그 밖의 조회 오류는 던진다 —
- *  블랙 고객을 못 읽은 채 '없음'으로 넘기면 확인 장치가 조용히 꺼진다(S4). */
+ *  등록 고객을 못 읽은 채 '없음'으로 넘기면 확인 장치가 조용히 꺼진다(S4). */
 export async function loadFlaggedCustomers(sb: Sb): Promise<{ list: FlaggedCustomer[]; missing: boolean }> {
-  const { data, error } = await sb.from("fulfill_customers").select("*").eq("active", true).order("kind", { ascending: true }).order("name", { ascending: true });
+  const { data, error } = await sb.from("fulfill_customers").select("*").eq("active", true).order("name", { ascending: true });
   if (error) {
     if (missingTable(error)) return { list: [], missing: true };
     throw error;
@@ -79,9 +81,8 @@ export function matchFlaggedCustomers(rows: unknown[][], customers: FlaggedCusto
       const key = `${orderNo || `row${i}`}||${c.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ rowNo: i + 1, orderNo, name: rawName, kind: c.kind, memo: c.memo, matchedBy: by, customerId: c.id });
+      out.push({ rowNo: i + 1, orderNo, name: rawName, memo: c.memo, matchedBy: by, customerId: c.id });
     }
   });
-  // 블랙 먼저, 그 다음 단골 — 주의할 것이 위에 오게
-  return out.sort((a, b) => (a.kind === b.kind ? a.rowNo - b.rowNo : a.kind === "블랙" ? -1 : 1));
+  return out.sort((a, b) => a.rowNo - b.rowNo);
 }
