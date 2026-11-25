@@ -279,18 +279,23 @@
 
 | 프리미티브 | 용도 | 주요 prop |
 |---|---|---|
-| `Donut` | 도넛 + 중앙 총계 | `data` `colors` `size`(기본 132) `center` `centerSub` |
+| `Donut` | 도넛 + 중앙 총계 | `data` `colors` `size`(기본 132) `center` `centerSub` · `active` `onActive`(넘기면 마우스오버: 올린 조각 굵게·나머지 흐리게·가운데 글이 그 조각의 비중으로) |
 | `PieCard` | 도넛 + 값·비율 범례 카드 (Donut 재사용) | `title` `data` `fmt` `colors` `size` |
 | `TrendChart` | 단일 세로막대 추세 | `data` `fmtAxis` **`accent`(의미색)** |
-| `StackedBar` | 누적 세로막대 (기간 x 카테고리) | `periods` `series` **`colors`(색 지도)** `fmtAxis` `unit` |
+| `StackedBar` | 누적 세로막대 (기간 x 카테고리) | `periods` `series` **`colors`(색 지도)** `fmtAxis` `unit` · `interactive`(올린 기간만 또렷하게 + 조각 값·합계 툴팁 카드) `fmtTip` |
 | `ComboBarLine` | 누적막대 + 선, 좌우 2축 | `barColors` **`barFmt`**(금액이면 `moneyCompact`) `lineFmt` `lineColor`(기본 `CHART_LINE` 보라) |
 | `BarList` | 가로 순위막대 카드 | `title` `caption` `accent` `fmt` `sub` `minPct` `sorted` |
-| `LineChart` | 선 그래프(시계열) — 여러 선, 값 없는 구간은 끊김 | `periods` `series: {key, values, color, dashed?}[]`(dashed = 비교 기간 같은 참고 선) `fmtAxis` `fmtTip` `unit` `height` |
-| `Sparkline` | 축·글자 없는 작은 추세선(스코어카드 안) | `values` `color` `height` |
+| `LineChart` | 선 그래프(시계열) — 여러 선, 값 없는 구간은 끊김 | `periods` `series: {key, values, color, dashed?}[]`(dashed = 비교 기간 같은 참고 선) `fmtAxis` `fmtTip` `unit` `height` · `smooth`(부드러운 곡선 + 올린 점에 흰 테두리 + 툴팁이 옆에서 따라옴) `area`(첫 실선 아래를 옅게 채움) |
+| `Sparkline` | 축·글자 없는 작은 추세선(스코어카드 안) | `values` `color` `height` `fill` · `smooth` · `labels` `fmt`(넘기면 마우스오버: 가까운 날에 점 + 값 툴팁) |
+| `ChartTip` | 마우스오버 툴팁 카드(선·막대·콤보·추세선 공용) | `leftPct` `side`(짚은 자리의 옆) `glide` `above` — 차트 안에서만 쓴다 |
 | `ChartLegend` | 범례 | `items: [라벨, 색][]` — 인라인 범례 재구현 금지 |
-| 헬퍼 | `moneyCompact`(억/만 축약) · `niceCeil`(축 상한) · `PIE_COLORS` · `CHART_LINE` | |
+| 헬퍼 | `moneyCompact`(억/만 축약) · `niceCeil`(축 상한) · `smoothPath`(단조 곡선) · `PIE_COLORS` · `CHART_LINE` | |
 
 규칙:
+- **곡선·마우스오버의 기준(2026-11-25 대표: "곡선·마우스오버가 조금씩 다르다, 최상향으로")** — 주요 지표(`/board`)가 기준이다:
+  선은 `smooth`(단조 곡선 — 값 위아래로 튀지 않는다), 마우스오버는 그 자리의 모든 값을 흰 툴팁 카드(`ChartTip`)로, 카드는 짚은 자리의 옆에(가리지 않게), 올린 것만 또렷하게.
+  정기배송 분석 탭(Chart.js)도 같은 값으로 맞췄다(`applyChartDefaults`: monotone · index 마우스오버 · 흰 툴팁). 차트 안의 0.12초 흐려짐·따라옴은 아래 모션 결정의 예외로 둔다(`prefers-reduced-motion` 에서는 꺼진다).
+  다른 화면은 예전 모양(직선·가운데 툴팁) 그대로다 — 새 prop 은 켜야 적용된다. 화면을 올릴 때는 이 prop 을 켠다(따로 만들지 않는다).
 - **화면에서 자체 차트를 만들지 않는다.** 표현이 부족하면 프리미티브에 prop 을 추가한다.
   (accent·barFmt·sub·minPct 가 없던 시절 화면마다 자작 차트가 생겼고, 그게 그래프 불일치의 뿌리였다.)
 - 의미축 데이터는 §4 색 지도를 `accent`/`colors` 로 전달. 지도 없는 분류만 `PIE_COLORS` 순환.

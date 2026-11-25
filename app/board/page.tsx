@@ -80,14 +80,18 @@ function Scores({ children }: { children: React.ReactNode }) {
   return <section className="bd-card bd-strip bd-c12">{children}</section>;
 }
 const UNIT_RE = /^(.*?)(원|건|명|회|%)$/;
-function Score({ label, value, delta, note, spark }: { label: string; value: string | null; delta?: Delta; note?: string; spark?: (number | null)[] }) {
+//  tip = 추세선에 마우스를 올렸을 때의 날짜 이름과 값 표기(추세선이 큰 숫자와 다른 값일 수 있어 — 전환율 타일의 선은 방문 수 — 타일마다 넘긴다)
+type SparkTip = { labels: string[]; fmt: (n: number) => string };
+const tipWon = (n: number) => `${won(Math.round(n))}원`;
+const tipCnt = (unit: string, head = "") => (n: number) => `${head}${Math.round(n).toLocaleString()}${unit}`;
+function Score({ label, value, delta, note, spark, tip }: { label: string; value: string | null; delta?: Delta; note?: string; spark?: (number | null)[]; tip?: SparkTip }) {
   const m = value ? UNIT_RE.exec(value) : null;
   return (
     <div className="bd-score">
       <div className="bd-score-label">{label}</div>
       <div className={`bd-score-value${value == null ? " is-light" : ""}`}>{m ? <>{m[1]}<span className="bd-score-unit">{m[2]}</span></> : (value ?? "-")}</div>
       <div className="bd-score-sub">{delta && <DeltaText d={delta} />}{note && <span>{note}</span>}</div>
-      {spark && <div className="bd-score-spark"><Sparkline values={spark} color={C_CUR} height={40} fill /></div>}
+      {spark && <div className="bd-score-spark"><Sparkline values={spark} color={C_CUR} height={40} fill smooth labels={tip?.labels} fmt={tip?.fmt} /></div>}
     </div>
   );
 }
@@ -312,7 +316,7 @@ type Win = { labels: string[]; win: (xs: (number | null)[]) => (number | null)[]
 function CompareLine({ v, values, fmtAxis, fmtTip, unit }: { v: Win; values: (number | null)[]; fmtAxis?: (n: number) => string; fmtTip?: (n: number) => string; unit: string }) {
   const prev = v.prevWin(values);
   return (
-    <LineChart periods={v.labels} fmtAxis={fmtAxis} fmtTip={fmtTip} unit={unit}
+    <LineChart smooth area periods={v.labels} fmtAxis={fmtAxis} fmtTip={fmtTip} unit={unit}
       series={[{ key: "이번 기간", values: v.win(values), color: C_CUR }, ...(prev ? [{ key: "직전 기간", values: prev, color: C_PREV, dashed: true }] : [])]} />
   );
 }
@@ -321,23 +325,23 @@ const mediaLegend = (v: View): [string, string][] => [...(v.meta ? [["메타", C
 function SpendLine({ v }: { v: View }) {
   if (!v.hasAds) return <div className="b2b-empty">광고 숫자가 없습니다.</div>;
   return (
-    <LineChart periods={v.labels} fmtAxis={moneyCompact} fmtTip={won} unit="원"
+    <LineChart smooth periods={v.labels} fmtAxis={moneyCompact} fmtTip={won} unit="원"
       series={[...(v.meta ? [{ key: "메타", values: v.win(v.meta.spend) as (number | null)[], color: C_META }] : []), ...(v.naver ? [{ key: "네이버", values: v.win(v.naverEx).map((x) => (x == null ? null : Math.round(x))), color: C_NAVER }] : [])]} />
   );
 }
 
 // ── 스코어카드 묶음(여러 쪽에서 같이 쓴다) ──
-const ScoreRev = ({ v }: { v: View }) => <Score label="매출" value={wonS(v.revS?.cur)} delta={pctDelta(v.revS?.cur ?? null, v.revS?.prev ?? null, "up")} note={prevNote(v.revS?.prev != null ? `${moneyCompact(v.revS.prev)}원` : null)} spark={v.win(v.rev)} />;
-const ScoreOrders = ({ v }: { v: View }) => <Score label="주문 건수" value={cnt(v.ordS?.cur, "건")} delta={pctDelta(v.ordS?.cur ?? null, v.ordS?.prev ?? null, "up")} note={prevNote(cnt(v.ordS?.prev, "건"))} spark={v.win(v.orders)} />;
-const ScoreAov = ({ v }: { v: View }) => <Score label="객단가" value={wonS(v.aov?.cur)} delta={pctDelta(v.aov?.cur ?? null, v.aov?.prev ?? null, "up")} note={prevNote(wonS(v.aov?.prev))} spark={v.win(v.aovSeries)} />;
+const ScoreRev = ({ v }: { v: View }) => <Score label="매출" value={wonS(v.revS?.cur)} delta={pctDelta(v.revS?.cur ?? null, v.revS?.prev ?? null, "up")} note={prevNote(v.revS?.prev != null ? `${moneyCompact(v.revS.prev)}원` : null)} spark={v.win(v.rev)} tip={{ labels: v.labels, fmt: tipWon }} />;
+const ScoreOrders = ({ v }: { v: View }) => <Score label="주문 건수" value={cnt(v.ordS?.cur, "건")} delta={pctDelta(v.ordS?.cur ?? null, v.ordS?.prev ?? null, "up")} note={prevNote(cnt(v.ordS?.prev, "건"))} spark={v.win(v.orders)} tip={{ labels: v.labels, fmt: tipCnt("건") }} />;
+const ScoreAov = ({ v }: { v: View }) => <Score label="객단가" value={wonS(v.aov?.cur)} delta={pctDelta(v.aov?.cur ?? null, v.aov?.prev ?? null, "up")} note={prevNote(wonS(v.aov?.prev))} spark={v.win(v.aovSeries)} tip={{ labels: v.labels, fmt: tipWon }} />;
 const ScoreSpend = ({ v, s }: { v: View; s: BoardSnapshot }) => (
   <Score label="광고비" value={wonS(v.spendS ? Math.round(v.spendS.cur) : null)} delta={pctDelta(v.spendS?.cur ?? null, v.spendS?.prev ?? null, "none")}
-    note={v.hasAds ? (v.naverPending ? "네이버 광고비 일부 받는 중" : prevNote(v.spendS?.prev != null ? `${moneyCompact(Math.round(v.spendS.prev))}원` : null)) : (why(s.meta) ?? why(s.naver))} spark={v.hasAds ? v.win(v.spend) : undefined} />
+    note={v.hasAds ? (v.naverPending ? "네이버 광고비 일부 받는 중" : prevNote(v.spendS?.prev != null ? `${moneyCompact(Math.round(v.spendS.prev))}원` : null)) : (why(s.meta) ?? why(s.naver))} spark={v.hasAds ? v.win(v.spend) : undefined} tip={{ labels: v.labels, fmt: tipWon }} />
 );
-const ScoreSessions = ({ v, s }: { v: View; s: BoardSnapshot }) => <Score label="방문" value={cnt(v.sesS?.cur, "회")} delta={pctDelta(v.sesS?.cur ?? null, v.sesS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.sesS?.prev, "회")) : why(s.ga)} spark={v.ga ? v.win(v.sessions) : undefined} />;
+const ScoreSessions = ({ v, s }: { v: View; s: BoardSnapshot }) => <Score label="방문" value={cnt(v.sesS?.cur, "회")} delta={pctDelta(v.sesS?.cur ?? null, v.sesS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.sesS?.prev, "회")) : why(s.ga)} spark={v.ga ? v.win(v.sessions) : undefined} tip={{ labels: v.labels, fmt: tipCnt("회") }} />;
 const ScoreSubRev = ({ v }: { v: View }) => {
   const share = v.subRevS && v.allRev ? ratio(v.subRevS.cur * 100, v.allRev.cur) : null;
-  return <Score label="정기배송 매출" value={wonS(v.subRevS?.cur)} delta={pctDelta(v.subRevS?.cur ?? null, v.subRevS?.prev ?? null, "up")} note={share != null ? `전체의 ${share.toFixed(1)}%` : undefined} spark={v.sub ? v.win(v.sub.subRev) : undefined} />;
+  return <Score label="정기배송 매출" value={wonS(v.subRevS?.cur)} delta={pctDelta(v.subRevS?.cur ?? null, v.subRevS?.prev ?? null, "up")} note={share != null ? `전체의 ${share.toFixed(1)}%` : undefined} spark={v.sub ? v.win(v.sub.subRev) : undefined} tip={{ labels: v.labels, fmt: tipWon }} />;
 };
 
 function Errors({ list }: { list: string[] }) {
@@ -347,12 +351,13 @@ function Errors({ list }: { list: string[] }) {
 const failOf = (label: string, x: { ok: boolean; error?: string } | null) => (x && !x.ok ? `${label}: ${x.error}` : "");
 function DonutCard({ data, colors, center, centerSub, fmt }: { data: [string, number][]; colors: string[]; center: string; centerSub: string; fmt: (n: number, total: number) => string }) {
   const total = data.reduce((a, [, n]) => a + n, 0);
+  const [active, setActive] = useState<number | null>(null);
   return (
     <div className="bd-donut">
-      <Donut data={data} colors={colors} size={148} center={center} centerSub={centerSub} />
-      <div className="bd-donut-legend">
+      <Donut data={data} colors={colors} size={148} center={center} centerSub={centerSub} active={active} onActive={setActive} />
+      <div className="bd-donut-legend" onMouseLeave={() => setActive(null)}>
         {data.map(([name, n], i) => (
-          <div key={name} className="sm-between"><span className="sm-row bd-donut-name"><span className="sm-stat-hero-dot" style={{ background: colors[i] }} /><span className="sm-ellipsis">{name}</span></span><span className="num">{fmt(n, total)}</span></div>
+          <div key={name} className={`sm-between bd-donut-row${active != null && active !== i ? " is-dim" : ""}`} onMouseEnter={() => setActive(i)}><span className="sm-row bd-donut-name"><span className="sm-stat-hero-dot" style={{ background: colors[i] }} /><span className="sm-ellipsis">{name}</span></span><span className="num">{fmt(n, total)}</span></div>
         ))}
       </div>
     </div>
@@ -405,7 +410,7 @@ function SalesPage({ v, s, detail }: { v: View; s: BoardSnapshot; detail: Detail
       <Score label="재구매 고객 비율" value={pct1(rep?.cur)} delta={rep ? ppDelta(rep.cur, rep.prev, "up") : null} note={cust ? `재구매 ${cust.cur.repeatCust.toLocaleString()}명` : waiting} />
       </Scores>
       <Card w={8} title="일별 매출" right={<ChartLegend items={series.map((x, i) => [x.key, PIE_COLORS[i % PIE_COLORS.length]])} />}>
-        <StackedBar periods={v.labels} series={series} fmtAxis={moneyCompact} unit="원" />
+        <StackedBar interactive fmtTip={won} periods={v.labels} series={series} fmtAxis={moneyCompact} unit="원" />
       </Card>
       <Card w={4} title="채널별 매출 비중"><ChannelDonut v={v} /></Card>
       <Card w={6} title="채널별">
@@ -453,7 +458,7 @@ function AdsPage({ v, s }: { v: View; s: BoardSnapshot }) {
       <Score label="네이버 ROAS" value={v.naver && !v.naver.purchaseOk ? null : fix2(v.nRoas?.cur)} delta={v.naver?.purchaseOk ? pctDelta(v.nRoas?.cur ?? null, v.nRoas?.prev ?? null, "up") : null}
         note={v.naver ? (v.naver.purchaseOk ? prevNote(fix2(v.nRoas?.prev)) : "구매 전환 미확정") : why(s.naver)} />
       <ScoreSessions v={v} s={s} />
-      <Score label="구매(GA4)" value={cnt(v.purS?.cur, "건")} delta={pctDelta(v.purS?.cur ?? null, v.purS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.purS?.prev, "건")) : why(s.ga)} spark={v.ga ? v.win(v.gaPurchases) : undefined} />
+      <Score label="구매(GA4)" value={cnt(v.purS?.cur, "건")} delta={pctDelta(v.purS?.cur ?? null, v.purS?.prev ?? null, "up")} note={v.ga ? prevNote(cnt(v.purS?.prev, "건")) : why(s.ga)} spark={v.ga ? v.win(v.gaPurchases) : undefined} tip={{ labels: v.labels, fmt: tipCnt("건") }} />
       <Score label="구매 전환율" value={pct2(v.conv?.cur)} delta={ppDelta(v.conv?.cur ?? null, v.conv?.prev ?? null, "up")} note={v.ga ? prevNote(pct2(v.conv?.prev)) : why(s.ga)} />
       </Scores>
       <Card w={6} title="광고비 추이" right={<ChartLegend items={mediaLegend(v)} />}><SpendLine v={v} /></Card>
@@ -548,6 +553,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null, un
   const N = t.days.length;
   const win = <T,>(xs: T[]): T[] => cut(xs, sp.i0, sp.i1);
   const bks = bucketsOf(t.days, sp, unit), chart = bucketWin(bks, sp);
+  const labels = win(t.days).map(md);
   const on = (name: string) => !salesCh || salesCh.includes(name);
 
   // 구매 — 판매 채널 필터가 걸린다
@@ -612,7 +618,7 @@ function buildTopicView(t: TopicSnapshot, sp: Span, salesCh: string[] | null, un
     return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: imp, clicks: clk, ctr: ratio(clk * 100, imp), purchases: sumOf(win(a.purchases)), value: val, roas: ratio(val, sp1) };
   }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
 
-  return { win, chart, unit, sales, orders, revS, ordS, itemRows, cust, firstS, freshS, cohort, afterRows, submit, subCntS, subRate, surveyRows, surveyAvg, surveyAnswered, surveyTrend, opinionRows, byMission, track,
+  return { win, labels, chart, unit, sales, orders, revS, ordS, itemRows, cust, firstS, freshS, cohort, afterRows, submit, subCntS, subRate, surveyRows, surveyAvg, surveyAnswered, surveyTrend, opinionRows, byMission, track,
     ga, visitS, convRate, funnel, sesTotal, sourceRows, meta, spend, value, spendS, valueS, purS, clickS, impS, cpa, adRows };
 }
 type TopicView = ReturnType<typeof buildTopicView>;
@@ -726,13 +732,13 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
         t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 단위로 보여 줍니다." : ""].filter(Boolean)} />
       <Section title="주요 지표" />
       <Scores>
-        <Score label="페이지 전환율" value={pct2(tv.convRate?.cur)} delta={ppDelta(tv.convRate?.cur ?? null, tv.convRate?.prev ?? null, "up")} note={tv.ga ? `방문 ${(tv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={tv.ga ? tv.win(tv.ga.visits) : undefined} />
-        <Score label="메타 광고비" value={wonS(tv.spendS?.cur)} delta={pctDelta(tv.spendS?.cur ?? null, tv.spendS?.prev ?? null, "none")} note={tv.meta ? `클릭 ${(tv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={tv.meta ? tv.win(tv.spend) : undefined} />
+        <Score label="페이지 전환율" value={pct2(tv.convRate?.cur)} delta={ppDelta(tv.convRate?.cur ?? null, tv.convRate?.prev ?? null, "up")} note={tv.ga ? `방문 ${(tv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={tv.ga ? tv.win(tv.ga.visits) : undefined} tip={{ labels: tv.labels, fmt: tipCnt("회", "방문 ") }} />
+        <Score label="메타 광고비" value={wonS(tv.spendS?.cur)} delta={pctDelta(tv.spendS?.cur ?? null, tv.spendS?.prev ?? null, "none")} note={tv.meta ? `클릭 ${(tv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={tv.meta ? tv.win(tv.spend) : undefined} tip={{ labels: tv.labels, fmt: tipWon }} />
         <Score label="주문 1건당 광고비" value={wonS(tv.cpa?.cur == null ? null : Math.round(tv.cpa.cur))} delta={pctDelta(tv.cpa?.cur ?? null, tv.cpa?.prev ?? null, "down")} note={tv.meta ? `메타 집계 구매 ${(tv.purS?.cur ?? 0).toLocaleString()}건 · ROAS ${fix2(roas) ?? "-"}` : whyX(t.meta)} />
-        <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `매출 ${moneyCompact(tv.revS?.cur ?? 0)}원` : "조회 실패"} spark={tv.sales ? tv.win(tv.orders) : undefined} />
+        <Score label="주문 건수" value={cnt(tv.ordS?.cur, "건")} delta={pctDelta(tv.ordS?.cur ?? null, tv.ordS?.prev ?? null, "up")} note={tv.sales ? `매출 ${moneyCompact(tv.revS?.cur ?? 0)}원` : "조회 실패"} spark={tv.sales ? tv.win(tv.orders) : undefined} tip={{ labels: tv.labels, fmt: tipCnt("건") }} />
         {hasSubmit
-          ? <Score label="미션 완료" value={tv.submit ? cnt(subCnt, "건") : null} delta={pctDelta(tv.subCntS?.cur ?? null, tv.subCntS?.prev ?? null, "up")} note={tv.submit ? `완료율 ${pctOf(tv.subRate?.cur ?? null)} · ${who} ${first.toLocaleString()}명` : "조회 실패"} spark={tv.submit ? tv.win(tv.submit.count) : undefined} />
-          : <Score label={who} value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} />}
+          ? <Score label="미션 완료" value={tv.submit ? cnt(subCnt, "건") : null} delta={pctDelta(tv.subCntS?.cur ?? null, tv.subCntS?.prev ?? null, "up")} note={tv.submit ? `완료율 ${pctOf(tv.subRate?.cur ?? null)} · ${who} ${first.toLocaleString()}명` : "조회 실패"} spark={tv.submit ? tv.win(tv.submit.count) : undefined} tip={{ labels: tv.labels, fmt: tipCnt("건") }} />
+          : <Score label={who} value={cnt(tv.firstS?.cur, "명")} delta={pctDelta(tv.firstS?.cur ?? null, tv.firstS?.prev ?? null, "up")} note={tv.cust ? `신규 ${fresh.toLocaleString()}명` : "조회 실패"} spark={tv.cust ? tv.win(tv.cust.first) : undefined} tip={{ labels: tv.labels, fmt: tipCnt("명") }} />}
         <Score label="재재구매(전체 기간)" value={cnt(tot?.rep2, "명")} note={tot ? `${ofBase(tot.rep2)} · 재구매 ${tot.rep1.toLocaleString()}명` : "조회 실패"} />
       </Scores>
 
@@ -743,7 +749,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
       <Card w={6} title={`${def.landing?.label ?? "페이지"} 단계별 전환`}><DataTable rows={tv.funnel} cols={fCols} rowKey={(r) => r.label} sortKey="idx" empty={noGa} /></Card>
       <Card w={6} title="유입 경로별 방문"><DataTable rows={tv.sourceRows} cols={sCols} rowKey={(r) => r.name} sortKey="sessions" empty={noGa} /></Card>
       <Card w={6} title={`메타 광고비와 구매액${unitTag}`} right={tv.meta ? <ChartLegend items={[["광고비", C_CUR], ["구매액", C_NAVER]]} /> : undefined}>
-        {tv.meta ? <LineChart periods={tv.chart.labels} fmtAxis={moneyCompact} fmtTip={won} unit="원" series={[{ key: "광고비", values: tv.chart.win(tv.spend), color: C_CUR }, { key: "구매액", values: tv.chart.win(tv.value), color: C_NAVER }]} />
+        {tv.meta ? <LineChart smooth periods={tv.chart.labels} fmtAxis={moneyCompact} fmtTip={won} unit="원" series={[{ key: "광고비", values: tv.chart.win(tv.spend), color: C_CUR }, { key: "구매액", values: tv.chart.win(tv.value), color: C_NAVER }]} />
           : <div className="b2b-empty">{noAds}</div>}
       </Card>
       <Card w={12} title="광고별"><DataTable rows={tv.adRows} cols={aCols} rowKey={(r) => r.id} sortKey="spend" empty={noAds} /></Card>
@@ -769,7 +775,7 @@ function TopicPage({ tv, t, def }: { tv: TopicView; t: TopicSnapshot; def: Topic
             <>
               <Card w={6} title={`설문 평균 점수 추이(${by})`}>
                 {tv.surveyRows.length
-                  ? <LineChart periods={tv.chart.labels} yMax={scaleMax} fmtTip={(v) => v.toFixed(1)} unit="점" series={[{ key: "전체 평균", values: tv.surveyTrend, color: C_CUR }]} />
+                  ? <LineChart smooth area periods={tv.chart.labels} yMax={scaleMax} fmtTip={(v) => v.toFixed(1)} unit="점" series={[{ key: "전체 평균", values: tv.surveyTrend, color: C_CUR }]} />
                   : <div className="b2b-empty">{noSurvey}</div>}
               </Card>
               <Card w={hasOpinion ? 6 : 12} title="설문 평균 점수" right={surveyNote ? <span className="bd-card-note">{surveyNote}</span> : undefined}>
@@ -803,6 +809,7 @@ function buildFormView(t: TopicSnapshot, sp: Span, unit: Unit) {
   const N = t.days.length;
   const win = <T,>(xs: T[]): T[] => cut(xs, sp.i0, sp.i1);
   const bks = bucketsOf(t.days, sp, unit), chart = bucketWin(bks, sp);
+  const labels = win(t.days).map(md);
 
   // 탈리 — 신청·결과
   const forms = t.forms?.ok ? t.forms : null;
@@ -850,7 +857,7 @@ function buildFormView(t: TopicSnapshot, sp: Span, unit: Unit) {
     return { id: a.id, name: a.name || a.campaign || a.id, path: [a.campaign, a.adset].filter(Boolean).join(" › "), spend: sp1, impressions: imp, clicks: clk, ctr: ratio(clk * 100, imp), cpc: ratio(sp1, clk) };
   }).filter((r) => r.spend > 0 || r.impressions > 0).sort((a, b) => b.spend - a.spend);
 
-  return { win, chart, unit, forms, hasResult, buy, applyS, peopleS, resultS, doneS, resPeopleS, buyS, people, buyRate, doneRate, steps, cohort, opinionRows,
+  return { win, labels, chart, unit, forms, hasResult, buy, applyS, peopleS, resultS, doneS, resPeopleS, buyS, people, buyRate, doneRate, steps, cohort, opinionRows,
     ga, visitS, convRate, funnel, sesTotal, sourceRows, meta, spend, spendS, clickS, impS, cpa, adRows };
 }
 type FormView = ReturnType<typeof buildFormView>;
@@ -936,11 +943,11 @@ function FormTopicPage({ fv, t, def }: { fv: FormView; t: TopicSnapshot; def: To
         t.meta?.ok && t.meta.campaignOnly ? "메타 광고: 광고 단위로 받지 못해 캠페인 단위로 보여 줍니다." : ""].filter(Boolean)} />
       <Section title="주요 지표" />
       <Scores>
-        <Score label="페이지 전환율" value={pct2(fv.convRate?.cur)} delta={ppDelta(fv.convRate?.cur ?? null, fv.convRate?.prev ?? null, "up")} note={fv.ga ? `방문 ${(fv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={fv.ga ? fv.win(fv.ga.visits) : undefined} />
-        <Score label="메타 광고비" value={wonS(fv.spendS?.cur)} delta={pctDelta(fv.spendS?.cur ?? null, fv.spendS?.prev ?? null, "none")} note={fv.meta ? `클릭 ${(fv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={fv.meta ? fv.win(fv.spend) : undefined} />
+        <Score label="페이지 전환율" value={pct2(fv.convRate?.cur)} delta={ppDelta(fv.convRate?.cur ?? null, fv.convRate?.prev ?? null, "up")} note={fv.ga ? `방문 ${(fv.visitS?.cur ?? 0).toLocaleString()}회` : whyX(t.ga)} spark={fv.ga ? fv.win(fv.ga.visits) : undefined} tip={{ labels: fv.labels, fmt: tipCnt("회", "방문 ") }} />
+        <Score label="메타 광고비" value={wonS(fv.spendS?.cur)} delta={pctDelta(fv.spendS?.cur ?? null, fv.spendS?.prev ?? null, "none")} note={fv.meta ? `클릭 ${(fv.clickS?.cur ?? 0).toLocaleString()}회 · CTR ${pct2(ctr) ?? "-"}` : whyX(t.meta)} spark={fv.meta ? fv.win(fv.spend) : undefined} tip={{ labels: fv.labels, fmt: tipWon }} />
         <Score label="신청 1명당 광고비" value={wonS(fv.cpa?.cur == null ? null : Math.round(fv.cpa.cur))} delta={pctDelta(fv.cpa?.cur ?? null, fv.cpa?.prev ?? null, "down")} note={fv.meta ? `노출 ${(fv.impS?.cur ?? 0).toLocaleString()}회` : whyX(t.meta)} />
-        <Score label="신청자 수" value={cnt(fv.peopleS?.cur, "명")} delta={pctDelta(fv.peopleS?.cur ?? null, fv.peopleS?.prev ?? null, "up")} note={fv.forms ? `제출 ${(fv.applyS?.cur ?? 0).toLocaleString()}건` : "조회 실패"} spark={fv.forms ? fv.win(fv.forms.people) : undefined} />
-        <Score label="미션 완료" value={cnt(fv.resPeopleS?.cur, "명")} delta={pctDelta(fv.resPeopleS?.cur ?? null, fv.resPeopleS?.prev ?? null, "up")} note={!fv.forms ? undefined : fv.hasResult ? `제출 ${(fv.resultS?.cur ?? 0).toLocaleString()}건` : "결과 폼 미정"} spark={fv.forms?.resultPeople ? fv.win(fv.forms.resultPeople) : undefined} />
+        <Score label="신청자 수" value={cnt(fv.peopleS?.cur, "명")} delta={pctDelta(fv.peopleS?.cur ?? null, fv.peopleS?.prev ?? null, "up")} note={fv.forms ? `제출 ${(fv.applyS?.cur ?? 0).toLocaleString()}건` : "조회 실패"} spark={fv.forms ? fv.win(fv.forms.people) : undefined} tip={{ labels: fv.labels, fmt: tipCnt("명") }} />
+        <Score label="미션 완료" value={cnt(fv.resPeopleS?.cur, "명")} delta={pctDelta(fv.resPeopleS?.cur ?? null, fv.resPeopleS?.prev ?? null, "up")} note={!fv.forms ? undefined : fv.hasResult ? `제출 ${(fv.resultS?.cur ?? 0).toLocaleString()}건` : "결과 폼 미정"} spark={fv.forms?.resultPeople ? fv.win(fv.forms.resultPeople) : undefined} tip={{ labels: fv.labels, fmt: tipCnt("명") }} />
         <Score label="재재구매(전체 기간)" value={cnt(trackOk ? btot.rep2 : null, "명")} note={trackOk ? `${ofDone(btot.rep2)} · 재구매 ${btot.rep1.toLocaleString()}명` : !fv.forms ? undefined : fv.hasResult ? "조회 실패" : "결과 폼 미정"} />
       </Scores>
 

@@ -95,6 +95,9 @@
 .bd-donut { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-5); }
 .bd-donut-legend { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: var(--sm-space-2); font-size: var(--sm-fs-base); }
 .bd-donut-name { gap: var(--sm-space-2); min-width: 0; }
+/* 도넛 범례 줄 — 조각이나 줄에 마우스를 올리면 나머지 줄이 흐려진다(그래프 마우스오버와 같은 0.12초) */
+.bd-donut-row { transition: opacity .12s ease-out; }
+.bd-donut-row.is-dim { opacity: .45; }
 .bd-donut-legend .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* 좁아지면 — 숫자 줄은 한 줄 3개, 그다음 2개. 차트·표는 한 줄 통째로 */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { moneyCompact } from "../lib/format";
 
 // 내부도구 공용 차트 프리미티브 — 도넛 / 세로막대 추세 / 분포 도넛카드 / 가로바 리스트.
@@ -27,6 +27,47 @@ function barPath(x: number, y: number, w: number, h: number, r = GEOM.rx): strin
   return `M${x},${y + h} L${x},${y + rr} Q${x},${y} ${x + rr},${y} L${x + w - rr},${y} Q${x + w},${y} ${x + w},${y + rr} L${x + w},${y + h} Z`;
 }
 
+// 부드러운 곡선(2026-11-25, 주요 지표) — 단조 3차 보간(Fritsch–Carlson). 모든 점을 지나되 값 위아래로 튀지 않는다
+//  (0 아래로 내려가거나 봉우리를 넘어서지 않는다 — 흔한 스플라인은 급한 변화 옆에서 없는 값을 그린다).
+//  정기배송 분석 탭(Chart.js)의 cubicInterpolationMode: "monotone" 과 같은 방식이라 두 곳의 곡선이 같게 보인다.
+export function smoothPath(pts: [number, number][]): string {
+  const n = pts.length;
+  const f = (v: number) => Math.round(v * 100) / 100;
+  if (!n) return "";
+  if (n < 3) return `M${pts.map((q) => `${f(q[0])},${f(q[1])}`).join(" L")}`;
+  const h: number[] = [], m: number[] = [], t: number[] = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) { h.push(pts[i + 1][0] - pts[i][0] || 1); m.push((pts[i + 1][1] - pts[i][1]) / h[i]); }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (3 * (h[i - 1] + h[i])) / ((2 * h[i] + h[i - 1]) / m[i - 1] + (h[i] + 2 * h[i - 1]) / m[i]);
+  let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
+    d += ` C${f(x0 + h[i] / 3)},${f(y0 + (t[i] * h[i]) / 3)} ${f(x1 - h[i] / 3)},${f(y1 - (t[i + 1] * h[i]) / 3)} ${f(x1)},${f(y1)}`;
+  }
+  return d;
+}
+// 값 없는 구간(null)에서 끊은 점 묶음 — 선 그래프·작은 추세선이 같이 쓴다
+function runsOf(vals: (number | null)[], x: (i: number) => number, y: (v: number) => number): [number, number][][] {
+  const out: [number, number][][] = []; let run: [number, number][] = [];
+  vals.forEach((v, i) => { if (v == null) { if (run.length) out.push(run); run = []; } else run.push([x(i), y(v)]); });
+  if (run.length) out.push(run);
+  return out;
+}
+const polyPath = (pts: [number, number][]) => `M${pts.map((q) => `${q[0]},${q[1]}`).join(" L")}`;
+
+// 마우스오버 툴팁 — 선·막대·콤보·작은 추세선이 같은 흰 카드를 쓴다(모양을 한 곳에서 정한다).
+//  glide = 옆 칸으로 옮길 때 툴팁이 미끄러지듯 따라온다(주요 지표). above = 그래프 위쪽에 띄운다(작은 추세선).
+//  side = 짚은 자리의 옆에 둔다(right = 오른쪽, left = 왼쪽) — 가운데에 얹으면 보고 있는 막대·점을 가린다. 없으면 가운데.
+const HOVER_FADE = "opacity .12s ease-out";
+export function ChartTip({ leftPct, glide, above, side, children }: { leftPct: number; glide?: boolean; above?: boolean; side?: "left" | "right"; children: React.ReactNode }) {
+  return (
+    <div style={{ position: "absolute", left: `${leftPct}%`, ...(above ? { bottom: "100%", marginBottom: 4 } : { top: 6 }), transform: side === "right" ? "translateX(14px)" : side === "left" ? "translateX(calc(-100% - 14px))" : "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 12, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5, transition: glide ? "left .12s ease-out, transform .12s ease-out" : undefined }}>
+      {children}
+    </div>
+  );
+}
+const TipDot = ({ color }: { color: string }) => <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: color, marginRight: 6, verticalAlign: "baseline" }} />;
+
 // 차트 범례 — .sm-chart-legend(b2b.css). 화면마다 인라인으로 재구현하지 말 것.
 export function ChartLegend({ items, style }: { items: [string, string][]; style?: React.CSSProperties }) {
   return (
@@ -51,26 +92,33 @@ export function niceCeil(n: number): number {
 export { moneyCompact };
 
 // 도넛(중앙 총계). colors 미지정 시 PIE_COLORS 순환.
-export function Donut({ data, colors, size = 132, center, centerSub }: { data: [string, number][]; colors?: string[]; size?: number; center: string; centerSub?: string }) {
+//  onActive 를 넘기면 마우스오버가 켜진다: 올린 조각은 굵게·나머지는 흐리게, 가운데 글이 그 조각의 비중과 이름으로 바뀐다.
+//  active 는 밖(범례 줄)에서도 정할 수 있게 부모가 들고 있다.
+export function Donut({ data, colors, size = 132, center, centerSub, active = null, onActive }: { data: [string, number][]; colors?: string[]; size?: number; center: string; centerSub?: string; active?: number | null; onActive?: (i: number | null) => void }) {
   const total = data.reduce((s, [, n]) => s + n, 0);
   const R = 42, W = 18, cx = 60, cy = 60, C = 2 * Math.PI * R;
   let off = 0;
+  const on = onActive && active != null && total > 0 && data[active] && data[active][1] > 0 ? active : null;
+  const shownCenter = on != null ? `${(Math.round((data[on][1] / total) * 1000) / 10).toFixed(1)}%` : center;
+  const shownSub = on != null ? (data[on][0].length > 8 ? `${data[on][0].slice(0, 7)}…` : data[on][0]) : centerSub;
   return (
-    <svg viewBox="0 0 120 120" width={size} height={size} style={{ flexShrink: 0 }}>
+    <svg viewBox="0 0 120 120" width={size} height={size} style={{ flexShrink: 0 }} onMouseLeave={onActive ? () => onActive(null) : undefined}>
       <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--sm-bg-subtle)" strokeWidth={W} />
       {total > 0 && data.map(([label, n], i) => {
         if (n <= 0) return null;
         const len = (n / total) * C;
         const seg = (
           <circle key={i} cx={cx} cy={cy} r={R} fill="none" stroke={colors ? colors[i] : PIE_COLORS[i % PIE_COLORS.length]}
-            strokeWidth={W} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-off}
-            transform={`rotate(-90 ${cx} ${cy})`}><title>{`${label} ${Math.round((n / total) * 100)}%`}</title></circle>
+            strokeWidth={on === i ? W + 4 : W} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-off}
+            opacity={on == null || on === i ? 1 : 0.35} style={onActive ? { transition: `${HOVER_FADE}, stroke-width .12s ease-out` } : undefined}
+            onMouseEnter={onActive ? () => onActive(i) : undefined}
+            transform={`rotate(-90 ${cx} ${cy})`}>{!onActive && <title>{`${label} ${Math.round((n / total) * 100)}%`}</title>}</circle>
         );
         off += len;
         return seg;
       })}
-      <text x={cx} y={cy - 1} textAnchor="middle" fontSize="20" fontWeight="800" fill="var(--sm-black)">{center}</text>
-      {centerSub && <text x={cx} y={cy + 15} textAnchor="middle" fontSize="12" fill="var(--sm-text-light)">{centerSub}</text>}
+      <text x={cx} y={cy - 1} textAnchor="middle" fontSize="20" fontWeight="800" fill="var(--sm-black)" style={{ pointerEvents: "none" }}>{shownCenter}</text>
+      {shownSub && <text x={cx} y={cy + 15} textAnchor="middle" fontSize="12" fill="var(--sm-text-light)" style={{ pointerEvents: "none" }}>{shownSub}</text>}
     </svg>
   );
 }
@@ -115,13 +163,17 @@ export function TrendChart({ data, fmtAxis, accent }: { data: { label: string; v
 
 // 누적 세로막대 — 기간(X축) × 카테고리(누적 세그먼트). 유형별 시계열 변화용.
 //  series[i].values 는 periods 와 같은 길이. 세그먼트 호버 시 "기간 · 유형 N건".
-export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
+//  interactive = 마우스를 올린 기간의 막대만 또렷하게 하고, 그 기간의 조각 값과 합계를 툴팁 카드로 보인다(선 그래프와 같은 카드).
+export function StackedBar({ periods, series, colors, fmtAxis, unit = "건", interactive, fmtTip }: {
   periods: string[];
   series: { key: string; values: number[] }[];
   colors?: string[];
   fmtAxis?: (n: number) => string;
   unit?: string; // 세그먼트 툴팁 값 단위(건/원 등)
+  interactive?: boolean;
+  fmtTip?: (n: number) => string; // 툴팁 값 표기(기본 천 단위 쉼표)
 }) {
+  const [hi, setHi] = useState<number | null>(null);
   if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const totals = periods.map((_, i) => series.reduce((s, ser) => s + (ser.values[i] || 0), 0));
@@ -132,8 +184,10 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
   const hOf = (v: number) => (v / top) * plotH;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
   const col = (i: number) => (colors ? colors[i % colors.length] : PIE_COLORS[i % PIE_COLORS.length]);
+  const tipFmt = fmtTip || ((n: number) => n.toLocaleString());
+  const at = interactive && hi != null && hi < periods.length ? hi : null;
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div style={{ position: "relative", overflowX: "auto" }} onMouseLeave={interactive ? () => setHi(null) : undefined}>
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", minWidth: 480 }}>
       {ticks.map((t, i) => {
         const yy = padT + plotH - hOf(t);
@@ -156,10 +210,10 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
           return { si, yTop, h, key: ser.key, v };
         }).filter(Boolean) as { si: number; yTop: number; h: number; key: string; v: number }[];
         return (
-          <g key={i}>
+          <g key={i} opacity={at == null || at === i ? 1 : 0.45} style={interactive ? { transition: HOVER_FADE } : undefined}>
             {segs.map((s, n) => {
               // 맨 위 조각만 꼭대기를 둥글게 — 막대 하나가 통으로 둥근 것처럼 보인다.
-              const t = <title>{`${p} · ${s.key} ${s.v.toLocaleString()}${unit}`}</title>;
+              const t = interactive ? null : <title>{`${p} · ${s.key} ${s.v.toLocaleString()}${unit}`}</title>;
               return n === segs.length - 1
                 ? <path key={s.si} d={barPath(cx - bw / 2, s.yTop, bw, s.h)} fill={col(s.si)}>{t}</path>
                 : <rect key={s.si} x={cx - bw / 2} y={s.yTop} width={bw} height={s.h} fill={col(s.si)}>{t}</rect>;
@@ -168,7 +222,15 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
           </g>
         );
       })}
+      {interactive && periods.map((_, i) => <rect key={i} x={padL + slot * i} y={padT} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHi(i)} />)}
     </svg>
+    {at != null && (
+      <ChartTip leftPct={((padL + slot * at + slot / 2) / W) * 100} side={padL + slot * at + slot / 2 < W / 2 ? "right" : "left"} glide>
+        <div style={{ fontWeight: 600, marginBottom: 2 }}>{periods[at]}</div>
+        {series.map((ser, si) => ((ser.values[at] || 0) > 0 ? <div key={ser.key}><TipDot color={col(si)} />{ser.key} <strong>{tipFmt(ser.values[at] || 0)}{unit}</strong></div> : null))}
+        {series.length > 1 && <div style={{ borderTop: "1px solid var(--sm-border)", marginTop: 3, paddingTop: 3 }}>합계 <strong>{tipFmt(totals[at])}{unit}</strong></div>}
+      </ChartTip>
+    )}
     </div>
   );
 }
@@ -242,12 +304,12 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
         {periods.map((_, i) => <rect key={i} x={padL + slot * i} y={padT} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHi(i)} />)}
       </svg>
       {hi != null && (
-        <div style={{ position: "absolute", left: `${clamp((cx(hi) / W) * 100, lo, hex)}%`, top: 6, transform: "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 12, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5 }}>
+        <ChartTip leftPct={clamp((cx(hi) / W) * 100, lo, hex)}>
           <div style={{ fontWeight: 600, marginBottom: 2 }}>{periods[hi]}</div>
           {barSeries.map((ser, si) => <div key={si}><span style={{ color: barColors[si % barColors.length] }}>●</span> {ser.key} <strong>{(ser.values[hi] || 0).toLocaleString()}{barUnit}</strong></div>)}
           <div style={{ borderTop: "1px solid var(--sm-border)", marginTop: 3, paddingTop: 3 }}>합계 <strong>{totals[hi].toLocaleString()}{barUnit}</strong></div>
           <div style={{ color: lineColor, fontWeight: 600 }}>{lineLabel} {lineValues[hi] == null ? "-" : `${lineFmt(lineValues[hi] as number)}${lineUnit}`}</div>
-        </div>
+        </ChartTip>
       )}
     </div>
   );
@@ -255,8 +317,9 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
 
 // 선 그래프(시계열) — 여러 선, 값 없는 구간(null)은 끊는다. dashed = 비교 기간처럼 '참고' 선.
 //  막대 3종과 같은 좌표계(GEOM)·격자·X축 솎음. 마우스오버 시 그 시점의 모든 선 값을 보여 준다.
-//  tipLabels = 툴팁 제목(기간 이름과 다르게 쓰고 싶을 때 — 예: 비교 선의 날짜를 함께 적기).
-export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height, yMax }: {
+//  smooth = 부드러운 곡선(smoothPath) + 마우스오버 때 점에 흰 테두리·툴팁이 미끄러지듯 따라옴. 점은 14칸 이하일 때만 늘 보인다.
+//  area = 첫 실선 아래를 그 색으로 옅게 채운다(위에서 아래로 옅어짐).
+export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height, yMax, smooth, area }: {
   periods: string[];
   series: { key: string; values: (number | null)[]; color: string; dashed?: boolean }[];
   fmtAxis?: (n: number) => string;
@@ -264,8 +327,11 @@ export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height,
   unit?: string;
   height?: number;                 // viewBox 높이(기본 GEOM.H) — 낮은 카드에 넣을 때만
   yMax?: number;                   // 세로축 최댓값 고정(만점이 정해진 점수 등) — 없으면 값에 맞춰 올림
+  smooth?: boolean;
+  area?: boolean;
 }) {
   const [hi, setHi] = useState<number | null>(null);
+  const gradId = `lc-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const tip = fmtTip || ((n: number) => n.toLocaleString());
@@ -276,14 +342,13 @@ export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height,
   const cx = (i: number) => (n === 1 ? padL + plotW / 2 : padL + (plotW * i) / (n - 1));
   const y = (v: number) => padT + plotH - (v / top) * plotH;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
-  const segsOf = (vals: (number | null)[]) => {
-    const out: string[] = []; let seg: string[] = [];
-    for (let i = 0; i < n; i++) { const v = vals[i]; if (v == null) { if (seg.length) out.push(seg.join(" ")); seg = []; } else seg.push(`${cx(i)},${y(v)}`); }
-    if (seg.length) out.push(seg.join(" "));
-    return out;
-  };
+  const pathOf = smooth ? smoothPath : polyPath;
   const clamp = (v: number, lo: number, up: number) => Math.max(lo, Math.min(up, v));
   const slot = n > 1 ? plotW / (n - 1) : plotW;
+  const at = hi != null && hi < n ? hi : null;   // 기간을 바꿔 칸 수가 줄면 남아 있던 자리는 버린다
+  const dotMax = smooth ? 14 : 31;                // 늘 보이는 점 — 곡선에서는 점이 많으면 선이 울퉁불퉁해 보인다
+  const main = area ? series.find((s) => !s.dashed) : undefined;
+  const base = padT + plotH;
   return (
     <div style={{ position: "relative", overflowX: "auto" }} onMouseLeave={() => setHi(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", minWidth: 480 }}>
@@ -293,28 +358,36 @@ export function LineChart({ periods, series, fmtAxis, fmtTip, unit = "", height,
             <text x={padL - 6} y={y(t) + 3.5} textAnchor="end" fontSize={AXIS_FS.y} fill="var(--sm-text-light)">{fmt(Math.round(t))}</text>
           </g>
         ))}
-        {hi != null && <line x1={cx(hi)} x2={cx(hi)} y1={padT} y2={padT + plotH} stroke="var(--sm-border-strong)" strokeWidth="1" />}
-        {series.map((s) => segsOf(s.values).map((pts, k) => (
-          <polyline key={`${s.key}-${k}`} points={pts} fill="none" stroke={s.color} strokeWidth={s.dashed ? 1.5 : 2} strokeDasharray={s.dashed ? "4 4" : undefined} strokeLinejoin="round" strokeLinecap="round" opacity={s.dashed ? 0.7 : 1} />
+        {main && (
+          <>
+            <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={main.color} stopOpacity="0.16" /><stop offset="1" stopColor={main.color} stopOpacity="0" /></linearGradient></defs>
+            {runsOf(main.values, cx, y).filter((r) => r.length > 1).map((r, k) => <path key={k} d={`${pathOf(r)} L${r[r.length - 1][0]},${base} L${r[0][0]},${base} Z`} fill={`url(#${gradId})`} stroke="none" />)}
+          </>
+        )}
+        {at != null && <line x1={cx(at)} x2={cx(at)} y1={padT} y2={base} stroke="var(--sm-border-strong)" strokeWidth="1" />}
+        {series.map((s) => runsOf(s.values, cx, y).map((r, k) => (
+          <path key={`${s.key}-${k}`} d={pathOf(r)} fill="none" stroke={s.color} strokeWidth={s.dashed ? 1.5 : 2} strokeDasharray={s.dashed ? "4 4" : undefined} strokeLinejoin="round" strokeLinecap="round" opacity={s.dashed ? 0.7 : 1} />
         )))}
-        {n <= 31 && series.filter((s) => !s.dashed).map((s) => s.values.map((v, i) => (v == null ? null : <circle key={`${s.key}-${i}`} cx={cx(i)} cy={y(v)} r={hi === i ? 4 : 2.4} fill={s.color} />)))}
-        {hi != null && n > 31 && series.map((s) => (s.values[hi] == null ? null : <circle key={s.key} cx={cx(hi)} cy={y(s.values[hi] as number)} r={4} fill={s.color} />))}
+        {n <= dotMax && series.filter((s) => !s.dashed).map((s) => s.values.map((v, i) => (v == null || (smooth && at === i) ? null : <circle key={`${s.key}-${i}`} cx={cx(i)} cy={y(v)} r={at === i ? 4 : 2.4} fill={s.color} />)))}
+        {at != null && (smooth || n > dotMax) && series.map((s) => (s.values[at] == null ? null : <circle key={s.key} cx={cx(at)} cy={y(s.values[at] as number)} r={smooth ? 4.5 : 4} fill={s.color} stroke={smooth ? "var(--sm-white)" : undefined} strokeWidth={smooth ? 2 : undefined} />))}
         {periods.map((p, i) => (showLabel(i, n) ? <text key={i} x={cx(i)} y={H - 9} textAnchor={i === 0 ? "start" : "middle"} fontSize={AXIS_FS.x} fill="var(--sm-text-mid)">{p}</text> : null))}
         {periods.map((_, i) => <rect key={i} x={cx(i) - slot / 2} y={padT} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHi(i)} />)}
       </svg>
-      {hi != null && (
-        <div style={{ position: "absolute", left: `${clamp((cx(hi) / W) * 100, 10, 88)}%`, top: 6, transform: "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 12, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5 }}>
-          <div style={{ fontWeight: 600, marginBottom: 2 }}>{periods[hi]}</div>
-          {series.map((s) => <div key={s.key}><span style={{ color: s.color }}>●</span> {s.key} <strong>{s.values[hi] == null ? "-" : `${tip(s.values[hi] as number)}${unit}`}</strong></div>)}
-        </div>
+      {at != null && (
+        <ChartTip leftPct={smooth ? (cx(at) / W) * 100 : clamp((cx(at) / W) * 100, 10, 88)} side={smooth ? (cx(at) < W / 2 ? "right" : "left") : undefined} glide={smooth}>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>{periods[at]}</div>
+          {series.map((s) => <div key={s.key}>{smooth ? <TipDot color={s.color} /> : <><span style={{ color: s.color }}>●</span>{" "}</>}{s.key} <strong>{s.values[at] == null ? "-" : `${tip(s.values[at] as number)}${unit}`}</strong></div>)}
+        </ChartTip>
       )}
     </div>
   );
 }
 
 // 작은 추세선(스코어카드 안) — 축·격자·글자 없음. 값이 2개 미만이면 그리지 않는다.
-// fill = 선 아래를 같은 색으로 옅게 채운다(주요 지표 숫자 줄)
-export function Sparkline({ values, color = "var(--sm-text-mid)", height = 32, fill = false }: { values: (number | null)[]; color?: string; height?: number; fill?: boolean }) {
+// fill = 선 아래를 같은 색으로 옅게 채운다(주요 지표 숫자 줄). smooth = 부드러운 곡선.
+// labels(값마다의 날짜 이름)나 fmt 를 넘기면 마우스오버가 켜진다: 가장 가까운 날에 점이 찍히고 그 날의 값이 위쪽 툴팁으로 뜬다.
+export function Sparkline({ values, color = "var(--sm-text-mid)", height = 32, fill = false, smooth, labels, fmt }: { values: (number | null)[]; color?: string; height?: number; fill?: boolean; smooth?: boolean; labels?: string[]; fmt?: (n: number) => string }) {
+  const [hi, setHi] = useState<number | null>(null);
   const pts = values.map((v, i) => [i, v] as const).filter((p): p is readonly [number, number] => p[1] != null);
   if (pts.length < 2) return null;
   const W = 120, H = 32, pad = 2;
@@ -322,11 +395,36 @@ export function Sparkline({ values, color = "var(--sm-text-mid)", height = 32, f
   const span = max - min || 1, n = values.length;
   const x = (i: number) => pad + ((W - pad * 2) * i) / (n - 1);
   const y = (v: number) => pad + (H - pad * 2) * (1 - (v - min) / span);
-  return (
+  const pathOf = smooth ? smoothPath : polyPath;
+  const runs = runsOf(values, x, y);
+  const svg = (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={height} preserveAspectRatio="none" style={{ display: "block" }} aria-hidden="true">
-      {fill && <polygon points={`${x(pts[0][0])},${H} ${pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" ")} ${x(pts[pts.length - 1][0])},${H}`} fill={color} opacity="0.1" />}
-      <polyline points={pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      {fill && runs.filter((r) => r.length > 1).map((r, k) => <path key={k} d={`${pathOf(r)} L${r[r.length - 1][0]},${H} L${r[0][0]},${H} Z`} fill={color} opacity="0.1" stroke="none" />)}
+      {runs.map((r, k) => <path key={k} d={pathOf(r)} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />)}
     </svg>
+  );
+  if (!labels && !fmt) return svg;
+  // 그림은 가로로 늘어나므로(preserveAspectRatio none) 점은 SVG 안이 아니라 그 위에 얹는다 — 안에 그리면 타원이 된다
+  const at = hi != null && hi < n && values[hi] != null ? hi : null;
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - box.left) / (box.width || 1)) * W;
+    let best = pts[0][0], gap = Infinity;
+    for (const [i] of pts) { const g = Math.abs(x(i) - px); if (g < gap) { gap = g; best = i; } }
+    setHi(best);
+  };
+  return (
+    <div style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHi(null)}>
+      {svg}
+      {at != null && (
+        <>
+          <span style={{ position: "absolute", left: `${(x(at) / W) * 100}%`, top: `${(y(values[at] as number) / H) * 100}%`, width: 9, height: 9, marginLeft: -4.5, marginTop: -4.5, borderRadius: "50%", background: color, border: "2px solid var(--sm-white)", boxSizing: "border-box", pointerEvents: "none" }} />
+          <ChartTip leftPct={Math.max(18, Math.min(82, (x(at) / W) * 100))} glide above>
+            {labels?.[at] ? <span style={{ color: "var(--sm-text-mid)" }}>{labels[at]} · </span> : null}<strong>{fmt ? fmt(values[at] as number) : (values[at] as number).toLocaleString()}</strong>
+          </ChartTip>
+        </>
+      )}
+    </div>
   );
 }
 

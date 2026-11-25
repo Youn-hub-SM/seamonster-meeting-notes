@@ -977,11 +977,29 @@ function applyChartDefaults() {
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
   Chart.defaults.font.size = 11;
   Chart.defaults.color = T.textMid();
-  Chart.defaults.elements.line.tension = 0;      // 공용 ComboBarLine 은 직선
-  Chart.defaults.elements.point.radius = 2.4;    // 〃 점 크기
+  // 곡선·마우스오버를 주요 지표의 다른 탭(공용 LineChart smooth)과 같게(2026-11-25 대표: "곡선·마우스오버가 조금씩 다르다, 최상향으로").
+  //  곡선 = 단조 보간(값 위아래로 튀지 않음 — charts.tsx smoothPath 와 같은 방식). 이 방식에서는 tension 값이 쓰이지 않는다.
+  Chart.defaults.elements.line.cubicInterpolationMode = "monotone";
+  Chart.defaults.elements.line.tension = 0.35;
+  Chart.defaults.elements.point.radius = 2.4;    // 공용 차트 점 크기
+  Chart.defaults.elements.point.hoverRadius = 4.5;       // 올린 점 = 흰 테두리 두른 큰 점
+  Chart.defaults.elements.point.hoverBorderWidth = 2;
+  Chart.defaults.elements.point.hoverBorderColor = CSSV("--card");
   Chart.defaults.elements.bar.borderRadius = 4;  // 〃 GEOM.rx
   Chart.defaults.scale.grid.color = T.grid();
   Chart.defaults.scale.ticks.color = T.textLight();
+  // 마우스오버 = 그 자리(가로 위치)의 값을 한 번에 — 점이나 막대를 정확히 짚지 않아도 뜬다. 도넛은 조각을 짚을 때만.
+  Chart.defaults.interaction.mode = "index";
+  Chart.defaults.interaction.intersect = false;
+  Chart.overrides.doughnut.interaction = { mode: "nearest", intersect: true };
+  Chart.defaults.animation.duration = 300;
+  // 툴팁 = 공용 차트의 흰 카드(ChartTip)와 같은 모양: 흰 바탕·옅은 테두리·모서리 8·꼬리 없음·둥근 색 점
+  const tt = Chart.defaults.plugins.tooltip;
+  tt.backgroundColor = CSSV("--card"); tt.titleColor = CSSV("--text"); tt.bodyColor = CSSV("--text");
+  tt.borderColor = CSSV("--border"); tt.borderWidth = 1; tt.cornerRadius = 8; tt.caretSize = 0; tt.caretPadding = 8;
+  tt.padding = { top: 7, bottom: 7, left: 10, right: 10 };
+  tt.titleFont = { size: 12, weight: "600" }; tt.bodyFont = { size: 12 }; tt.titleMarginBottom = 4; tt.bodySpacing = 3;
+  tt.usePointStyle = true; tt.boxWidth = 8; tt.boxHeight = 8; tt.boxPadding = 4;
 }
 applyChartDefaults();  // Chart.js 는 위 <script src> 로 이미 로드됨
 
@@ -1924,7 +1942,7 @@ function renderSpeciesChart() {
   charts.species = new Chart(document.getElementById("speciesChart"), {
     type: "bar",
     data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: T.orange() }] },
-    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
+    options: { indexAxis: "y", interaction: { mode: "index", intersect: false, axis: "y" }, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
   });
 }
 
