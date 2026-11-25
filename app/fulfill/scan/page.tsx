@@ -315,17 +315,18 @@ export default function ScanPage() {
       }
       const lack = found.map[t.key] || 0;
       if (lack > 0) shortItems++;
-      rows += `<tr><td>${esc(t.name)}${lack > 0 ? `<div><span class="s">부족량 ${qtyText(lack)}</span></div>` : ""}</td><td class="q">${qty(t.qty)}</td></tr>`;
+      // 부족량은 수량 숫자 바로 왼쪽에(2026-11-25 대표: "숫자 옆에")
+      rows += `<tr><td>${esc(t.name)}</td><td class="q">${lack > 0 ? `<span class="s">부족량 ${qtyText(lack)}</span>` : ""}${qty(t.qty)}</td></tr>`;
     }
     const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>피킹 리스트</title>`
       + `<style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;margin:22px;color:#111}`
       + `h1{font-size:19px;margin:0 0 3px}.meta{color:#666;font-size:12px;margin-bottom:14px}`
       + `table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #d0d0d0;padding:10px 6px;text-align:left}`
-      + `th{font-size:12px;color:#666}td{font-size:17px}th.q,td.q{text-align:right;width:90px}td.q{font-weight:800;font-size:21px}`
+      + `th{font-size:12px;color:#666}td{font-size:17px}th.q,td.q{text-align:right;width:90px;white-space:nowrap}td.q{font-weight:800;font-size:21px}`
       + `tr.z td{background:#ececec;font-weight:800;font-size:13px;padding:6px;border-bottom:1px solid #aaa;letter-spacing:.5px}`
       + `tfoot td{font-weight:800;border-top:2px solid #333;border-bottom:none;font-size:17px}`
       // 부족량 — 흑백 영수증 프린터에서도 보이게 색이 아니라 굵은 테두리로
-      + `.s{display:inline-block;margin-top:4px;border:2px solid #111;padding:1px 8px;font-size:15px;font-weight:800}`
+      + `.s{display:inline-block;vertical-align:middle;margin-right:10px;border:2px solid #111;padding:1px 8px;font-size:15px;font-weight:800}`
       + `.w{border:2px solid #111;padding:6px 8px;font-size:13px;font-weight:800;margin-bottom:12px}`
       + `@media print{body{margin:6mm}}</style></head><body>`
       + `<h1>피킹 리스트</h1>`
@@ -456,12 +457,12 @@ export default function ScanPage() {
                     {st.tally.some((x) => x.zone) && (
                       <td data-label="위치" style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{t.unknown ? "-" : t.zone || <span className="sm-faint" style={{ fontWeight: 400 }}>미지정</span>}</td>
                     )}
-                    <td data-label="품목명">
-                      <strong>{t.name}</strong>
-                      {(short?.map[t.key] || 0) > 0 && <div style={{ color: "var(--sm-danger)", fontSize: 12, fontWeight: 600, marginTop: 2 }}>부족량 {qtyText(short?.map[t.key])}</div>}
-                    </td>
+                    <td data-label="품목명"><strong>{t.name}</strong></td>
                     <td data-label="SKU" className="sm-faint">{t.sku || "-"}</td>
-                    <td data-label="수량" className="num b2b-money" style={{ fontWeight: 600, fontSize: 13 }}>{qty(t.qty)}</td>
+                    <td data-label="수량" className="num b2b-money" style={{ fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
+                      {(short?.map[t.key] || 0) > 0 && <span style={{ color: "var(--sm-danger)", fontSize: 12, marginRight: 8 }}>부족량 {qtyText(short?.map[t.key])}</span>}
+                      {qty(t.qty)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
