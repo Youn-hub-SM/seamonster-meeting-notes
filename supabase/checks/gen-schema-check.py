@@ -1,4 +1,4 @@
-# 마이그레이션 파일들이 만들기로 한 표·칸·함수·색인·뷰·제약이 DB 에 실제로 있는지 보는 '읽기 전용' 점검 SQL 을 만든다.
+# 마이그레이션 파일들이 만들기로 한 표·칸·함수·색인·뷰·제약·방아쇠가 DB 에 실제로 있는지 보는 '읽기 전용' 점검 SQL 을 만든다.
 #  순서대로 읽어, 나중 파일이 지운 것(drop)은 기대 목록에서 뺀다. 함수는 마지막 정의의 본문(공백 무시)까지 견준다.
 import io, os, re, hashlib, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).replace("\\", "/") + "/"
@@ -31,7 +31,7 @@ def strip_comments(sql):
         out.append(p if inside else re.sub(r'/\*.*?\*/', ' ', re.sub(r'--[^\n]*', '', p), flags=re.S))
     return "".join(out)
 
-tables, columns, funcs, indexes, views, checks = {}, {}, {}, {}, {}, {}
+tables, columns, funcs, indexes, views, checks, triggers = {}, {}, {}, {}, {}, {}, {}
 # 값 = 그것을 (마지막으로) 만든 파일 이름
 
 for name, path, default in files():
@@ -72,6 +72,11 @@ for name, path, default in files():
     for m in re.finditer(rf'drop\s+index\s+(?:concurrently\s+)?(?:if\s+exists\s+)?{QNAME}', sql, re.I): events.append((m.start(), "i-", qn(m, dflt), None))
     for m in re.finditer(rf'create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+{QNAME}', sql, re.I): events.append((m.start(), "v+", qn(m, dflt), None))
     for m in re.finditer(rf'drop\s+(?:materialized\s+)?view\s+(?:if\s+exists\s+)?{QNAME}', sql, re.I): events.append((m.start(), "v-", qn(m, dflt), None))
+    # 방아쇠: create trigger 이름 before|after|instead of … on 표  /  drop trigger [if exists] 이름 on 표
+    for m in re.finditer(rf'create\s+(?:or\s+replace\s+)?(?:constraint\s+)?trigger\s+(?P<g>{IDENT})\s+(?:before|after|instead\s+of)\b[^;]*?\bon\s+{QNAME}', sql, re.I | re.S):
+        events.append((m.start(), "g+", qn(m, dflt), m.group("g").strip('"').lower()))
+    for m in re.finditer(rf'drop\s+trigger\s+(?:if\s+exists\s+)?(?P<g>{IDENT})\s+on\s+{QNAME}', sql, re.I):
+        events.append((m.start(), "g-", qn(m, dflt), m.group("g").strip('"').lower()))
 
     for _, kind, key, extra in sorted(events, key=lambda e: e[0]):
         if kind == "t+": tables.setdefault(key, name)
@@ -80,6 +85,7 @@ for name, path, default in files():
             for k in [k for k in columns if k[:2] == key]: columns.pop(k)
             for k in [k for k in checks if k[:2] == key]: checks.pop(k)
             for k in [k for k, v in indexes.items() if v[1] == key]: indexes.pop(k)
+            for k in [k for k in triggers if k[:2] == key]: triggers.pop(k)
         elif kind == "tr":
             if key in tables: tables[(key[0], extra)] = tables.pop(key)
             for k in [k for k in columns if k[:2] == key]: columns[(key[0], extra, k[2])] = columns.pop(k)
@@ -96,6 +102,8 @@ for name, path, default in files():
         elif kind == "v-": views.pop(key, None)
         elif kind == "k+": checks[(*key, extra[0])] = (name, extra[1])
         elif kind == "k-": checks.pop((*key, extra), None)
+        elif kind == "g+": triggers[(*key, extra)] = name
+        elif kind == "g-": triggers.pop((*key, extra), None)
 
 q = lambda s: "'" + s.replace("'", "''") + "'"
 norm = lambda body: hashlib.md5(re.sub(r'[ \t\n\r\f\v]+', '', body).encode("utf-8")).hexdigest()  # 아스키 공백만 — DB 쪽 정규식과 같은 글자
@@ -109,15 +117,17 @@ for (s, n), (f, body) in funcs.items(): rows.append(("함수", s, n, "", norm(bo
 for (s, n), (f, _t) in indexes.items(): rows.append(("색인", s, n, "", "", f))
 for (s, n), f in views.items(): rows.append(("뷰", s, n, "", "", f))
 for (s, t, k), (f, lits) in checks.items(): rows.append(("제약", s, t, k, "~|~".join(lits), f))
+for (s, t, g), f in triggers.items():
+    if not BACKUP.match(t): rows.append(("방아쇠", s, t, g, "", f))
 rows.sort(key=lambda r: (r[5].count("/"), r[5], r[0], r[2], r[3]))
 
 values = ",\n".join(f"  ({q(k)}, {q(s)}, {q(o)}, {q(c)}, {q(x)}, {q(f)})" for k, s, o, c, x, f in rows)
 sql = f"""-- 마이그레이션 적용 점검(읽기 전용) — supabase/migrations 의 파일들이 만들기로 한 것 중 DB 에 없는 것을 찾는다.
 --   쓰는 법: Supabase SQL Editor 에 이 파일 전체를 붙여 넣고 Run. 아무것도 바꾸지 않는다(select 한 번).
 --   결과가 0줄이면 빠진 것이 없다. 줄이 나오면 '파일' 칸의 마이그레이션이 적용되지 않았거나 옛 판이 적용된 것이다.
---   종류: 표 · 칸 · 함수(없음 / 본문이 최신 파일과 다름) · 색인 · 뷰 · 제약(없음 / 허용 값이 최신 파일과 다름)
+--   종류: 표 · 칸 · 함수(없음 / 본문이 최신 파일과 다름) · 색인 · 뷰 · 제약(없음 / 허용 값이 최신 파일과 다름) · 방아쇠(없음 / 꺼져 있음)
 --   못 보는 것: 데이터를 고치는 문장(update·insert), 권한·정책(RLS·grant), pg_cron 예약, 뷰의 본문.
---   만든 날: 2026-11-25 · 기대 목록 {len(rows)}개(표 {len(tables)} · 칸 {len(columns)} · 함수 {len(funcs)} · 색인 {len(indexes)} · 뷰 {len(views)} · 제약 {len(checks)})
+--   만든 날: 2026-11-25 · 기대 목록 {len(rows)}개(표 {len(tables)} · 칸 {len(columns)} · 함수 {len(funcs)} · 색인 {len(indexes)} · 뷰 {len(views)} · 제약 {len(checks)} · 방아쇠 {len(triggers)})
 --   마이그레이션을 새로 더하면 이 파일도 다시 만들어야 한다(같은 폴더의 gen-schema-check.py 를 돌리면 된다).
 with expected(kind, sch, obj, sub, extra, file) as (values
 {values}
@@ -130,6 +140,7 @@ with expected(kind, sch, obj, sub, extra, file) as (values
       when '색인' then not exists (select 1 from pg_indexes i where i.schemaname = e.sch and i.indexname = e.obj)
       when '뷰' then not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = e.sch and c.relname = e.obj and c.relkind in ('v', 'm'))
       when '제약' then not exists (select 1 from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = e.sch and c.relname = e.obj and k.conname = e.sub)
+      when '방아쇠' then not exists (select 1 from pg_trigger g join pg_class c on c.oid = g.tgrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = e.sch and c.relname = e.obj and g.tgname = e.sub and not g.tgisinternal)
     end as missing,
     case
       when e.kind = '함수' and e.extra <> '' then not exists (
@@ -140,16 +151,19 @@ with expected(kind, sch, obj, sub, extra, file) as (values
         where not exists (
           select 1 from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace
           where n.nspname = e.sch and c.relname = e.obj and k.conname = e.sub and position(lit in pg_get_constraintdef(k.oid)) > 0))
+      when e.kind = '방아쇠' then exists (
+        select 1 from pg_trigger g join pg_class c on c.oid = g.tgrelid join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = e.sch and c.relname = e.obj and g.tgname = e.sub and not g.tgisinternal and g.tgenabled = 'D')
       else false
     end as outdated
   from expected e
 )
 select file as "파일", kind as "종류", sch as "스키마",
-       case when kind in ('칸', '제약') then obj || '.' || sub else obj end as "이름",
-       case when missing then '없음' when kind = '함수' then '본문이 최신 파일과 다름' else '허용 값이 최신 파일과 다름' end as "상태"
+       case when kind in ('칸', '제약', '방아쇠') then obj || '.' || sub else obj end as "이름",
+       case when missing then '없음' when kind = '함수' then '본문이 최신 파일과 다름' when kind = '방아쇠' then '꺼져 있음' else '허용 값이 최신 파일과 다름' end as "상태"
 from found
 where missing or outdated
 order by (file like '%/%'), file, kind, obj, sub;
 """
 io.open(OUT, "w", encoding="utf-8", newline="\n").write(sql)
-print(f"rows={len(rows)} tables={len(tables)} columns={len(columns)} funcs={len(funcs)} indexes={len(indexes)} views={len(views)} checks={len(checks)} bytes={len(sql.encode('utf-8'))}")
+print(f"rows={len(rows)} tables={len(tables)} columns={len(columns)} funcs={len(funcs)} indexes={len(indexes)} views={len(views)} checks={len(checks)} triggers={len(triggers)} bytes={len(sql.encode('utf-8'))}")

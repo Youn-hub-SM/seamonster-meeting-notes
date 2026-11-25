@@ -1,11 +1,17 @@
 -- 마이그레이션 적용 점검(읽기 전용) — supabase/migrations 의 파일들이 만들기로 한 것 중 DB 에 없는 것을 찾는다.
 --   쓰는 법: Supabase SQL Editor 에 이 파일 전체를 붙여 넣고 Run. 아무것도 바꾸지 않는다(select 한 번).
 --   결과가 0줄이면 빠진 것이 없다. 줄이 나오면 '파일' 칸의 마이그레이션이 적용되지 않았거나 옛 판이 적용된 것이다.
---   종류: 표 · 칸 · 함수(없음 / 본문이 최신 파일과 다름) · 색인 · 뷰 · 제약(없음 / 허용 값이 최신 파일과 다름)
+--   종류: 표 · 칸 · 함수(없음 / 본문이 최신 파일과 다름) · 색인 · 뷰 · 제약(없음 / 허용 값이 최신 파일과 다름) · 방아쇠(없음 / 꺼져 있음)
 --   못 보는 것: 데이터를 고치는 문장(update·insert), 권한·정책(RLS·grant), pg_cron 예약, 뷰의 본문.
---   만든 날: 2026-11-25 · 기대 목록 481개(표 110 · 칸 128 · 함수 49 · 색인 164 · 뷰 11 · 제약 19)
+--   만든 날: 2026-11-25 · 기대 목록 490개(표 110 · 칸 128 · 함수 49 · 색인 164 · 뷰 11 · 제약 19 · 방아쇠 9)
 --   마이그레이션을 새로 더하면 이 파일도 다시 만들어야 한다(같은 폴더의 gen-schema-check.py 를 돌리면 된다).
 with expected(kind, sch, obj, sub, extra, file) as (values
+  ('방아쇠', 'public', 'companies', 'companies_touch', '', '001_b2b_init.sql'),
+  ('방아쇠', 'public', 'order_items', 'order_items_recalc', '', '001_b2b_init.sql'),
+  ('방아쇠', 'public', 'orders', 'orders_gen_no', '', '001_b2b_init.sql'),
+  ('방아쇠', 'public', 'orders', 'orders_touch', '', '001_b2b_init.sql'),
+  ('방아쇠', 'public', 'products', 'products_cost_log', '', '001_b2b_init.sql'),
+  ('방아쇠', 'public', 'products', 'products_touch', '', '001_b2b_init.sql'),
   ('색인', 'public', 'companies_name_idx', '', '', '001_b2b_init.sql'),
   ('색인', 'public', 'cost_history_product_id_idx', '', '', '001_b2b_init.sql'),
   ('색인', 'public', 'order_items_order_id_idx', '', '', '001_b2b_init.sql'),
@@ -217,6 +223,7 @@ with expected(kind, sch, obj, sub, extra, file) as (values
   ('색인', 'public', 'ig_dm_rules_media_idx', '', '', '094_instagram_dm.sql'),
   ('표', 'public', 'ig_dm_logs', '', '', '094_instagram_dm.sql'),
   ('표', 'public', 'ig_dm_rules', '', '', '094_instagram_dm.sql'),
+  ('방아쇠', 'public', 'orders', 'orders_discount_total', '', '095_order_discount.sql'),
   ('칸', 'public', 'orders', 'discount_amount', '', '095_order_discount.sql'),
   ('칸', 'public', 'orders', 'discount_reason', '', '095_order_discount.sql'),
   ('함수', 'public', 'apply_order_discount', '', '17a6cbe461cf13c9dc5b353c5c4d202c', '095_order_discount.sql'),
@@ -397,6 +404,7 @@ with expected(kind, sch, obj, sub, extra, file) as (values
   ('표', 'factory', 'lot_txns', '', '', 'factory/001_factory_init.sql'),
   ('표', 'factory', 'lots', '', '', 'factory/001_factory_init.sql'),
   ('표', 'factory', 'warehouses', '', '', 'factory/001_factory_init.sql'),
+  ('방아쇠', 'factory', 'products', 'factory_products_log', '', 'factory/005_products_stock_ledger.sql'),
   ('색인', 'factory', 'factory_product_changes_at_idx', '', '', 'factory/005_products_stock_ledger.sql'),
   ('색인', 'factory', 'factory_products_sku_uq', '', '', 'factory/005_products_stock_ledger.sql'),
   ('색인', 'factory', 'factory_stock_txns_batch_idx', '', '', 'factory/005_products_stock_ledger.sql'),
@@ -478,6 +486,7 @@ with expected(kind, sch, obj, sub, extra, file) as (values
   ('칸', 'hr', 'holidays', 'kind', '', 'hr/008_holiday_kinds.sql'),
   ('칸', 'hr', 'holidays', 'workplace_id', '', 'hr/008_holiday_kinds.sql'),
   ('제약', 'hr', 'work_logs', 'work_logs_leave_days_check', '', 'hr/009_leave_hours.sql'),
+  ('방아쇠', 'hr', 'work_logs', 'work_logs_closed_guard', '', 'hr/010_attendance.sql'),
   ('색인', 'hr', 'punch_notes_date_idx', '', '', 'hr/010_attendance.sql'),
   ('색인', 'hr', 'punches_date_idx', '', '', 'hr/010_attendance.sql'),
   ('표', 'hr', 'punch_names', '', '', 'hr/010_attendance.sql'),
@@ -496,6 +505,7 @@ with expected(kind, sch, obj, sub, extra, file) as (values
       when '색인' then not exists (select 1 from pg_indexes i where i.schemaname = e.sch and i.indexname = e.obj)
       when '뷰' then not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = e.sch and c.relname = e.obj and c.relkind in ('v', 'm'))
       when '제약' then not exists (select 1 from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = e.sch and c.relname = e.obj and k.conname = e.sub)
+      when '방아쇠' then not exists (select 1 from pg_trigger g join pg_class c on c.oid = g.tgrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = e.sch and c.relname = e.obj and g.tgname = e.sub and not g.tgisinternal)
     end as missing,
     case
       when e.kind = '함수' and e.extra <> '' then not exists (
@@ -506,13 +516,16 @@ with expected(kind, sch, obj, sub, extra, file) as (values
         where not exists (
           select 1 from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace
           where n.nspname = e.sch and c.relname = e.obj and k.conname = e.sub and position(lit in pg_get_constraintdef(k.oid)) > 0))
+      when e.kind = '방아쇠' then exists (
+        select 1 from pg_trigger g join pg_class c on c.oid = g.tgrelid join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = e.sch and c.relname = e.obj and g.tgname = e.sub and not g.tgisinternal and g.tgenabled = 'D')
       else false
     end as outdated
   from expected e
 )
 select file as "파일", kind as "종류", sch as "스키마",
-       case when kind in ('칸', '제약') then obj || '.' || sub else obj end as "이름",
-       case when missing then '없음' when kind = '함수' then '본문이 최신 파일과 다름' else '허용 값이 최신 파일과 다름' end as "상태"
+       case when kind in ('칸', '제약', '방아쇠') then obj || '.' || sub else obj end as "이름",
+       case when missing then '없음' when kind = '함수' then '본문이 최신 파일과 다름' when kind = '방아쇠' then '꺼져 있음' else '허용 값이 최신 파일과 다름' end as "상태"
 from found
 where missing or outdated
 order by (file like '%/%'), file, kind, obj, sub;
