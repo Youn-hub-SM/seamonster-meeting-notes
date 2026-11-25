@@ -3,7 +3,8 @@ import { clientIp, hrAudit, hrDb, hrError, hrJson, requireHr } from "@/app/lib/h
 import { isDate, todayKst } from "@/app/lib/hr";
 import { WORK_KIND_LABEL, addDays, hoursText, leaveDaysOf, leaveText, normalizeLog, round2, weekdayOf, type WorkLog } from "@/app/lib/hr-work";
 import { GRANT_COLS, HR_PENDING_004, HR_PENDING_009, ensureAutoGrants, fetchGrants, fetchLeaveEmployees, fetchLeaveLogs, fetchLeaveWorkplaces, fetchLogsBetween, leaverCompare, toGrant } from "@/app/lib/hr-leave-db";
-import { refusal } from "@/app/lib/hr-pay-db";
+import { confirmedWorkplaces, refusal } from "@/app/lib/hr-pay-db";
+import { fetchClosings } from "@/app/lib/hr-punch-db";
 import { dayOffsFor } from "@/app/lib/hr-holidays-db";
 import { fillKindOf } from "@/app/lib/hr-holidays";
 
@@ -15,6 +16,21 @@ type Row = Record<string, unknown>;
 const UUID = /^[0-9a-f-]{36}$/i;
 const SINCE_DAYS = 1100; // 사용·결근을 읽는 범위(3년) — 지금 유효한 발생 건과 앞 1년 출근율을 덮는다
 const quarter = (n: number) => Number.isFinite(n) && Math.abs(n * 4 - Math.round(n * 4)) < 1e-9;
+
+// 잠긴 달(급여 확정 또는 근무대장 확정)에는 연차를 넣지도 지우지도 않는다 — 연차는 근무대장의 줄이기 때문이다.
+//  DB(hr.save_work_logs 와 work_logs 방아쇠)도 같은 것을 보지만 여기서 먼저 거른다: 덮어쓰기 안내가 뜨기 전에 알려 주고,
+//  DB 쪽 정의가 옛 판으로 돌아가 있어도(2026-11-25 실제로 있었다) 뚫리지 않게 한다. 문구는 근무대장 화면과 같다.
+const LOCK_PAY = "급여가 확정된 달입니다. 근무대장을 고치려면 급여 확정을 취소하세요.";
+const LOCK_WORK = "근무대장이 확정된 달입니다. 고치려면 [근무대장 확정 취소]를 누르세요.";
+async function monthLocks(workplaceId: string, months: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  await Promise.all(months.map(async (m) => {
+    const [paid, closing] = await Promise.all([confirmedWorkplaces(m), fetchClosings(m)]);
+    if (paid.includes(workplaceId)) out.set(m, LOCK_PAY);
+    else if (closing.closed.some((c) => c.workplace_id === workplaceId)) out.set(m, LOCK_WORK);
+  }));
+  return out;
+}
 
 // GET /api/hr/leave — 연차 현황. 열 때마다 "오늘까지 생겼어야 할 자동 발생 건"을 넣는다(없는 것만, 한 번만).
 //  ?history=1 이면 연차 이력(누가 언제 무엇을)만.
@@ -109,7 +125,9 @@ export async function POST(req: NextRequest) {
       };
 
       // 그 직원이 쉬는 날(공휴일·유급 휴무일·무급 휴무일)에는 연차를 넣지 않는다 — 쉬는 날에 연차가 깎이지 않게
-      const [logs, offs, workplaces] = await Promise.all([fetchLogsBetween(e.id, from, to), dayOffsFor(from, to, { id: e.id, workplace_id: e.workplace_id }), fetchLeaveWorkplaces()]);
+      const months = new Set<string>();
+      for (let d = from; d <= to; d = addDays(d, 1)) months.add(d.slice(0, 7));
+      const [logs, offs, workplaces, locks] = await Promise.all([fetchLogsBetween(e.id, from, to), dayOffsFor(from, to, { id: e.id, workplace_id: e.workplace_id }), fetchLeaveWorkplaces(), monthLocks(e.workplace_id, [...months])]);
       const fivePlus = workplaces.find((w) => w.id === e.workplace_id)?.five_plus ?? true;
       // 날짜마다 넣을 줄을 먼저 만든다(아직 저장하지 않는다). 이미 있는 기록을 바꾸게 되는 날은 changes 에 모은다.
       //  · 연차(하루): 그날의 줄이 '연차'가 된다. 다른 기록(근무·결근 등)이 있으면 덮는다.
@@ -121,6 +139,8 @@ export async function POST(req: NextRequest) {
       for (let d = from; d <= to; d = addDays(d, 1)) {
         if (!e.work_days.includes(weekdayOf(d))) continue;                       // 소정근로일이 아닌 날은 연차를 쓰지 않는다
         if (d < e.hire_date || (e.leave_date && d > e.leave_date)) { skipped.push({ date: d, reason: "재직 기간이 아님" }); continue; }
+        const lock = locks.get(d.slice(0, 7));
+        if (lock) { skipped.push({ date: d, reason: lock }); continue; }                // 잠긴 달은 건너뛴다(덮어쓰기 안내에도 올리지 않는다)
         const off = offs[d];
         if (off && fillKindOf(off, d, fivePlus)) { skipped.push({ date: d, reason: `${off.kind === "public" ? "공휴일" : "휴무일"}(${off.name})` }); continue; }
         const cur = logs.get(d);
@@ -173,7 +193,9 @@ export async function POST(req: NextRequest) {
     if (body.action === "cancel_use") {
       const date = String(body.date ?? "");
       if (!isDate(date)) return hrJson({ ok: false, error: "날짜가 올바르지 않습니다." }, 400);
-      const cur = (await fetchLogsBetween(e.id, date, date)).get(date);
+      const lock = (await monthLocks(e.workplace_id, [date.slice(0, 7)])).get(date.slice(0, 7));
+      if (lock) return hrJson({ ok: false, error: lock }, 409);
+      const cur =(await fetchLogsBetween(e.id, date, date)).get(date);
       if (!cur || !(cur.leave_days > 0)) return hrJson({ ok: false, error: "그 날의 연차 기록이 없습니다. 새로 고치세요." }, 404);
       const rows = cur.kind === "leave" ? [] : [{ ...cur, leave_days: 0 }];
       const { error } = await hrDb().rpc("save_work_logs", { p_employee: e.id, p_from: date, p_to: date, p_rows: rows, p_actor: who.name });
