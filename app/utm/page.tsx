@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import {
   CRM_MEDIA, CRM_SOURCE, DEFAULT_CONTENT_SLUGS, DEFAULT_SOURCE_MEDIUM_MAP, DEFAULT_URL_PRESETS,
-  SLUG_RE, buildUtmUrl, checkCommon, checkCrmUtm, isTrackedUrl, slugify,
+  SLUG_RE, buildUtmUrl, checkCommon, checkCrmUtm, isCrmLink, isTrackedUrl, slugify,
   type CrmButton, type CrmMediumExtra, type UtmIssue,
 } from "@/app/lib/utm-rules";
 
@@ -358,14 +358,28 @@ function CrmMode({ slugs, campaigns, mediaExtra, addLink, copyText, onLearnSlug,
     const cell = (s: string) => (/[\t\n"]/.test(s) ? `"${s.replace(/"/g, "\"\"")}"` : s);
     return [cell(urls), campaign.trim(), medium].join("\t");
   };
+  // 기록 저장 — 용도는 늘 crm. 복사만 해도 한 번 저장한다(광고·SNS 모드의 [주소 복사]와 같게 — 2026-11-25: 복사만 하고 나가면 CRM 링크가 기록에 안 남았다).
+  //  savedKey = 이미 저장한 링크 묶음. 같은 묶음은 다시 저장하지 않는다.
+  const savedKey = useRef("");
+  const resultKey = trackedResults.map((r) => r.url).join("|");
+  const saveRows = async () => {
+    for (const r of trackedResults) await addLink({ base_url: r.url.split("?")[0], source: CRM_SOURCE, medium, campaign: campaign.trim(), content: r.content, term, note: note.trim(), full_url: r.url, purpose: "crm", crm_campaign: campaign.trim() }, false);
+    savedKey.current = resultKey;
+  };
   async function saveAll() {
     if (!trackedResults.length) return;
+    if (savedKey.current === resultKey) { toast.success("이미 기록에 저장한 링크입니다"); return; }
     setSaving(true);
     try {
-      for (const r of trackedResults) await addLink({ base_url: r.url.split("?")[0], source: CRM_SOURCE, medium, campaign: campaign.trim(), content: r.content, term, note: note.trim(), full_url: r.url, purpose: "crm", crm_campaign: campaign.trim() }, false);
+      await saveRows();
       toast.success(`링크 ${trackedResults.length}개를 기록에 저장했습니다`);
     } catch (e) { toast.error(e instanceof Error ? e.message : "기록에 저장하지 못했습니다. 다시 시도하세요"); }
     setSaving(false);
+  }
+  async function copyAndKeep(text: string, msg: string) {
+    await copyText(text, msg);
+    if (!trackedResults.length || savedKey.current === resultKey) return;
+    try { await saveRows(); } catch { /* 복사는 됐다 */ }
   }
   const fixable = (issues || []).some((i) => i.fix);
   const btnIndex = (key: number) => input().buttons.findIndex((b) => (b as BtnRow).key === key);
@@ -469,8 +483,8 @@ function CrmMode({ slugs, campaigns, mediaExtra, addLink, copyText, onLearnSlug,
                     <tr key={i}>
                       <td>{r.label}</td>
                       <td>{r.tracked ? r.content : <span className="utm-ext">UTM 없음</span>}</td>
-                      <td className="utm-url" title="누르면 복사" onClick={() => copyText(r.url, "주소를 복사했습니다")}>{r.url}</td>
-                      <td><button className="b2b-link-btn" onClick={() => copyText(r.url, "주소를 복사했습니다")}>복사</button></td>
+                      <td className="utm-url" title="누르면 복사" onClick={() => copyAndKeep(r.url, "주소를 복사했습니다")}>{r.url}</td>
+                      <td><button className="b2b-link-btn" onClick={() => copyAndKeep(r.url, "주소를 복사했습니다")}>복사</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -478,8 +492,8 @@ function CrmMode({ slugs, campaigns, mediaExtra, addLink, copyText, onLearnSlug,
             </div>
             <div className="utm-actions">
               <button className="b2b-btn-primary" onClick={saveAll} disabled={saving || !trackedResults.length}>{saving ? "저장 중..." : "기록에 저장"}</button>
-              <button className="b2b-btn-secondary" onClick={() => copyText(trackedResults.map((r) => r.url).join("\n"), "주소를 전부 복사했습니다")} disabled={!trackedResults.length}>전체 복사</button>
-              <button className="b2b-btn-secondary" onClick={() => copyText(excelCells(), "엑셀의 링크 URL 칸에 붙여 넣으세요(캠페인·매체 칸까지 채워집니다)")} disabled={!trackedResults.length}>엑셀 칸으로 복사</button>
+              <button className="b2b-btn-secondary" onClick={() => copyAndKeep(trackedResults.map((r) => r.url).join("\n"), "주소를 전부 복사했습니다")} disabled={!trackedResults.length}>전체 복사</button>
+              <button className="b2b-btn-secondary" onClick={() => copyAndKeep(excelCells(), "엑셀의 링크 URL 칸에 붙여 넣으세요(캠페인·매체 칸까지 채워집니다)")} disabled={!trackedResults.length}>엑셀 칸으로 복사</button>
             </div>
           </>
         )}
@@ -505,7 +519,7 @@ function History({ history, setHistory, copyText }: { history: Link[]; setHistor
   const fileRef = useRef<HTMLInputElement>(null);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return history.filter((h) => (kind === "all" || (kind === "crm" ? h.purpose === "crm" : h.purpose !== "crm")) && (!s || [h.campaign, h.source, h.medium, h.note, h.base_url, h.content, h.crm_campaign].some((v) => (v || "").toLowerCase().includes(s))));
+    return history.filter((h) => (kind === "all" || (kind === "crm" ? isCrmLink(h) : !isCrmLink(h))) && (!s || [h.campaign, h.source, h.medium, h.note, h.base_url, h.content, h.crm_campaign].some((v) => (v || "").toLowerCase().includes(s))));
   }, [history, q, kind]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const cur = Math.min(page, pages);
@@ -524,7 +538,7 @@ function History({ history, setHistory, copyText }: { history: Link[]; setHistor
   }
   function exportCsv() {
     const cell = (v: string) => `"${(v || "").replace(/"/g, "\"\"")}"`;
-    const lines = ["생성일시,용도,기본URL,Source,Medium,Campaign,Content,Term,비고,전체URL", ...history.map((h) => [kst(h.created_at), h.purpose === "crm" ? "CRM" : "광고", h.base_url, h.source, h.medium, h.campaign, h.content, h.term, h.note, h.full_url].map(cell).join(","))];
+    const lines = ["생성일시,용도,기본URL,Source,Medium,Campaign,Content,Term,비고,전체URL", ...history.map((h) => [kst(h.created_at), isCrmLink(h) ? "CRM" : "광고", h.base_url, h.source, h.medium, h.campaign, h.content, h.term, h.note, h.full_url].map(cell).join(","))];
     download(`씨몬스터_UTM_기록_${today()}.csv`, "﻿" + lines.join("\r\n"));
   }
   function downloadTemplate() {
@@ -578,7 +592,7 @@ function History({ history, setHistory, copyText }: { history: Link[]; setHistor
               {pageRows.map((h) => (
                 <tr key={h.id}>
                   <td style={{ whiteSpace: "nowrap" }}>{kst(h.created_at)}</td>
-                  <td><span className="b2b-status-pill">{h.purpose === "crm" ? "CRM" : "광고"}</span></td>
+                  <td><span className="b2b-status-pill">{isCrmLink(h) ? "CRM" : "광고"}</span></td>
                   <td>{h.source}</td><td>{h.medium}</td><td>{h.campaign}</td><td>{h.content}{h.term ? ` · ${h.term}` : ""}</td>
                   <td className="sm-faint">{h.note}</td>
                   <td className="utm-url" title="누르면 복사" onClick={() => copyText(h.full_url, "주소를 복사했습니다")}>{h.full_url}</td>

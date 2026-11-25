@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { isCrmLink } from "@/app/lib/utm-rules";
 
 export const dynamic = "force-dynamic";
 
 const MAX_LINKS = 100;
+
+// 응답의 용도(purpose)는 늘 채워서 준다 — 용도 열이 없는 DB(162 미적용)나 열이 생기기 전에 저장된 줄도 규칙(isCrmLink)으로 가른다.
+//  이게 없으면 CRM 모드로 만든 링크가 기록에 '광고'로 보인다(2026-11-25).
+type LinkRow = Record<string, unknown> & { source?: string | null; medium?: string | null; campaign?: string | null; purpose?: string | null; crm_campaign?: string | null };
+function withPurpose<T extends LinkRow>(r: T): T {
+  const crm = isCrmLink(r);
+  return { ...r, purpose: crm ? "crm" : "ad", crm_campaign: r.crm_campaign || (crm ? String(r.campaign || "") : "") };
+}
 
 // GET /api/utm/links — 최근 생성 히스토리 (최신순, 최대 100)
 export async function GET() {
@@ -15,7 +24,7 @@ export async function GET() {
       .order("created_at", { ascending: false })
       .limit(MAX_LINKS);
     if (error) throw error;
-    return NextResponse.json({ ok: true, links: data ?? [] });
+    return NextResponse.json({ ok: true, links: ((data ?? []) as LinkRow[]).map(withPurpose) });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
@@ -44,7 +53,7 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle();
       if (latest && latest.full_url === fullUrl) {
-        return NextResponse.json({ ok: true, link: latest, deduped: true });
+        return NextResponse.json({ ok: true, link: withPurpose(latest as LinkRow), deduped: true });
       }
     }
 
@@ -77,7 +86,7 @@ export async function POST(req: NextRequest) {
       await sb.from("utm_links").delete().in("id", overflow.map((r) => r.id));
     }
 
-    return NextResponse.json({ ok: true, link: data });
+    return NextResponse.json({ ok: true, link: data ? withPurpose(data as LinkRow) : data });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "저장 실패") }, { status: 500 });
   }
