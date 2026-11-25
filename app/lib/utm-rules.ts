@@ -10,6 +10,14 @@
 //   주소         = https. 우리 GA 밖(인스타·네이버·카카오 등)은 UTM 을 붙이지 않는다.
 
 export const CRM_SOURCE = "kakao";
+// CRM 메시지 링크인가 — 저장된 용도(utm_links.purpose, migration 162)가 crm 이거나, 규칙으로 CRM 링크(source = kakao, medium = 종류-경로)인 것.
+//  용도 열이 없는 DB(162 미적용)에서는 저장할 때 용도가 빠져 CRM 모드로 만든 링크가 기록에 '광고'로 보였다(2026-11-25 대표 신고).
+//  열이 있든 없든 같은 답이 나오게 규칙으로도 가른다. 광고·SNS 모드의 kakao 매체(cpc·display·bizboard·kakao_moment)에는 하이픈이 없어 겹치지 않는다.
+const CRM_MEDIUM_RE = /^[a-z0-9]+(-[a-z0-9]+)+$/;
+export function isCrmLink(l: { purpose?: string | null; source?: string | null; medium?: string | null }): boolean {
+  if (l.purpose === "crm") return true;
+  return String(l.source || "").trim().toLowerCase() === CRM_SOURCE && CRM_MEDIUM_RE.test(String(l.medium || "").trim().toLowerCase());
+}
 
 // 광고·SNS 모드 기본값(설정을 못 읽어도 화면이 돌아가게 클라이언트에도 둔다). 저장본은 utm_settings.
 export type UrlPreset = { label: string; value: string };
