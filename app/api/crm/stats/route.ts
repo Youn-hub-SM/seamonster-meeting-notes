@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { weeklyStats, gaByMedium, weeklyTrend, upsertCrmStats, weekStartOf, kstToday, isCrmSource, CRM_SOURCES, trackedMessages, trackedHistory, applyGaClicks } from "@/app/lib/crm-stats";
+import { weeklyStats, gaByMedium, weeklyTrend, upsertCrmStats, weekStartOf, kstToday, shiftDays, isCrmSource, CRM_SOURCES, trackedMessages, trackedHistory, applyGaClicks } from "@/app/lib/crm-stats";
 import { isSolapiConfigured } from "@/app/lib/solapi";
 
 export const runtime = "nodejs";
@@ -18,18 +18,26 @@ export async function GET(req: NextRequest) {
     if (!DATE_RE.test(raw)) return NextResponse.json({ ok: false, error: "week 는 YYYY-MM-DD 여야 합니다." }, { status: 400 });
     const week = weekStartOf(raw);
     const [w, trend] = await Promise.all([weeklyStats(week), weeklyTrend(12, week)]);
-    let ga: Awaited<ReturnType<typeof gaByMedium>> = null, gaNote = "";
-    try { ga = await gaByMedium(week, w.until); } catch (e) { gaNote = e instanceof Error ? e.message : "GA 조회 실패"; }
+    // gaPrev = 전주의 매체별 — KPI·주간 브리핑의 '전주'를 이 주와 같은 기준(매체별 합)으로 견준다(2026-11-25). 실패하면 전주 값만 비운다.
+    let ga: Awaited<ReturnType<typeof gaByMedium>> = null, gaPrev: Awaited<ReturnType<typeof gaByMedium>> = null, gaNote = "";
+    try { [ga, gaPrev] = await Promise.all([gaByMedium(week, w.until), gaByMedium(shiftDays(week, -7), shiftDays(week, -1)).catch(() => null)]); } catch (e) { gaNote = e instanceof Error ? e.message : "GA 조회 실패"; }
     let tracked: Awaited<ReturnType<typeof trackedMessages>>["tracked"] = [], trackedNote = "";
     let sources = w.sources;
+    // 맵과 이어지지 않은 캠페인(주간 브리핑의 점검, 2026-11-25) — kakao·datarize 로 들어왔는데 켜진 메시지의 UTM 캠페인·이전 이름 어디에도 없는 것.
+    //  데이터라이즈 온사이트 배너(datarize / banner)는 메시지가 아니라 뺀다.
+    let unmatched: { campaign: string; medium: string; sessions: number }[] = [];
     try {
       const t = await trackedMessages(week, w.until, w.rows);
       tracked = t.tracked;
       sources = applyGaClicks(w.sources, w.rows, t.gaRows); // 데이터라이즈 수단의 클릭 = GA 세션(데이터라이즈 클릭은 공식몰 랜딩만 잡힌다)
+      if (t.gaRows) {
+        const known = new Set(t.tracked.flatMap((x) => [x.campaign, ...x.aliases]).map((s) => s.trim().toLowerCase()).filter(Boolean));
+        unmatched = t.gaRows.filter((g) => g.campaign && g.campaign !== "(not set)" && g.sessions > 0 && !known.has(g.campaign) && !g.medium.includes("banner")).sort((a, b) => b.sessions - a.sessions).slice(0, 60);
+      }
     } catch (e) { trackedNote = e instanceof Error ? e.message : "추적 메시지 집계 실패"; }
     let history: Awaited<ReturnType<typeof trackedHistory>>;
     try { history = await trackedHistory(week, 12); } catch (e) { history = { weeks: [], rows: [], total: { sent: [], sessions: [], ctr: [] }, note: e instanceof Error ? e.message : "주간 이력 집계 실패" }; }
-    return NextResponse.json({ ok: true, ...w, ga, gaNote, trend, tracked, trackedNote, history, sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured(), datarize: !!(process.env.DATARIZE_API_KEY || "").trim() });
+    return NextResponse.json({ ok: true, ...w, ga, gaPrev, gaNote, trend, tracked, trackedNote, unmatched, history, sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured(), datarize: !!(process.env.DATARIZE_API_KEY || "").trim() });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }

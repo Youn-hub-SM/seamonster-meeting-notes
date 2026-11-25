@@ -113,6 +113,23 @@
 /* 모달(선택지·가져오기) */
 .crm-modal { max-width: 560px; }
 .crm-import-modal { max-width: 860px; }
+
+/* 주간 브리핑(2026-11-25) — 성과의 한 주 숫자를 글로 푼 창. 좋음·나쁨은 왼쪽 막대 색으로만 가른다 */
+.crm-brief-modal { max-width: 720px; }
+.crm-brief-modal .b2b-modal-body { overflow-x: hidden; } /* 불러온 뒤 세로 막대가 생기는 순간 가로 막대가 함께 남는다 — 글은 모두 줄바꿈되므로 가로는 막는다 */
+.crm-brief-nav { display: flex; align-items: center; margin-bottom: var(--sm-space-4); }
+.crm-brief-nav .sm-tabs { align-items: center; margin: 0; }
+.crm-brief-lead { font-size: var(--sm-fs-lg); font-weight: 500; line-height: var(--sm-lh-body); margin: var(--sm-space-3) 0 var(--sm-space-5); }
+.crm-brief-sec { margin-bottom: var(--sm-space-5); }
+.crm-brief-sec:last-child { margin-bottom: 0; }
+.crm-brief-title { font-size: var(--sm-fs-base); font-weight: 600; margin: 0 0 var(--sm-space-2); padding-bottom: var(--sm-space-2); border-bottom: 1px solid var(--sm-border); }
+.crm-brief-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sm-space-2); }
+.crm-brief-line { padding-left: var(--sm-space-3); border-left: 2px solid var(--sm-border); line-height: var(--sm-lh-ui); }
+.crm-brief-line.is-good { border-left-color: var(--sm-success); }
+.crm-brief-line.is-bad { border-left-color: var(--sm-danger); }
+.crm-brief-text { display: block; overflow-wrap: anywhere; }
+.crm-brief-sub { display: block; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-top: 2px; overflow-wrap: anywhere; }
+.crm-brief-empty { margin: 0; color: var(--sm-text-mid); }
 .crm-opt-section { display: flex; flex-direction: column; gap: var(--sm-space-2); margin-bottom: var(--sm-space-3); }
 .crm-opt-title { font-weight: 600; }
 .crm-opt-list { gap: 6px; }

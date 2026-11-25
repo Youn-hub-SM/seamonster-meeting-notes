@@ -5,7 +5,7 @@ import { isGaConfigured, runGaReport } from "./ga";
 import { fetchSolapiMessages, aggregateSolapi, isSolapiConfigured, fetchSolapiTemplates, type SolapiTemplate } from "./solapi";
 import { getKv, setKv } from "./b2b-settings";
 import { estimateAudience, estimateAudienceWeekly } from "./crm-audience";
-import { isTracked, triggerText, campaignKeys, campaignAliases, CRM_CUSTOMER_LABEL, type CrmMessage } from "./crm";
+import { isTracked, triggerText, campaignKeys, campaignAliases, CRM_CUSTOMER_LABEL, type CrmMessage, type CrmLinks } from "./crm";
 
 export const CRM_SOURCES = [
   { key: "datarize_brand", label: "데이터라이즈 브랜드메시지", how: "api" },   // 2026-11-24 리포팅 API(app/lib/datarize.ts) — 그 전에는 CSV 예정이었다
@@ -125,7 +125,24 @@ export type TrackedRow = {
   sent: number | null; sentBasis: "solapi" | "datarize" | "manual" | "estimate" | "none"; sentNote: string;
   sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null;
   cost: number | null;
+  landing: LandingKind;
 };
+// 버튼 링크가 GA 가 보는 사이트로 가는가(주간 브리핑, 2026-11-25) — 공식몰·블로그는 GA 가 유입을 세고, 설문 폼·가이드·노션은 세지 못한다.
+//  tracked = 링크 하나라도 GA 가 보는 사이트 / untracked = 링크가 전부 GA 가 못 보는 사이트 / "" = 링크 없음·숏링크(/q/)라 도착지를 모름.
+//  브리핑은 untracked 메시지를 '유입 0'·목표 미달로 지적하지 않는다.
+export type LandingKind = "tracked" | "untracked" | "";
+const GA_SEEN_HOSTS = new Set(["seamonster.kr", "www.seamonster.kr", "m.seamonster.kr", "blog.seamonster.kr"]);
+export function landingKind(links: CrmLinks | undefined): LandingKind {
+  const list = [...(links?.urls || []), links?.url || ""].map((s) => String(s || "").trim()).filter(Boolean);
+  let unknown = false, blind = false;
+  for (const raw of list) {
+    let u: URL;
+    try { u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`); } catch { unknown = true; continue; }
+    if (GA_SEEN_HOSTS.has(u.hostname.toLowerCase())) return "tracked";
+    if (u.pathname.startsWith("/q/")) unknown = true; else blind = true;
+  }
+  return blind && !unknown ? "untracked" : "";
+}
 // GA 캠페인×소스/매체 한 줄 — 수단별 표의 데이터라이즈 클릭(= GA 세션)을 세는 데도 쓴다
 export type GaCampaignRow = { campaign: string; medium: string; sessions: number };
 export async function trackedMessages(weekStart: string, until: string, rows: CrmStatRow[]): Promise<{ tracked: TrackedRow[]; gaNote: string; gaRows: GaCampaignRow[] | null }> {
@@ -172,7 +189,7 @@ async function buildTracked(sb: ReturnType<typeof supabaseAdmin>, msgs: CrmMessa
     if (sent == null && m.trigger) { const e = await estimateAudience(sb, m, weekStart, until); if (e.count != null) { sent = e.count; sentBasis = "estimate"; sentNote = `추정 · ${e.note}`; } else sentNote = e.note; }
     const g = gaOk ? campaignKeys(m).reduce((acc, k) => { const x = ga.get(k); if (x) { acc.sessions += x.sessions; acc.purchases += x.purchases; acc.revenue += x.revenue; } return acc; }, { sessions: 0, purchases: 0, revenue: 0 }) : null;
     const ctr = g && sent ? Math.round((g.sessions / sent) * 1000) / 10 : null;
-    out.push({ id: m.id, title: m.title, stage: m.stage, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, aliases: campaignAliases(m), triggerText: triggerText(m), sent, sentBasis, sentNote, sessions: g ? g.sessions : null, purchases: g ? g.purchases : null, revenue: g ? g.revenue : null, ctr, targetCtr: m.target_ctr ?? null, cost });
+    out.push({ id: m.id, title: m.title, stage: m.stage, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, aliases: campaignAliases(m), triggerText: triggerText(m), sent, sentBasis, sentNote, sessions: g ? g.sessions : null, purchases: g ? g.purchases : null, revenue: g ? g.revenue : null, ctr, targetCtr: m.target_ctr ?? null, cost, landing: landingKind(m.links) });
   }
   return { tracked: out.sort((a, b) => (b.sessions || 0) - (a.sessions || 0)), gaRows: gaOk ? gaRows : null };
 }

@@ -1,23 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { TrendChart } from "@/app/components/charts";
 import { qty, qtyText, wonText } from "@/app/lib/format";
+import { buildBriefing } from "@/app/lib/crm-briefing";
+import WeeklyBriefing from "./WeeklyBriefing";
 
 // CRM 성과(2026-11-09 개편, 대표: "접혀 있지 않아도 펼쳐진 채로 가독성·인사이트", "메시지별 클릭률을 매주 추적") — 접기 없이 구역 카드로 펼친다.
 //  위에서부터: 주 이동 한 줄 → 이 주 KPI 4(전주 대비) → 메시지별 클릭률 최근 12주 표(핵심) → 이 주 메시지별 성과 → 주간 클릭률·발송 차트 → 수단별·GA 매체별 → 이 주의 기록.
 //  데이터: /api/crm/stats?week= (crm_send_stats + GA 매체별 + 추적 메시지 + history 12주), 솔라피 가져오기 POST, 직접 입력 POST(모달).
 //  판매 채널 세그먼트(channel)가 수단·GA 매체·추적 메시지·이력·추이·기록 전부에 적용된다.
+//  [주간 브리핑](2026-11-25) — 같은 숫자를 글로 푼 창(app/lib/crm-briefing.ts). 열 때 그 주와 전주의 솔라피·데이터라이즈 발송 수를 먼저 받아 온다.
+//  보고 있는 주가 진행 중이면 지난주로 옮겨서 연다(끝난 주라야 전주와 견줄 수 있다). 창 안의 주 이동은 이 탭의 주와 함께 움직인다.
 
 type SourceDef = { key: string; label: string; how: "csv" | "api" | "manual" };
 type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; label: string; sent: number; clicked: number | null; days: number }[] };
 type GaRow = { medium: string; sessions: number; purchases: number; revenue: number };
-type StatRow = { id: string; source: string; grain: "day" | "week"; date: string; template: string; sent: number; clicked: number | null; cost: number | null; note: string; batch: string };
-type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; aliases?: string[]; triggerText: string; cost?: number | null; sent: number | null; sentBasis: "solapi" | "datarize" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null };
+type StatRow = { id: string; source: string; grain: "day" | "week"; date: string; template: string; sent: number; clicked: number | null; cost: number | null; note: string; batch: string; utm_campaign?: string | null };
+type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; aliases?: string[]; triggerText: string; cost?: number | null; sent: number | null; sentBasis: "solapi" | "datarize" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null; landing?: "tracked" | "untracked" | "" };
 type HistoryRow = { id: string; title: string; customer: string; medium: string; campaign: string; aliases?: string[]; targetCtr: number | null; sentBasis: TrackedRow["sentBasis"]; sent: (number | null)[]; sessions: (number | null)[]; ctr: (number | null)[] };
 type History = { weeks: string[]; rows: HistoryRow[]; total: { sent: number[]; sessions: (number | null)[]; ctr: (number | null)[] }; note: string };
-type Resp = { ok: boolean; error?: string; week: string; until: string; sources: WeeklySource[]; rows: StatRow[]; ga: GaRow[] | null; gaNote: string; trend: { week: string; bySource: Record<string, number> }[]; tracked: TrackedRow[]; trackedNote: string; history?: History | null; sourceDefs: SourceDef[]; solapi: boolean; datarize?: boolean };
+type Resp = { ok: boolean; error?: string; week: string; until: string; sources: WeeklySource[]; rows: StatRow[]; ga: GaRow[] | null; gaPrev?: GaRow[] | null; gaNote: string; trend: { week: string; bySource: Record<string, number> }[]; tracked: TrackedRow[]; trackedNote: string; unmatched?: { campaign: string; medium: string; sessions: number }[]; history?: History | null; sourceDefs: SourceDef[]; solapi: boolean; datarize?: boolean };
 
 const fmtDate = (iso: string) => iso.slice(5).replace("-", "/");
 const pct = (a: number | null, b: number) => (a == null || !b ? "-" : `${((a / b) * 100).toFixed(1)}%`);
@@ -32,6 +36,7 @@ const ctrTone = (ctr: number | null, target: number | null) => (ctr == null || t
 const SOURCE_CHANNEL: Record<string, string> = { solapi: "naver", naver_talk: "naver", datarize_brand: "mall", datarize_alimtalk: "mall", blumn: "mall", sms: "mall" };
 const MEDIUM_CHANNEL = (medium: string): string => (medium.endsWith("-naver") ? "naver" : medium.endsWith("-cafe24") ? "mall" : "");
 const CUSTOMER_LABEL_KEY: Record<string, string> = { "네이버": "naver", "공식몰": "mall", "기타": "etc" };
+const CHANNEL_LABEL: Record<string, string> = { naver: "네이버", mall: "공식몰", etc: "기타" };
 const inChannel = (channel: string, t: { customer: string; medium: string }) => !channel || (CUSTOMER_LABEL_KEY[t.customer] || t.customer) === channel || (!t.customer && MEDIUM_CHANNEL(t.medium) === channel);
 
 export default function WeeklyStats({ channel = "" }: { channel?: string }) {
@@ -45,6 +50,10 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
   const [showAdd, setShowAdd] = useState(false);
   const [add, setAdd] = useState({ source: "naver_talk", grain: "day", date: kstToday(), template: "", sent: "", clicked: "", note: "" });
   const [addErr, setAddErr] = useState("");
+  const [brief, setBrief] = useState(false);
+  const [briefBusy, setBriefBusy] = useState(false);
+  const [briefNotes, setBriefNotes] = useState<string[]>([]);
+  const synced = useRef(new Set<string>()); // 이 화면에서 발송 수를 이미 받아 온 주 — 창을 다시 열거나 주를 오갈 때 또 받지 않는다
 
   const load = useCallback(async (w: string) => {
     setLoading(true); setErr("");
@@ -91,6 +100,28 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
     } catch (e) { setAddErr(e instanceof Error ? e.message : "발송 기록을 저장하지 못했습니다. 입력값을 확인하세요"); }
     finally { setBusy(""); }
   };
+  // 주간 브리핑 — 그 주(w = 주 시작일)와 전주의 발송 수를 받아 온 뒤 다시 불러온다. 받아 오지 못한 수단은 점검 구역에 적는다.
+  const prepareBrief = async (w: string) => {
+    setBriefBusy(true);
+    const notes: string[] = [];
+    if (!synced.current.has(w)) {
+      const today = kstToday(), end = shiftDays(w, 6);
+      const body = JSON.stringify({ since: shiftDays(w, -7), until: end < today ? end : today });
+      const pull = async (url: string, name: string) => {
+        try { const j = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body }).then((r) => r.json()); if (!j.ok) throw new Error(j.error || ""); }
+        catch (e) { notes.push(`${name} 발송 수를 받아 오지 못했습니다${e instanceof Error && e.message ? ` (${e.message})` : ""}`); }
+      };
+      const jobs: Promise<void>[] = [];
+      if (data?.solapi) jobs.push(pull("/api/crm/stats/solapi", "솔라피"));
+      if (data?.datarize && end >= shiftDays(today, -179)) jobs.push(pull("/api/crm/datarize", "데이터라이즈")); // 데이터라이즈 성과는 최근 180일까지만 조회된다
+      await Promise.all(jobs);
+      if (!notes.length) synced.current.add(w);
+    }
+    setBriefNotes(notes);
+    await load(w);
+    setBriefBusy(false);
+  };
+  const openBrief = () => { if (!data) return; setBrief(true); void prepareBrief(data.until >= kstToday() ? shiftDays(data.week, -7) : data.week); };
   const remove = async (id: string) => {
     if (!(await confirm({ title: "발송 기록 삭제", body: "이 줄을 지웁니다. 되돌릴 수 없습니다.", action: "기록 삭제" }))) return;
     const j = await fetch(`/api/crm/stats?id=${id}`, { method: "DELETE" }).then((r) => r.json());
@@ -105,6 +136,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
     const srcOk = (k: string) => !channel || SOURCE_CHANNEL[k] === channel;
     const sources = data.sources.filter((s) => srcOk(s.source));
     const ga = data.ga ? data.ga.filter((g) => !channel || MEDIUM_CHANNEL(g.medium) === channel) : data.ga;
+    const gaPrev = data.gaPrev ? data.gaPrev.filter((g) => !channel || MEDIUM_CHANNEL(g.medium) === channel) : null;
     const tracked = (data.tracked || []).filter((t) => inChannel(channel, t))
       .slice().sort((a, b) => (b.sent ?? -1) - (a.sent ?? -1) || (b.sessions ?? -1) - (a.sessions ?? -1));
     const rows = data.rows.filter((r) => srcOk(r.source));
@@ -116,7 +148,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
       ? { sent: h.weeks.map((_, i) => hRows.reduce((s, r) => s + (r.sent[i] ?? 0), 0)), sessions: h.weeks.map((_, i) => (hRows.some((r) => r.sessions[i] != null) ? hRows.reduce((s, r) => s + (r.sessions[i] ?? 0), 0) : null)) }
       : { sent: h.total.sent, sessions: h.total.sessions }) : null;
     const hCtr = h && hTotal ? h.weeks.map((_, i) => (hTotal.sent[i] && hTotal.sessions[i] != null ? Math.round(((hTotal.sessions[i] as number) / hTotal.sent[i]) * 1000) / 10 : null)) : [];
-    return { ...data, sources, ga, tracked, rows, trend, h, hRows, hTotal, hCtr };
+    return { ...data, sources, ga, gaPrev, tracked, rows, trend, h, hRows, hTotal, hCtr };
   }, [data, channel]);
   const totalSent = useMemo(() => (v?.sources || []).reduce((s, x) => s + x.sent, 0), [v]);
   const gaTotal = useMemo(() => (v?.ga || []).reduce((s, g) => ({ sessions: s.sessions + g.sessions, purchases: s.purchases + g.purchases, revenue: s.revenue + g.revenue }), { sessions: 0, purchases: 0, revenue: 0 }), [v]);
@@ -129,10 +161,37 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
   const last = v?.h ? v.h.weeks.length - 1 : -1;
   const hWeeks = v?.h?.weeks || [];
   const deltaTone = (cur: number | null, prev: number | null) => (cur == null || prev == null ? undefined : cur >= prev ? "var(--sm-success)" : "var(--sm-danger)");
-  const prevSent = v?.hTotal && last > 0 ? v.hTotal.sent[last - 1] : null;
-  const prevSessions = v?.hTotal && last > 0 ? v.hTotal.sessions[last - 1] : null;
-  const prevCtr = v && last > 0 ? v.hCtr[last - 1] : null;
+  // 전주 값 = 이 주와 같은 기준(2026-11-25): 발송 = 전주의 수단별 기록 합, 클릭·구매·매출 = 전주의 GA 매체별 합. 세그먼트를 골라도 같은 채널끼리 견준다.
+  //  (그 전에는 세그먼트에서 전주만 '표의 메시지 합'이라 이 주와 기준이 달랐다)
+  const prevBySrc = v ? v.trend.find((t) => t.week === shiftDays(v.week, -7))?.bySource : undefined;
+  const prevSent = prevBySrc ? Object.values(prevBySrc).reduce((a, b) => a + b, 0) : null;
+  const prevGa = v?.gaPrev ? v.gaPrev.reduce((s, g) => ({ sessions: s.sessions + g.sessions, purchases: s.purchases + g.purchases, revenue: s.revenue + g.revenue }), { sessions: 0, purchases: 0, revenue: 0 }) : null;
+  const prevSessions = prevGa ? prevGa.sessions : null;
+  const prevCtr = prevSent && prevSessions != null ? Math.round((prevSessions / prevSent) * 1000) / 10 : null;
   const curCtr = totalSent && hasGa ? Math.round((gaTotal.sessions / totalSent) * 1000) / 10 : null;
+
+  // 주간 브리핑 — 창이 열려 있을 때만 만든다. 숫자는 위 KPI·표와 같은 값(세그먼트 포함)을 그대로 넘긴다.
+  const briefing = (() => {
+    if (!brief || !v || loading || briefBusy) return null;
+    const bySrc = prevBySrc || {};
+    const hById = new Map(v.hRows.map((r) => [r.id, r]));
+    const have = new Set(v.sources.map((s) => s.source));
+    const un = new Map<string, number>();
+    for (const u of data?.unmatched || []) { if (channel && MEDIUM_CHANNEL(u.medium) !== channel) continue; un.set(u.campaign, (un.get(u.campaign) || 0) + u.sessions); }
+    const noUtm = new Map<string, number>();
+    for (const r of v.rows) { if (r.batch !== "datarize-sync" || (r.utm_campaign || "").trim()) continue; const name = (r.note || "").split(" · ")[0] || r.template; noUtm.set(name, (noUtm.get(name) || 0) + r.sent); }
+    return buildBriefing({
+      week: v.week, until: v.until, today: kstToday(), channelLabel: CHANNEL_LABEL[channel] || "", hasGa,
+      cur: { sent: totalSent, sessions: hasGa ? gaTotal.sessions : null, ctr: curCtr, purchases: hasGa ? gaTotal.purchases : null, revenue: hasGa ? gaTotal.revenue : null, cost: v.sources.reduce<number | null>((a, s) => (s.cost == null ? a : (a || 0) + s.cost), null) },
+      prev: { sent: prevSent, sessions: prevSessions, ctr: prevCtr, purchases: prevGa ? prevGa.purchases : null, revenue: prevGa ? prevGa.revenue : null },
+      messages: v.tracked.map((t) => { const hr = last > 0 ? hById.get(t.id) : undefined; return { id: t.id, title: t.title, customer: t.customer, sent: t.sent, sentBasis: t.sentBasis, sessions: t.sessions, ctr: t.ctr, targetCtr: t.targetCtr, purchases: t.purchases, revenue: t.revenue, landing: t.landing || "", prevSent: hr ? hr.sent[last - 1] ?? null : null, prevCtr: hr ? hr.ctr[last - 1] ?? null : null }; }),
+      sources: v.sources.map((s) => ({ label: s.label, sent: s.sent, clicked: s.clicked, prevSent: bySrc[s.source] ?? null })),
+      missingSources: Object.entries(bySrc).filter(([k, n]) => n > 0 && !have.has(k)).map(([k, n]) => ({ label: defs.find((d) => d.key === k)?.label || k, prevSent: n })),
+      unmatched: [...un].map(([campaign, sessions]) => ({ campaign, sessions })).sort((a, b) => b.sessions - a.sessions),
+      noUtm: [...noUtm].map(([name, sent]) => ({ name, sent })).sort((a, b) => b.sent - a.sent),
+      notes: briefNotes,
+    });
+  })();
 
   const histCell = (r: HistoryRow, i: number, isLast: boolean, weeks: string[]) => {
     const c = r.ctr[i], g = r.sessions[i], s = r.sent[i];
@@ -154,6 +213,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
           <button className="sm-tab" onClick={() => go(1)} disabled={loading || week >= kstToday()} aria-label="다음 주">다음 주</button>
         </div>
         <span className="crm-bar-spacer" />
+        <button className="b2b-btn-secondary" onClick={openBrief} disabled={!data || loading || !!busy}>주간 브리핑</button>
         {data?.datarize && <button className="b2b-btn-secondary" onClick={syncDatarize} disabled={!!busy}>{busy === "datarize" ? "가져오는 중..." : "데이터라이즈 가져오기"}</button>}
         {data?.solapi && <button className="b2b-btn-secondary" onClick={syncSolapi} disabled={!!busy}>{busy === "solapi" ? "가져오는 중..." : "솔라피 가져오기"}</button>}
         <button className="b2b-btn-secondary" onClick={() => setShowAdd(true)}>발송 기록 입력</button>
@@ -291,6 +351,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
         )}
       </section>
 
+      {brief && <WeeklyBriefing briefing={briefing} busy={briefBusy || loading} busyText={briefBusy ? "발송 수를 받아 와 정리하는 중..." : "불러오는 중..."} canNext={shiftDays(week, 7) <= kstToday()} onPrev={() => void prepareBrief(shiftDays(week, -7))} onNext={() => void prepareBrief(shiftDays(week, 7))} onClose={() => setBrief(false)} />}
       {showAdd && (
         <div className="b2b-modal-backdrop" onClick={() => setShowAdd(false)}>
           <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
