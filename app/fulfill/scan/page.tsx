@@ -8,6 +8,8 @@ import { qty, qtyText, dateTime } from "@/app/lib/format";
 type Tally = { key: string; sku: string; name: string; qty: number; unknown: boolean; zone?: string | null };
 type State = { tally: Tally[]; scannedCount: number; totalInvoices: number; totalUnits: number };
 type LastReset = { at: string; count: number } | null;
+// 소매 재고가 모자란 품목(인쇄할 때 한 번 읽는다). checked=false = 재고를 읽지 못함 — '부족 없음'이 아니다
+type Short = { map: Record<string, number>; checked: boolean; reason: string };
 // 메시지 — dup = 이번 라운드에서 이미 찍음(무시), prev = 이전 라운드(초기화 전)에서 찍음(집계 제외, 넣기 가능),
 //  moved = 이전 라운드 송장을 이번 라운드에 넣음, bad = 미등록·오류, wait = 처리 중이라 인쇄·초기화를 미룸
 type Msg = { kind: "ok" | "dup" | "prev" | "moved" | "bad" | "wait"; text: string };
@@ -38,7 +40,10 @@ const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", 
 
 export default function ScanPage() {
   const confirm = useConfirm();
-  const [st, setSt] = useState<State | null>(null);
+  const [st, setStRaw] = useState<State | null>(null);
+  // 마지막 인쇄 때 확인한 부족량 — 집계가 바뀌면 지운다(낡은 표시를 남기지 않는다). 다음 인쇄 때 다시 읽는다.
+  const [short, setShort] = useState<Short | null>(null);
+  const setSt = (next: State) => { setStRaw(next); setShort(null); };
   const [error, setError] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
   const [scan, setScan] = useState("");
@@ -149,7 +154,7 @@ export default function ScanPage() {
       if (typeof j.version === "string") verRef.current = j.version;
       // 출발 뒤 스캔·초기화가 있었거나 처리 중이면 이 응답은 낡았다 — 대상 건수만 반영
       if (seqRef.current !== seq0 || processingRef.current || queueRef.current.length > 0) {
-        setSt((s) => (s ? { ...s, totalInvoices: j.totalInvoices } : s));
+        setStRaw((s) => (s ? { ...s, totalInvoices: j.totalInvoices } : s));
         return;
       }
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
@@ -207,7 +212,8 @@ export default function ScanPage() {
     if (!j.ok) throw new Error(j.error || "송장을 스캔하지 못했습니다. 다시 스캔하세요.");
     if (!j.known) { setMsg({ kind: "bad", text: `미등록 송장번호: ${inv}` }); alarm("bad"); return; }
     seqRef.current++;
-    setSt((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
+    setStRaw((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
+    setShort(null);
     if (j.moved) { setMsg({ kind: "moved", text: `이전 라운드 송장 ${inv} — 이번 라운드에 넣음` }); return; }
     if (j.prevRound) {
       lastPrevRef.current = inv;
@@ -272,20 +278,44 @@ export default function ScanPage() {
   }
 
   // 피킹 리스트 인쇄 — 품목명·수량. 창고 위치(구역)가 설정돼 있으면 구역 소제목으로 묶어 걷는 순서대로.
-  function printTally() {
+  //  인쇄할 때 소매 재고를 한 번 읽어, 모자란 품목에 '부족량 N개'를 찍는다(스캔마다 읽지 않아 스캔 속도는 그대로).
+  //  재고를 읽지 못해도 인쇄는 한다 — 대신 맨 위에 '재고를 확인하지 못했습니다'를 찍는다(표시가 없는 것을 '부족 없음'으로 읽지 않게).
+  const printingRef = useRef(false);
+  async function printTally() {
     if (waitBusy("인쇄")) return;
-    if (!st || !st.tally.length) return;
+    if (!st || !st.tally.length || printingRef.current) return;
+    // 창은 누른 순간에 먼저 연다 — 재고를 읽고 난 뒤에 열면 브라우저가 팝업으로 보고 막을 수 있다
+    const w = window.open("", "_blank", "width=560,height=880");
+    if (!w) { setError("팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 인쇄하세요."); return; }
+    printingRef.current = true;
+    const seq0 = seqRef.current;
+    let view: Pick<State, "tally" | "scannedCount" | "totalUnits"> = st;
+    const found: Short = { map: {}, checked: false, reason: "" };
+    try {
+      const j = await (await fetch("/api/fulfill/scan/stock", { cache: "no-store" })).json();
+      if (!j.ok) throw new Error(j.error || "재고 조회 실패");
+      if (Array.isArray(j.tally) && j.tally.length) view = { tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits }; // 부족량과 같은 순간의 집계로 인쇄
+      found.checked = j.checked === true; found.reason = String(j.reason || "");
+      for (const s of (j.short || []) as { key: string; qty: number }[]) found.map[s.key] = s.qty;
+    } catch (e) { found.checked = false; found.reason = e instanceof Error ? e.message : ""; }
+    finally { printingRef.current = false; }
+    // 그 사이 스캔·초기화가 없었을 때만 화면에 남긴다(있었으면 화면의 집계가 이미 다르다)
+    if (seqRef.current === seq0) setShort(found);
+    if (w.closed) return;
     const now = new Date();
     const ts = dateTime(now);
-    const grouped = st.tally.some((t) => t.zone); // 구역 미설정이면 소제목 없이 기존 형태 그대로
+    const grouped = view.tally.some((t) => t.zone); // 구역 미설정이면 소제목 없이 기존 형태 그대로
     let rows = "";
     let curZone: string | undefined;
-    for (const t of st.tally) {
+    let shortItems = 0;
+    for (const t of view.tally) {
       if (grouped) {
         const z = t.unknown ? "미등록 코드" : t.zone || "위치 미지정";
         if (z !== curZone) { curZone = z; rows += `<tr class="z"><td colspan="2">${esc(z)}</td></tr>`; }
       }
-      rows += `<tr><td>${esc(t.name)}</td><td class="q">${qty(t.qty)}</td></tr>`;
+      const lack = found.map[t.key] || 0;
+      if (lack > 0) shortItems++;
+      rows += `<tr><td>${esc(t.name)}${lack > 0 ? `<div><span class="s">부족량 ${qtyText(lack)}</span></div>` : ""}</td><td class="q">${qty(t.qty)}</td></tr>`;
     }
     const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>피킹 리스트</title>`
       + `<style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;margin:22px;color:#111}`
@@ -294,14 +324,16 @@ export default function ScanPage() {
       + `th{font-size:12px;color:#666}td{font-size:17px}th.q,td.q{text-align:right;width:90px}td.q{font-weight:800;font-size:21px}`
       + `tr.z td{background:#ececec;font-weight:800;font-size:13px;padding:6px;border-bottom:1px solid #aaa;letter-spacing:.5px}`
       + `tfoot td{font-weight:800;border-top:2px solid #333;border-bottom:none;font-size:17px}`
+      // 부족량 — 흑백 영수증 프린터에서도 보이게 색이 아니라 굵은 테두리로
+      + `.s{display:inline-block;margin-top:4px;border:2px solid #111;padding:1px 8px;font-size:15px;font-weight:800}`
+      + `.w{border:2px solid #111;padding:6px 8px;font-size:13px;font-weight:800;margin-bottom:12px}`
       + `@media print{body{margin:6mm}}</style></head><body>`
       + `<h1>피킹 리스트</h1>`
-      + `<div class="meta">출력 ${ts}, 스캔 ${qtyText(st.scannedCount, "건")}</div>`
+      + `<div class="meta">출력 ${ts}, 스캔 ${qtyText(view.scannedCount, "건")}${shortItems > 0 ? `, 소매 재고 부족 ${qtyText(shortItems, "품목")}` : ""}</div>`
+      + (found.checked ? "" : `<div class="w">재고를 확인하지 못했습니다 — 부족량 표시 없음</div>`)
       + `<table><thead><tr><th>품목명</th><th class="q">수량</th></tr></thead><tbody>${rows}</tbody>`
-      + `<tfoot><tr><td>합계</td><td class="q">${qty(st.totalUnits)}</td></tr></tfoot></table>`
+      + `<tfoot><tr><td>합계</td><td class="q">${qty(view.totalUnits)}</td></tr></tfoot></table>`
       + `<script>window.onload=function(){setTimeout(function(){window.print()},80)}</script></body></html>`;
-    const w = window.open("", "_blank", "width=560,height=880");
-    if (!w) { setError("팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 인쇄하세요."); return; }
     w.document.write(html);
     w.document.close();
   }
@@ -409,6 +441,9 @@ export default function ScanPage() {
         <div className="b2b-card-head">
           <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>총 {qtyText(st?.totalUnits ?? 0)} (묶음 전개 반영)</span></span>
         </div>
+        {short && !short.checked && st && st.tally.length > 0 && (
+          <div className="sm-warn" style={{ marginBottom: 10 }}>재고를 확인하지 못했습니다 — 인쇄물에 부족량 표시가 없습니다. 다시 인쇄하세요(F2).{short.reason ? ` (${short.reason})` : ""}</div>
+        )}
         {!st || st.tally.length === 0 ? (
           <div className="b2b-empty" style={{ padding: 24 }}>스캔한 송장이 없습니다. 위 칸에 송장번호를 스캔하세요.</div>
         ) : (
@@ -421,7 +456,10 @@ export default function ScanPage() {
                     {st.tally.some((x) => x.zone) && (
                       <td data-label="위치" style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{t.unknown ? "-" : t.zone || <span className="sm-faint" style={{ fontWeight: 400 }}>미지정</span>}</td>
                     )}
-                    <td data-label="품목명"><strong>{t.name}</strong></td>
+                    <td data-label="품목명">
+                      <strong>{t.name}</strong>
+                      {(short?.map[t.key] || 0) > 0 && <div style={{ color: "var(--sm-danger)", fontSize: 12, fontWeight: 600, marginTop: 2 }}>부족량 {qtyText(short?.map[t.key])}</div>}
+                    </td>
                     <td data-label="SKU" className="sm-faint">{t.sku || "-"}</td>
                     <td data-label="수량" className="num b2b-money" style={{ fontWeight: 600, fontSize: 13 }}>{qty(t.qty)}</td>
                   </tr>
