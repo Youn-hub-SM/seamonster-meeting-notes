@@ -98,7 +98,6 @@ export default function UsersPage() {
           </label>
           <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 160 }}>
             <span className="b2b-field-label">비밀번호<span className="req">*</span></span>
-            <span className="b2b-field-hint">다른 계정과 달라야 합니다</span>
             <input className="b2b-input" value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={fieldErrors.password ? "true" : undefined} />
             {fieldErrors.password && <span className="b2b-field-error">{fieldErrors.password}</span>}
           </label>
@@ -114,7 +113,6 @@ export default function UsersPage() {
             <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중..." : "계정 추가"}</button>
           </div>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호가 곧 신원이라 사람마다 다른 값으로. 파도소리 계정은 입출고 화면만 열립니다</p>
       </section>
 
       <section className="b2b-card" style={{ marginTop: 14 }}>

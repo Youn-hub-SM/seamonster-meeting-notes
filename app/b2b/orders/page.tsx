@@ -1647,9 +1647,6 @@ export default function OrdersListPage() {
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setShipPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>
-                저장하면 각 차수에 담은 수량이 그 차수의 발송일에 재고에서 차감됩니다. 아직 차수를 잡지 않은 남은 수량은 재고에 남습니다.
-              </p>
               {shipError && <div className="b2b-error" style={{ marginBottom: 10 }}>{shipError}</div>}
               {shipLoading ? (
                 <div className="b2b-loading">불러오는 중...</div>

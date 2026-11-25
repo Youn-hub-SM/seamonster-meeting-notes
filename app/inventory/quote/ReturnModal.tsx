@@ -356,7 +356,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             ) : (
               <div>
                 <div className="b2b-field-row">
-                  <label className="b2b-field"><span className="b2b-field-label">반품일 <span className="opt">(파일 전체)</span></span>
+                  <label className="b2b-field"><span className="b2b-field-label">반품일</span>
                     <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
                   <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="opt">(선택)</span></span>
                     <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
@@ -369,7 +369,6 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
           ) : (
             <>
               <div className="b2b-field"><span className="b2b-field-label">품목</span>
-                <span className="b2b-field-hint">초성으로도 검색됩니다</span>
                 <Combobox
                   invalid={!!fieldErr.product}
                   value={productLabel}
@@ -397,13 +396,13 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
               </div>
               <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">반품 단가(원) <span className="opt">(비우면 매입가)</span></span>
+                <label className="b2b-field"><span className="b2b-field-label">반품 단가(원) <span className="opt">(선택)</span></span>
                   <input className="b2b-input" type="number" min={0} value={unitAmount} onChange={(e) => setUnitAmount(e.target.value)} placeholder="0" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="opt">(선택)</span></span>
                   <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
               </div>
-              <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">(반품 사유)</span></span>
-                <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
+              <label className="b2b-field"><span className="b2b-field-label">메모</span>
+                <input className="b2b-input" placeholder="반품 사유" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
 
               {overReturn && (
                 <div className="sm-warn" style={{ marginTop: 8 }}>

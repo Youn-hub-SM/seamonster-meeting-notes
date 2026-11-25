@@ -602,7 +602,7 @@ export default function VocPage() {
               <label className="b2b-field"><span className="b2b-field-label">고객 특이사항</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.customer_note} onChange={(e) => setF("customer_note", e.target.value)} /></label>
               <div className="b2b-field">
-                <span className="b2b-field-label">사진 첨부 <span className="sm-faint" style={{ fontWeight: 400 }}>· 개선요청서에 자동 첨부됩니다</span></span>
+                <span className="b2b-field-label">사진 첨부</span>
                 <div className="sm-row-wrap" style={{ gap: 8 }}>
                   {edit.photos.map((url) => (
                     <div key={url} style={{ position: "relative" }}>

@@ -1114,7 +1114,6 @@ export default function OrderForm({
           </div>
           <div className="b2b-field" style={{ marginTop: 12 }}>
             <label className="b2b-field-label">배송지 주소</label>
-            <div className="b2b-field-hint">우편번호 · 시/도 · 시/군/구 · 도로명 · 상세 순</div>
             <input
               type="text"
               className="b2b-input"
@@ -1431,7 +1430,6 @@ export default function OrderForm({
               <div style={{ fontSize: 13, fontWeight: 600, padding: "9px 0" }}>
                 {orderMargin.season} <span style={{ fontWeight: 400, fontSize: 12, color: "var(--sm-text-mid)" }}>({SEASON_MONTHS[orderMargin.season]})</span>
               </div>
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발송예정일 기준 자동</span>
             </div>
           </div>
           {realScheduleCount === 0 && (

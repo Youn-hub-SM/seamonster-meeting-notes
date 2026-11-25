@@ -431,9 +431,6 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
           </button>
           {showManage && (
             <div className="pay-dep-manage">
-              <div className="pay-dep-manage-hint">
-                미등록 입금자명은 알림 없이 무시(잔액과 정확히 일치하면 예외), 업체를 연결하면 자동 매칭
-              </div>
               <div className="pay-dep-manage-form">
                 <input
                   type="text"

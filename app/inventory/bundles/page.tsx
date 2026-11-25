@@ -112,7 +112,6 @@ export default function BundlesPage() {
         </div>
       )}
 
-      <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>구성품은 등록된 상품이어야 하며, 없는 묶음 SKU는 최소 정보로 자동 생성됩니다</p>
 
       {/* 미리보기 → 반영 */}
       {preview && (
@@ -232,7 +231,6 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             <div className="b2b-field"><label className="b2b-field-label">품목명(묶음명)</label>
               <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="대구 실속세트" /></div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, margin: "-2px 0 8px" }}>SKU가 상품 마스터에 없으면 자동 생성됩니다</p>
           <div className="b2b-field-label" style={{ fontWeight: 600 }}>구성품</div>
           {rows.map((r, i) => (
             <div key={i} className="promo-item-row">

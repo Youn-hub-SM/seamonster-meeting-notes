@@ -390,7 +390,7 @@ function CrmMode({ slugs, campaigns, mediaExtra, addLink, copyText, onLearnSlug,
           {issueOf("medium") && <div className="b2b-field-error">{issueOf("medium")!.msg}</div>}
         </div>
         <div className="b2b-field">
-          <label className="b2b-field-label" htmlFor="crm-campaign">캠페인<span className="req">*</span><span className="opt"> utm_campaign · 메시지 하나에 하나</span></label>
+          <label className="b2b-field-label" htmlFor="crm-campaign">캠페인<span className="req">*</span></label>
           <input id="crm-campaign" className="b2b-input" value={campaign} onChange={(e) => setCampaign(e.target.value)} list="crm-campaigns" autoComplete="off" placeholder="review-30d" aria-invalid={issueOf("campaign") ? true : undefined} />
           <datalist id="crm-campaigns">{campaignNames.map((c) => <option key={c} value={c} />)}</datalist>
           {campaignSuggest && !issueOf("campaign") && <div className="b2b-field-hint">영문 제안: <button className="b2b-link-btn" onClick={() => setCampaign(campaignSuggest)}>{campaignSuggest}</button></div>}
@@ -398,7 +398,7 @@ function CrmMode({ slugs, campaigns, mediaExtra, addLink, copyText, onLearnSlug,
           {dup.length > 0 && <div className="b2b-field-hint">이미 쓰는 캠페인: {dup.map((d) => d.title).join(", ")} — 같은 메시지를 다시 만드는 게 아니면 다른 이름으로</div>}
         </div>
         <div className="b2b-field">
-          <span className="b2b-field-label">버튼<span className="req">*</span><span className="opt"> 링크 없는 버튼(채널추가)은 비워 둔다</span></span>
+          <span className="b2b-field-label">버튼<span className="req">*</span></span>
           <div className="utm-btn-rows">
             <div className="utm-btn-row"><span className="utm-btn-head">버튼명</span><span className="utm-btn-head">content</span><span className="utm-btn-head">링크 주소</span><span /></div>
             {rows.map((r) => {
@@ -437,7 +437,7 @@ function CrmMode({ slugs, campaigns, mediaExtra, addLink, copyText, onLearnSlug,
             {issueOf("term") && <div className="b2b-field-error">{issueOf("term")!.msg}</div>}
           </div>
           <div className="b2b-field">
-            <label className="b2b-field-label" htmlFor="crm-note">비고<span className="opt"> 메시지명 등</span></label>
+            <label className="b2b-field-label" htmlFor="crm-note">비고</label>
             <input id="crm-note" className="b2b-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="1회 구매고객 장기 이탈 방지 (A)" />
           </div>
         </div>
@@ -686,7 +686,6 @@ function Settings({ presets, mediumMap, slugs, mediaExtra, onSave }: { presets: 
 
       <div className="b2b-form-section" style={{ marginBottom: "var(--sm-space-4)" }}>
         <div className="b2b-form-section-title">추가한 발송 수단 (CRM)</div>
-        <div className="b2b-field-hint is-block">기본 4종(알림톡·브랜드메시지 × 공식몰·네이버)은 늘 있고, CRM 모드의 [기타]로 더한 것만 여기 보입니다</div>
         {mediaExtra.length === 0 ? <div className="b2b-empty">추가한 발송 수단이 없습니다.</div> : mediaExtra.map((m) => (
           <div className="utm-preset" key={m.value}>
             <div className="utm-preset-body"><div className="utm-preset-label">{m.label}</div><div className="utm-preset-url">{m.value}</div></div>
@@ -697,7 +696,6 @@ function Settings({ presets, mediumMap, slugs, mediaExtra, onSave }: { presets: 
 
       <div className="b2b-form-section">
         <div className="b2b-form-section-title">버튼명 → content 사전 (CRM)</div>
-        <div className="b2b-field-hint is-block">버튼명에 이 말이 들어 있으면 content 가 자동으로 채워집니다</div>
         {dict.map(([k, v], i) => (
           <div className="utm-dict-row" key={i}>
             <input className="b2b-input" value={k} onChange={(e) => setDict(dict.map((d, j) => (j === i ? [e.target.value, d[1]] : d)))} aria-label="버튼명" />

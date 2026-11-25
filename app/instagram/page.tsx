@@ -342,15 +342,13 @@ export default function InstagramDmPage() {
               )}
 
               <label className="b2b-field"><span className="b2b-field-label">키워드 (선택, 쉼표 구분)</span>
-                <span className="b2b-field-hint">비우면 모든 댓글에 발송</span>
-                <input className="b2b-input" value={draft.keyword} onChange={(e) => setDraft({ ...draft, keyword: e.target.value })} placeholder="예: 신청, 참여" /></label>
+                <input className="b2b-input" value={draft.keyword} onChange={(e) => setDraft({ ...draft, keyword: e.target.value })} placeholder="비우면 모든 댓글에 발송 · 예: 신청, 참여" /></label>
               <label className="b2b-field"><span className="b2b-field-label">보낼 메시지<span className="req">*</span></span>
                 <textarea className="b2b-textarea" rows={4} value={draft.message} onChange={(e) => setDraft({ ...draft, message: e.target.value })}
                   placeholder={"예: {닉네임}님, 참여 감사합니다! 이벤트 안내는 여기서 확인하세요 → https://link.seamonster.kr/이벤트"} aria-invalid={fieldErr.message ? "true" : undefined} />
                 {fieldErr.message && <span className="b2b-field-error">{fieldErr.message}</span>}
                 <span className="sm-faint ig-hint">{"{닉네임}"} = 댓글 작성자 이름, 링크는 메시지에 직접 포함</span></label>
               <label className="b2b-field"><span className="b2b-field-label">링크 (클릭 집계용)</span>
-                <span className="b2b-field-hint">브랜드링크면 클릭수가 표에 집계된다</span>
                 <input className="b2b-input" value={draft.link} onChange={(e) => setDraft({ ...draft, link: e.target.value })} placeholder="예: https://link.seamonster.kr/이벤트" spellCheck={false} /></label>
 
               <div className="b2b-field-row">

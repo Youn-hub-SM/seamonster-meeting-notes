@@ -940,7 +940,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               </div>
             </div>
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>요청자(MD) <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>(비우면 본인)</span></span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>요청자(MD)</span>
               <input className="b2b-input" style={{ width: 160 }} value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
             </label>
             <label className="sm-col" style={{ gap: 3 }}>
@@ -950,13 +950,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             {purpose === "재고 보충" && (
               <label className="sm-col" style={{ gap: 3 }}>
                 {/* 생산기간의 시작 — 이 날부터 생산종료일까지 기록된 입고가 이 요청서에 잡힌다(넘쳐도 초과로 기록) */}
-                <span style={{ fontSize: 13, fontWeight: 500 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>(입고 매칭 시작)</span></span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>생산시작일</span>
                 <input type="date" className="b2b-input" style={{ width: 150 }} value={prodStart} max={dueDate || undefined} onChange={(e) => { datesTouched.current = true; setProdStart(e.target.value); }} />
               </label>
             )}
             <label className="sm-col" style={{ gap: 3 }}>
               {/* 확정형은 마감이 아니라 그날 물건이 있어야 하는 날이다 — 라벨을 용도에 맞춘다(115) */}
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{DUE_LABEL[purpose]}{purpose === "재고 보충" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> (입고 매칭 끝)</span>}</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{DUE_LABEL[purpose]}</span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} aria-invalid={formErr.due ? "true" : undefined} onChange={(e) => { datesTouched.current = true; setDueDate(e.target.value); if (formErr.due) setFormErr((x) => ({ ...x, due: undefined })); }} />
               {formErr.due && <span className="b2b-field-error">{formErr.due}</span>}
             </label>
@@ -973,7 +973,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               </label>
             )}
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>제목(선택){purpose === "도매 대량" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> (비우면 거래처 이름)</span>}</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>제목(선택)</span>
               <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={purpose === "도매 대량" ? undefined : "3월 2주차 도매 생산"} />
             </label>
           </div>
@@ -981,7 +981,6 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           {/* 품목 추가 — 다른 검색창과 동일한 콤보박스(이름·SKU·규격 아무 글자나 검색, 한글 입력 기본) */}
           <div style={{ marginBottom: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>생산 품목 추가</span>
-            <div className="b2b-field-hint">품목명·SKU·규격 아무 글자나 검색해 고르면 아래 표에 추가됩니다</div>
             <div style={{ marginTop: 3 }}>
               <Combobox
                 invalid={!!formErr.lines}

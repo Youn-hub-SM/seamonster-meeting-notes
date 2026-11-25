@@ -90,7 +90,6 @@ export default function SkuGeneratorPage() {
                 placeholder="MK"
                 style={{ textTransform: "uppercase" }}
               />
-              <span className="b2b-field-hint">영문 2자 — 예: MK(고등어)</span>
             </div>
           )}
           {line.needsCut && (

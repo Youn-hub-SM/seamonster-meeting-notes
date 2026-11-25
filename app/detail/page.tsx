@@ -605,7 +605,7 @@ export default function DetailSendPage() {
                 </div>
               </div>
               <div className="b2b-field">
-                <span className="b2b-field-label">구성 소스 <span className="opt">(위에서 아래 순서로 들어간다)</span></span>
+                <span className="b2b-field-label">구성 소스</span>
                 {comboForm.members.length === 0 ? (
                   <div className="dp-members-empty">구성 소스가 없습니다.</div>
                 ) : (
@@ -656,8 +656,8 @@ export default function DetailSendPage() {
               {kind === "set" ? (selectedSet ? `조합 · ${selectedSet.name}` : "조합을 고르세요") : (selected ? `소스 · ${selected.name} v${selected.version}` : "소스를 고르세요")}
             </div>
             <div className="b2b-field">
-              <label className="b2b-field-label" htmlFor="dp-nos">상품번호 <span className="opt">(쉼표·줄바꿈 구분)</span></label>
-              <textarea id="dp-nos" className="b2b-input dp-nos" value={nosText} onChange={(e) => setNosText(e.target.value)} />
+              <label className="b2b-field-label" htmlFor="dp-nos">상품번호</label>
+              <textarea id="dp-nos" className="b2b-input dp-nos" placeholder="쉼표·줄바꿈으로 구분" value={nosText} onChange={(e) => setNosText(e.target.value)} />
             </div>
             <div className="dp-send-foot">
               <button type="button" className="b2b-btn-primary" disabled={sending || !!sendWhy} onClick={send}>

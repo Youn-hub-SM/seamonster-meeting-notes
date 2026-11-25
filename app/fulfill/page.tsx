@@ -387,11 +387,11 @@ export default function FulfillPage() {
           <section className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head"><span className="b2b-card-title">① 발주엑셀 업로드</span></div>
             <div className="b2b-field" style={{ marginBottom: 12 }}>
-              <label className="b2b-field-label">주소 경고어 <span className="opt">(쉼표로 구분, 이 브라우저에만 저장)</span></label>
+              <label className="b2b-field-label">주소 경고어</label>
               <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="제주마루 702호, 군부대, 사서함" />
             </div>
             <div className="b2b-field" style={{ marginBottom: 12 }}>
-              <label className="b2b-field-label">CN 파일 행 순서 <span className="opt">(이 브라우저에만 저장)</span></label>
+              <label className="b2b-field-label">CN 파일 행 순서</label>
               <select className="b2b-input" value={rowOrder} onChange={(e) => saveRowOrder(e.target.value === "input" ? "input" : "label")} style={{ width: "auto" }}>
                 <option value="label">정리 순서 — 단일상품(SKU·수량 순) 먼저, 복수상품은 품목 조합 순</option>
                 <option value="input">올린 순서 그대로 — 순서대로 발송해야 할 때</option>
@@ -663,7 +663,6 @@ export default function FulfillPage() {
                     </table>
                   </div>
                   {dispatch.shortages > 0 && <p style={{ fontSize: 12, color: "var(--sm-danger)", marginTop: 6 }}>재고 부족 {dispatch.shortages}품목 — 출고는 진행되지만 마이너스 재고로 기록됩니다.</p>}
-                  <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>묶음(세트)은 구성품으로 전개, 정기배송 제외</p>
                 </>
               )}
             </>

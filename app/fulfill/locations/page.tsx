@@ -206,7 +206,6 @@ export default function LocationsPage() {
             </table>
           </div>
         )}
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>묶음(세트)은 구성품 위치를 따릅니다. 스캔 화면 반영은 최대 1분.</p>
       </section>
     </div>
   );

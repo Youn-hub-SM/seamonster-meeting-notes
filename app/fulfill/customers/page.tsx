@@ -142,19 +142,19 @@ export default function CustomersPage() {
             {fieldErr.name && <div className="b2b-field-error">{fieldErr.name}</div>}
           </label>
           <label className="b2b-field" style={{ margin: 0 }}>
-            <span className="b2b-field-label">전화 <span className="opt">선택 — 있으면 전화로 먼저 찾는다</span></span>
+            <span className="b2b-field-label">전화 <span className="opt">선택</span></span>
             <input className="b2b-input" value={draft.phone} onChange={set("phone")} placeholder="010-0000-0000" inputMode="tel" aria-invalid={fieldErr.phone ? "true" : undefined} />
             {fieldErr.phone && <div className="b2b-field-error">{fieldErr.phone}</div>}
           </label>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginTop: 10 }}>
           <label className="b2b-field" style={{ margin: 0 }}>
-            <span className="b2b-field-label">주소 일부 <span className="opt">선택 — 이름이 같고 이 글자가 주소에 있으면 일치</span></span>
+            <span className="b2b-field-label">주소 일부 <span className="opt">선택</span></span>
             <input className="b2b-input" value={draft.address} onChange={set("address")} placeholder="래미안 101동" aria-invalid={fieldErr.address ? "true" : undefined} />
             {fieldErr.address && <div className="b2b-field-error">{fieldErr.address}</div>}
           </label>
           <label className="b2b-field" style={{ margin: 0 }}>
-            <span className="b2b-field-label">메모 <span className="opt">발주처리 안내창에 그대로 보인다</span></span>
+            <span className="b2b-field-label">메모</span>
             <input className="b2b-input" value={draft.memo} onChange={set("memo")} placeholder="반품 3회 — 발송 전 전화 확인" aria-invalid={fieldErr.memo ? "true" : undefined} />
             {fieldErr.memo && <div className="b2b-field-error">{fieldErr.memo}</div>}
           </label>
@@ -205,7 +205,6 @@ export default function CustomersPage() {
             </table>
           </div>
         )}
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>발주처리에서 찾는 순서: 전화 일치 → 이름이 같고 주소 일부가 주문 주소에 포함 → 이름만(주소를 안 적었고, 전화를 안 적었거나 주문에 전화가 없을 때). 전화는 숫자만 저장됩니다.</p>
       </section>
     </div>
   );

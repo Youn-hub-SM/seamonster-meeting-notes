@@ -123,9 +123,6 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
             <div className="sm-warn">예약 기능을 쓰려면 마이그레이션 <code>093_cost_schedules.sql</code> 을 Supabase 에 먼저 적용해야 합니다.</div>
           ) : (
             <>
-              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-                적용일 새벽에 자동 반영 — 지난 발주의 이익률은 바뀌지 않습니다
-              </p>
               {(fieldErr.date || fieldErr.cost) && (
                 <div className="b2b-error">
                   {fieldErr.date && fieldErr.cost ? <ul><li>{fieldErr.date}</li><li>{fieldErr.cost}</li></ul> : (fieldErr.date || fieldErr.cost)}

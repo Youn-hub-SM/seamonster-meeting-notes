@@ -188,7 +188,6 @@ export default function SalesUploadPage() {
           {!file && busy === "" && <span className="b2b-btn-why">파일을 올리면 켜집니다</span>}
           <a className="b2b-btn-secondary" href="/api/sales/upload/template" title="빈 양식(xlsx) 내려받기">양식 내려받기</a>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장. 한글·영문 헤더 모두 인식</p>
       </section>
 
       {future && (

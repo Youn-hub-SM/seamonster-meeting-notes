@@ -492,7 +492,6 @@ export default function InventoryPage() {
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setHistoryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>재고 = 그 거래 채널 기준 전후 수량. 대기 행은 재고에 넣지 않음</p>
               <ProductHistory productId={historyFor.product_id} />
             </div>
             <div className="b2b-modal-foot">

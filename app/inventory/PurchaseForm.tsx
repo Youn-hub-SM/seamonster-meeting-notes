@@ -206,7 +206,6 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
           <input className="b2b-input" value={search} onChange={(e) => { setSearch(e.target.value); setActive(-1); }} onKeyDown={onSearchKey} autoComplete="off"
             placeholder="품목·SKU 검색" aria-label="제품 검색"
             style={{ fontSize: 13, padding: "13px 16px" }} />
-          <div className="b2b-field-hint is-below">이름·옵션·SKU·초성(ㄱㅇ)·여러 단어(광어 100 1kg). ↓↑ 이동, Enter 추가</div>
           {matches.length > 0 && (
             <div className="inv-buy-suggest" ref={suggestRef}>
               {matches.map((p, i) => (
@@ -249,7 +248,6 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       <div className="sm-between" style={{ marginTop: 16, gap: 10, flexWrap: "wrap" }}>
         <label className="sm-row" style={{ gap: 7, fontSize: 13, cursor: "pointer" }}>
           <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> 즉시 {type === "입고" ? "입고" : "출고"}처리
-          <span className="sm-faint" style={{ fontSize: 12 }}>(미래 날짜는 해제해 대기로)</span>
         </label>
         <div className="sm-row" style={{ gap: 10 }}>
           <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>그만두기</button>

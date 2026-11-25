@@ -102,7 +102,7 @@ export default function QrPage() {
               <label className="b2b-field" style={{ flex: 2, minWidth: 220 }}><span className="b2b-field-label">연결할 주소 (목적지)<span className="req">*</span></span>
                 <input className="b2b-input" value={nTarget} onChange={(e) => setNTarget(e.target.value)} placeholder="예: https://seamonster.kr/event" aria-invalid={targetErr ? "true" : undefined} />
                 {targetErr && <span className="b2b-field-error">{targetErr}</span>}</label>
-              <label className="b2b-field" style={{ width: 190 }}><span className="b2b-field-label">원하는 링크 주소 <span className="opt">(선택, 비우면 자동)</span></span>
+              <label className="b2b-field" style={{ width: 190 }}><span className="b2b-field-label">원하는 링크 주소 <span className="opt">선택</span></span>
                 <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="예: 여름세일" /></label>
               <label className="b2b-field" style={{ flex: 1, minWidth: 130 }}><span className="b2b-field-label">메모 (선택)</span>
                 <input className="b2b-input" value={nTitle} onChange={(e) => setNTitle(e.target.value)} placeholder="예: 6월 라방" /></label>
@@ -150,7 +150,6 @@ export default function QrPage() {
         <section className="b2b-card">
           <div className="b2b-card-head"><span className="b2b-card-title">정적 QR 생성</span></div>
           <label className="b2b-field" style={{ maxWidth: 460 }}><span className="b2b-field-label">QR 에 담을 내용</span>
-            <span className="b2b-field-hint">주소 또는 아무 텍스트</span>
             <input className="b2b-input" value={staticText} onChange={(e) => setStaticText(e.target.value)} placeholder="예: https://seamonster.kr" /></label>
           {staticText.trim() && (
             <div className="sm-col" style={{ gap: 10, marginTop: 14, alignItems: "flex-start" }}>

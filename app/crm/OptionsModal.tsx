@@ -70,7 +70,6 @@ export default function OptionsModal({ current, onClose, onSaved }: { current: C
               </div>
             </div>
           ))}
-          <p className="b2b-field-hint">선택지를 지워도 기존 메시지 값은 남고 "(구)" 로 표시됩니다</p>
         </div>
         <div className="b2b-modal-foot">
           <div />

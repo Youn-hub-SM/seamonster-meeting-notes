@@ -370,7 +370,7 @@ export default function WeeklyStats({ channel = "" }: { channel?: string }) {
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">발송 건수<span className="req">*</span></span><input className="b2b-input" type="number" min={0} value={add.sent} onChange={(e) => setAdd({ ...add, sent: e.target.value })} /></label>
-                <label className="b2b-field"><span className="b2b-field-label">클릭 수 <span className="opt">모르면 비움</span></span><input className="b2b-input" type="number" min={0} value={add.clicked} onChange={(e) => setAdd({ ...add, clicked: e.target.value })} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">클릭 수 <span className="opt">선택</span></span><input className="b2b-input" type="number" min={0} value={add.clicked} onChange={(e) => setAdd({ ...add, clicked: e.target.value })} /></label>
               </div>
               <label className="b2b-field"><span className="b2b-field-label">메모</span><input className="b2b-input" value={add.note} onChange={(e) => setAdd({ ...add, note: e.target.value })} /></label>
             </div>

@@ -78,7 +78,6 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>세트 SKU는 구성품으로 분해되어 재고에 반영됩니다.</p>
           {error && <div className="b2b-error" style={{ marginBottom: 8 }}>{error}</div>}
           {loading ? <div className="b2b-loading">불러오는 중...</div> : loadErr ? (
             <div className="b2b-error">

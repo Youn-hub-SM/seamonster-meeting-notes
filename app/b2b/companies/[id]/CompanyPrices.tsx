@@ -67,7 +67,6 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
     <section className="b2b-card" style={{ marginBottom: 16 }}>
       <div className="b2b-card-head">
         <h2 className="b2b-card-title">거래처 전용 단가</h2>
-        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발주 시 자동 적용, 없으면 기본 판매가</span>
       </div>
       {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
 

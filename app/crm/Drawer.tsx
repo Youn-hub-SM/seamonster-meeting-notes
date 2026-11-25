@@ -94,8 +94,8 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
                 ); })}
               </ul>
             )}
-            <label className="b2b-field"><span className="b2b-field-label">링크 주소 <span className="opt">버튼마다 한 줄</span></span>
-              <textarea className="b2b-textarea" rows={Math.min(6, Math.max(2, urls.length + 1))} value={urls.join("\n")} onChange={(e) => setUrls(e.target.value)} spellCheck={false} /></label>
+            <label className="b2b-field"><span className="b2b-field-label">링크 주소</span>
+              <textarea className="b2b-textarea" placeholder="버튼마다 한 줄" rows={Math.min(6, Math.max(2, urls.length + 1))} value={urls.join("\n")} onChange={(e) => setUrls(e.target.value)} spellCheck={false} /></label>
             <div className="b2b-field-row">
               <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인</span>
                 <input className="b2b-input" value={data.links.utm_campaign || ""} onChange={(e) => setLink("utm_campaign", e.target.value)} spellCheck={false} /></label>
@@ -109,8 +109,8 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
                   <option value="">없음</option><option value="a">a</option><option value="b">b</option>
                 </select></label>
             </div>
-            <label className="b2b-field"><span className="b2b-field-label">이전 캠페인 이름 <span className="opt">쉼표로 여러 개 · 옛 UTM·데이터라이즈 캠페인 ID</span></span>
-              <input className="b2b-input" value={aliasText} onChange={(e) => setAliasText(e.target.value)} onBlur={() => onChange({ ...data, links: { ...data.links, utm_campaign_aliases: aliasText.split(/[,\n]/).map((s) => s.trim()).filter(Boolean) } })} spellCheck={false} /></label>
+            <label className="b2b-field"><span className="b2b-field-label">이전 캠페인 이름</span>
+              <input className="b2b-input" placeholder="쉼표로 여러 개" value={aliasText} onChange={(e) => setAliasText(e.target.value)} onBlur={() => onChange({ ...data, links: { ...data.links, utm_campaign_aliases: aliasText.split(/[,\n]/).map((s) => s.trim()).filter(Boolean) } })} spellCheck={false} /></label>
             {!aliasText && (CRM_CAMPAIGN_ALIASES[(data.links.utm_campaign || "").trim()] || []).length > 0 && <div className="crm-ga-line">기본 별칭 적용 중: {CRM_CAMPAIGN_ALIASES[(data.links.utm_campaign || "").trim()].join(", ")}</div>}
             {ga && <div className="crm-ga-line">GA 90일 · 세션 {qty(ga.sessions)} · 구매 {qty(ga.purchases)}{ga.revenue ? ` · ${wonText(ga.revenue)}` : ""}</div>}
           </section>
@@ -127,7 +127,7 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
                     <option value="">없음</option>
                     {CRM_TRIGGERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                   </select></label>
-                <label className="b2b-field crm-field-num"><span className="b2b-field-label">D+n <span className="opt">전이면 음수</span></span>
+                <label className="b2b-field crm-field-num"><span className="b2b-field-label">D+n</span>
                   <input className="b2b-input" type="number" value={data.offset_days == null ? "" : String(data.offset_days)} onChange={(e) => set("offset_days", e.target.value === "" ? null : Number(e.target.value))} /></label>
               </div>
               <label className="b2b-field"><span className="b2b-field-label">조건 메모</span>
@@ -138,7 +138,7 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
                 <label className="b2b-field crm-field-num"><span className="b2b-field-label">목표 클릭률(%)</span>
                   <input className="b2b-input" type="number" step="0.1" min={0} value={data.target_ctr == null ? "" : String(data.target_ctr)} onChange={(e) => set("target_ctr", e.target.value === "" ? null : Number(e.target.value))} /></label>
               </div>
-              <label className="b2b-field"><span className="b2b-field-label">솔라피 템플릿 <span className="opt">네이버 솔라피만</span></span>
+              <label className="b2b-field"><span className="b2b-field-label">솔라피 템플릿</span>
                 {solapiTpls.length ? (
                   <select className="b2b-select" value={data.solapi_template_id || ""} onChange={(e) => set("solapi_template_id", e.target.value)}>
                     <option value="">없음</option>
@@ -159,8 +159,8 @@ export default function Drawer({ data, onChange, onClose, onSave, onDelete, savi
                   <input type="date" className="b2b-input" value={data.end_date || ""} onChange={(e) => set("end_date", e.target.value)} /></label>
               </div>
             )}
-            <label className="b2b-field"><span className="b2b-field-label">태그 <span className="opt">콤마 구분</span></span>
-              <input className="b2b-input" value={data.tags} onChange={(e) => set("tags", e.target.value)} /></label>
+            <label className="b2b-field"><span className="b2b-field-label">태그</span>
+              <input className="b2b-input" placeholder="쉼표로 구분" value={data.tags} onChange={(e) => set("tags", e.target.value)} /></label>
             <label className="b2b-field"><span className="b2b-field-label">상세 설명</span>
               <textarea className="b2b-textarea" rows={2} value={data.detail} onChange={(e) => set("detail", e.target.value)} /></label>
             <label className="crm-active-check">

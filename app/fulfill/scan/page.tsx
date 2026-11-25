@@ -355,7 +355,6 @@ export default function ScanPage() {
           autoFocus
           style={{ fontSize: 18, padding: "12px 14px", fontWeight: 600, letterSpacing: 0.5 }}
         />
-        <div className="b2b-field-hint is-below">바코드를 스캔하거나 송장번호를 입력하고 Enter. 하이픈 있어도/없어도 인식</div>
         {msg && (
           <div className="sm-row" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600, gap: 10, flexWrap: "wrap", alignItems: "center",
             background: MSG_COLOR[msg.kind].bg, color: MSG_COLOR[msg.kind].fg }}>
@@ -402,7 +401,7 @@ export default function ScanPage() {
       {lastReset && lastReset.count > 0 && (
         <div className="sm-row" style={{ gap: 10, marginTop: -6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" className="b2b-link-btn" onClick={undoReset}>직전 초기화 되돌리기</button>
-          <span className="sm-faint" style={{ fontSize: 12 }}>{dateTime(lastReset.at)} 초기화 {qtyText(lastReset.count, "건")} (스캔 기록 30일 보관)</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{dateTime(lastReset.at)} 초기화 {qtyText(lastReset.count, "건")}</span>
         </div>
       )}
 

@@ -116,13 +116,13 @@ export default function CustomStatementPage() {
         <div className="b2b-field-row" style={{ marginBottom: 14 }}>
           <label className="b2b-field"><span className="b2b-field-label">거래일자</span>
             <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-          <label className="b2b-field"><span className="b2b-field-label">문서번호 <span className="opt">(선택, 비우면 표시 안 함)</span></span>
+          <label className="b2b-field"><span className="b2b-field-label">문서번호 <span className="opt">선택</span></span>
             <input className="b2b-input" value={docNo} onChange={(e) => setDocNo(e.target.value)} /></label>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>공급자 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(고쳐도 설정은 안 바뀝니다)</span></div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>공급자</div>
             <Field label="상호" value={supplier.name} onChange={(v) => setSupplier({ ...supplier, name: v })} />
             <Field label="등록번호" value={supplier.biz_no} onChange={(v) => setSupplier({ ...supplier, biz_no: v })} />
             <Field label="대표" value={supplier.ceo} onChange={(v) => setSupplier({ ...supplier, ceo: v })} />
@@ -175,7 +175,6 @@ export default function CustomStatementPage() {
               </tbody>
             </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>세액은 과세 품목의 공급가액 10%로 자동 계산됩니다.</p>
         </div>
       </section>
 

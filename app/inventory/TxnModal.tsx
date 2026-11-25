@@ -627,7 +627,7 @@ export default function TxnModal({
             <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
           {!isAdjust && (
             <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {type}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’ — 미래 날짜는 대기로만)</span>
+              <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {type}처리
             </label>
           )}
           </>
