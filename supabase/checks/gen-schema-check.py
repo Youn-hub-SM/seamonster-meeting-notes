@@ -100,6 +100,8 @@ for name, path, default in files():
 q = lambda s: "'" + s.replace("'", "''") + "'"
 norm = lambda body: hashlib.md5(re.sub(r'[ \t\n\r\f\v]+', '', body).encode("utf-8")).hexdigest()  # 아스키 공백만 — DB 쪽 정규식과 같은 글자
 rows = []
+BACKUP = re.compile(r'^bak\d')  # 일회성 초기화 스크립트가 만든 백업 표(예: factory.bak20260929_lots)는 있어야 하는 것이 아니다
+for k in [k for k in tables if BACKUP.match(k[1])]: tables.pop(k)
 for (s, t), f in tables.items(): rows.append(("표", s, t, "", "", f))
 for (s, t, c), f in columns.items():
     if (s, t) in tables or True: rows.append(("칸", s, t, c, "", f))

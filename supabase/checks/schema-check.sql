@@ -3,7 +3,7 @@
 --   결과가 0줄이면 빠진 것이 없다. 줄이 나오면 '파일' 칸의 마이그레이션이 적용되지 않았거나 옛 판이 적용된 것이다.
 --   종류: 표 · 칸 · 함수(없음 / 본문이 최신 파일과 다름) · 색인 · 뷰 · 제약(없음 / 허용 값이 최신 파일과 다름)
 --   못 보는 것: 데이터를 고치는 문장(update·insert), 권한·정책(RLS·grant), pg_cron 예약, 뷰의 본문.
---   만든 날: 2026-11-25 · 기대 목록 483개(표 112 · 칸 128 · 함수 49 · 색인 164 · 뷰 11 · 제약 19)
+--   만든 날: 2026-11-25 · 기대 목록 481개(표 110 · 칸 128 · 함수 49 · 색인 164 · 뷰 11 · 제약 19)
 --   마이그레이션을 새로 더하면 이 파일도 다시 만들어야 한다(같은 폴더의 gen-schema-check.py 를 돌리면 된다).
 with expected(kind, sch, obj, sub, extra, file) as (values
   ('색인', 'public', 'companies_name_idx', '', '', '001_b2b_init.sql'),
@@ -397,8 +397,6 @@ with expected(kind, sch, obj, sub, extra, file) as (values
   ('표', 'factory', 'lot_txns', '', '', 'factory/001_factory_init.sql'),
   ('표', 'factory', 'lots', '', '', 'factory/001_factory_init.sql'),
   ('표', 'factory', 'warehouses', '', '', 'factory/001_factory_init.sql'),
-  ('표', 'factory', 'bak20260929_lot_txns', '', '', 'factory/004_reset_stock_20260929.sql'),
-  ('표', 'factory', 'bak20260929_lots', '', '', 'factory/004_reset_stock_20260929.sql'),
   ('색인', 'factory', 'factory_product_changes_at_idx', '', '', 'factory/005_products_stock_ledger.sql'),
   ('색인', 'factory', 'factory_products_sku_uq', '', '', 'factory/005_products_stock_ledger.sql'),
   ('색인', 'factory', 'factory_stock_txns_batch_idx', '', '', 'factory/005_products_stock_ledger.sql'),
