@@ -325,7 +325,18 @@
 .fac-fc-bar > span { display: block; height: 100%; background: var(--fac-blue); transition: width .2s; }
 
 /* ── 구분·보관처·단가·이동(factory/011) ──────────────────────────── */
-.fac-txn-kinds { margin: 0 0 var(--sm-space-3); }
+/* 위계(2026-11-27 대표 지시): 유형(입고·출고·조정)은 1차 — 붙은 분절 버튼, 고른 것은 파랑 채움·흰 글자.
+   구분(생산·매입·반품 / 매출·현장 투입)은 2차 — '구분' 글자 뒤 작은 알약 칩, 고른 것은 옅은 파랑 바탕·파랑 글자 */
+.fac-txn-types { gap: 0; border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius-btn); overflow: hidden; }
+.fac-txn-types .sm-tab { border: 0; border-radius: 0; padding: 9px 22px; font-size: var(--sm-fs-lg); font-weight: 600; color: var(--sm-text-mid); }
+.fac-txn-types .sm-tab + .sm-tab { border-left: 1px solid var(--sm-border-strong); }
+.fac-txn-types .sm-tab:hover:not(.is-active) { background: var(--sm-bg-subtle); color: var(--sm-black); }
+.fac-txn-types .sm-tab.is-active { background: var(--fac-blue); border-color: var(--fac-blue); color: var(--sm-white); font-weight: 600; }
+.fac-txn-types .sm-tab.is-active + .sm-tab { border-left-color: var(--fac-blue); }
+.fac-txn-kinds { margin: 0 0 var(--sm-space-3); align-items: center; gap: var(--sm-space-1); }
+.fac-txn-kinds-label { font-size: var(--sm-fs-xs); color: var(--sm-text-light); margin-right: var(--sm-space-1); }
+.fac-txn-kinds .sm-tab { padding: 4px 12px; font-size: var(--sm-fs-xs); font-weight: 500; border-radius: var(--sm-radius-pill); color: var(--sm-text-mid); }
+.fac-txn-kinds .sm-tab.is-active { background: var(--sm-orange-light); border-color: var(--fac-blue); color: var(--fac-blue); }
 .fac-storages { display: flex; flex-direction: column; gap: var(--sm-space-1); margin-top: var(--sm-space-2); padding-top: var(--sm-space-2); border-top: 1px solid var(--sm-border); }
 .fac-storage { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-2); font-size: var(--sm-fs-base); }
 .fac-storage-add { display: flex; gap: var(--sm-space-1); margin-top: var(--sm-space-1); }

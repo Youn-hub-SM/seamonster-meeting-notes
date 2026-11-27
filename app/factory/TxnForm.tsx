@@ -383,6 +383,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
           {/* 구분(011) — 한 번 저장 = 한 구분 */}
           {kinds && (type === "입고" || type === "출고") && (
             <div className="sm-tabs fac-txn-kinds">
+              <span className="fac-txn-kinds-label">구분</span>
               {(type === "입고" ? IN_KINDS : OUT_KINDS).map((kd) => (
                 <button key={kd} type="button" className={`sm-tab ${kind === kd ? "is-active" : ""}`} onClick={() => setKind(kd)}>{KIND_LABEL[kd]}</button>
               ))}
