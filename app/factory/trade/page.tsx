@@ -1,8 +1,8 @@
 "use client";
 
-// 파도소리 입고 및 출고 — 씨몬스터 업무도우미 '입고 및 출고'와 같은 틀(2026-11-27 대표 지시).
-//  머리에 [입고][출고][조정](·보관처가 둘 이상이면 [이동]) → 재고 목록과 같은 기록 창(TxnForm). 아래 '입고·출고 내역' 카드에
-//  기록(입고·출고·조정)만 보인다 — 품목 변경·취소 이력까지는 히스토리 메뉴. 기록 취소는 여기서도 된다.
+// 파도소리 입고 및 출고 — 메뉴를 누르면 업무도우미 '입고/출고 기록'처럼 기록 폼이 바로 펼쳐진다(2026-11-27 대표 지시 — 버튼으로 여는 모달이 아니라).
+//  폼(TxnForm inline)은 재고 목록의 기록 창과 같은 것 — 위 입고·출고·조정 탭으로 유형을 고른다. 저장하면 폼이 비워지고 아래 내역에 바로 보인다.
+//  아래 '입고·출고 내역' 카드에는 기록(입고·출고·조정)만 보인다 — 품목 변경·취소 이력까지는 히스토리 메뉴. 기록 취소는 여기서도 된다.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
@@ -11,7 +11,6 @@ import TxnForm from "../TxnForm";
 import { today, daysAgo } from "../util";
 import { describe, hm, qtyBox, qtyKg, stamp } from "../hist-util";
 
-type FormType = React.ComponentProps<typeof TxnForm>["initialType"];
 type Tab = "전체" | "입고" | "출고" | "조정";
 const TABS: Tab[] = ["전체", "입고", "출고", "조정"];
 const PRESETS = [["오늘", 0, 0], ["어제", 1, 1], ["7일", 6, 0], ["30일", 29, 0]] as const;
@@ -24,7 +23,8 @@ export default function FactoryTradePage() {
   const [kinds, setKinds] = useState(false);
   const [storages, setStorages] = useState<string[]>([DEFAULT_STORAGE]);
   const [admin, setAdmin] = useState(false);
-  const [form, setForm] = useState<{ type: FormType } | null>(null);
+  const [formKey, setFormKey] = useState(0);   // 저장·그만두기 때 올려 폼을 새로 띄운다
+  const [stockReady, setStockReady] = useState(false);
   const [notice, setNotice] = useState("");
   const [doc, setDoc] = useState<{ batch_id: string; doc_no: string } | null>(null);
   const [error, setError] = useState("");
@@ -45,6 +45,7 @@ export default function FactoryTradePage() {
       const j = await (await fetch("/api/factory/stock", { cache: "no-store" })).json();
       if (j.ok) setRows(j.rows || []); else setError(j.error || "재고를 불러오지 못했습니다. 새로고침하세요.");
     } catch { setError("재고를 불러오지 못했습니다. 새로고침하세요."); }
+    setStockReady(true);
   }, []);
   const loadFields = useCallback(async () => {
     try {
@@ -78,8 +79,7 @@ export default function FactoryTradePage() {
       .filter((e) => tab === "전체" || e.kind === tab)
       .filter((e) => !q || matchKoQuery(`${e.name || ""} ${e.sku || ""} ${e.who || ""} ${e.partner || ""} ${e.tape_color || ""} ${e.memo || ""}`, q));
   }, [events, tab, kw]);
-  const canMove = kinds && storages.length > 1;
-  const openForm = (type: FormType) => { setNotice(""); setDoc(null); setError(""); setForm({ type }); };
+  const resetForm = () => { setNotice(""); setDoc(null); setError(""); setFormKey((n) => n + 1); window.scrollTo({ top: 0 }); };
 
   async function cancel(e: HistEvent) {
     if (!e.txn_id) return;
@@ -108,13 +108,7 @@ export default function FactoryTradePage() {
   return (
     <div className="b2b-container fac-stock fac-trade">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">입고 및 출고</h1></div>
-        <div className="b2b-page-actions fac-head-actions">
-          <button className="b2b-btn-primary" onClick={() => openForm("입고")}>입고</button>
-          <button className="b2b-btn-secondary" onClick={() => openForm("출고")}>출고</button>
-          <button className="b2b-btn-secondary" onClick={() => openForm("조정")}>조정</button>
-          {canMove && <button className="b2b-btn-secondary" onClick={() => openForm("이동")}>이동</button>}
-        </div>
+        <div><h1 className="b2b-page-title">입고/출고 기록</h1></div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
@@ -123,6 +117,15 @@ export default function FactoryTradePage() {
           {notice}
           {doc && <> · <a className="b2b-link-btn" href={`/factory/outdoc?batch=${doc.batch_id}`} target="_blank" rel="noreferrer">출고증 {doc.doc_no}</a></>}
         </div>
+      )}
+
+      {/* 기록 폼 — 재고 목록을 받은 뒤 띄운다(출고·조정 로트는 재고에서 나온다). 저장·그만두기 → key 가 바뀌어 빈 폼 */}
+      {!stockReady ? <div className="b2b-loading">불러오는 중...</div> : (
+        <TxnForm key={formKey} inline rows={rows} initialType="입고"
+          fields={fields} suggest={suggest} onFields={setFields}
+          kinds={kinds} storages={storages} admin={admin} onStorages={setStorages}
+          onClose={resetForm}
+          onSaved={(msg, d) => { resetForm(); setNotice(msg); setDoc(d || null); loadStock(); loadFields(); loadEvents(); }} />
       )}
 
       <section className="b2b-card">
@@ -205,13 +208,6 @@ export default function FactoryTradePage() {
         )}
       </section>
 
-      {form && (
-        <TxnForm rows={rows} initialType={form.type}
-          fields={fields} suggest={suggest} onFields={setFields}
-          kinds={kinds} storages={storages} admin={admin} onStorages={setStorages}
-          onClose={() => setForm(null)}
-          onSaved={(msg, d) => { setForm(null); setNotice(msg); setDoc(d || null); loadStock(); loadFields(); loadEvents(); }} />
-      )}
     </div>
   );
 }

@@ -11,6 +11,8 @@
 //   수량·제조일자는 첫 로트 줄(lines[0])의 값이다. 줄을 더하면 아래에 보통 줄로 붙는다.
 //   품목은 [입고 저장] 때 /api/factory/products/quick 으로 먼저 등록하고(이름·규격·원산지가 같으면 기존 품목) 그 id 로 입고한다.
 //   창을 닫으면 아무것도 남지 않는다.
+//  inline(2026-11-27 대표 지시): 입고 및 출고 메뉴는 이 창을 모달이 아니라 페이지에 바로 펼친다(업무도우미 '입고/출고 기록'처럼).
+//   머리·배경·Esc 닫기가 없고, [그만두기]는 onClose 로 폼을 비운다.
 //  구분·보관처·단가·이동(factory/011, 2026-11-20 대표 지시 — kinds 가 true 일 때만 보인다):
 //   입고는 생산·매입·반품, 출고는 매출·현장 투입 중 하나를 고른다(한 번 저장 = 한 구분). 매입·매출·반품은 줄마다 kg당 단가.
 //   보관처가 둘 이상이면 입고·조정 새 줄이 들어갈 보관처를 창 머리에서 고르고, [이동]으로 로트를 다른 보관처로 옮긴다.
@@ -48,8 +50,9 @@ const defaultKind = (t: FormType): TxnKind => (t === "출고" ? "매출" : "생�
 // 입력 번호 — 창을 열 때 한 번 만들고 다시 눌러도 같은 번호(서버가 두 번 기록하지 않는다)
 const newBatch = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : undefined);
 const numOr = (s: string) => (s.trim() === "" ? null : Number(s));
+const noop = () => {};
 
-export default function TxnForm({ rows, initialType, initialProductId, fields, suggest, kinds, storages, admin, onStorages, onFields, onClose, onSaved }: {
+export default function TxnForm({ rows, initialType, initialProductId, fields, suggest, kinds, storages, admin, onStorages, onFields, onClose, onSaved, inline = false }: {
   rows: StockRow[];
   initialType: FormType;
   initialProductId?: string;
@@ -62,6 +65,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
   onFields: (f: FactoryFields) => void;
   onClose: () => void;
   onSaved: (msg: string, doc?: { batch_id: string; doc_no: string } | null) => void; // doc = 매출 출고에 붙은 출고 번호(출고증)
+  inline?: boolean;                                        // 모달 대신 페이지에 바로 펼친다(입고 및 출고 메뉴)
 }) {
   // 칸 설정 — 창 안에서 바로 켜고 끈다(서버 kv 에 저장, 모든 계정 공용)
   const [fieldsOpen, setFieldsOpen] = useState(false);
@@ -103,7 +107,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const suggestRef = useRef<HTMLDivElement>(null);
-  useEscClose(onClose, saving);
+  useEscClose(inline ? noop : onClose, saving);   // 페이지에 펼친 폼은 Esc 로 비우지 않는다
 
   function switchType(t: FormType) {
     if (t === type) return;
@@ -337,14 +341,9 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
     </>
   );
 
-  return (
-    <div className="b2b-modal-backdrop">
-      <div className="b2b-modal fac-txn-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head">
-          <span className="b2b-modal-title">{TITLE[type]}</span>
-          <button className="b2b-modal-close" onClick={onClose} aria-label="닫기">✕</button>
-        </div>
-        <div className="b2b-modal-body">
+  const body = (
+    <>
+        <div className={inline ? "fac-txn-body" : "b2b-modal-body"}>
           <div className="fac-txn-top">
             <div className="sm-tabs fac-txn-types">
               {((multi ? ["입고", "출고", "조정", "이동"] : ["입고", "출고", "조정"]) as FormType[]).map((t) => (
@@ -568,15 +567,27 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
 
           {error && <div className="b2b-error">{error}</div>}
         </div>
-        <div className="b2b-modal-foot">
+        <div className={inline ? "fac-txn-foot" : "b2b-modal-foot"}>
           <span className="fac-txn-total">
             {totals.lines}줄 · {type === "조정" ? signedKg(totals.kg) : kgStr(totals.kg)}
           </span>
           <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>닫기</button>
+            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>{inline ? "그만두기" : "닫기"}</button>
             <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.lines === 0}>{saving ? "저장 중..." : `${type} 저장`}</button>
           </div>
         </div>
+    </>
+  );
+
+  if (inline) return <section className="b2b-card fac-txn-inline">{body}</section>;
+  return (
+    <div className="b2b-modal-backdrop">
+      <div className="b2b-modal fac-txn-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="b2b-modal-head">
+          <span className="b2b-modal-title">{TITLE[type]}</span>
+          <button className="b2b-modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        </div>
+        {body}
       </div>
     </div>
   );

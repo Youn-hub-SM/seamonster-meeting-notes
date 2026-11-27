@@ -127,6 +127,10 @@
 
 /* ── 입고·출고·조정 창 ───────────────────────────────────────────── */
 .fac-txn-modal { max-width: 720px; }
+/* 입고 및 출고 메뉴 — 같은 폼을 페이지에 바로 펼친 모습(2026-11-27). 본문·발은 모달과 같은 간격 */
+.fac-txn-inline { padding: 0; margin-bottom: 20px; }
+.fac-txn-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.fac-txn-foot { padding: 14px 22px; border-top: 1px solid var(--sm-border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .fac-txn-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .fac-fields { position: relative; font-size: 12px; }
 .fac-fields-pop {
@@ -182,7 +186,7 @@
 .fac-f-name .b2b-input { width: 200px; }
 .fac-f-spec .b2b-input { width: 120px; }
 .fac-f select.b2b-input { width: 160px; }
-.fac-txn-total { align-self: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fac-txn-total { align-self: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ── 히스토리 ───────────────────────────────────────────────────── */
 .fac-row-cancelled td, .fac-row-cancelled .fac-hist-desc { color: var(--sm-text-light); }
