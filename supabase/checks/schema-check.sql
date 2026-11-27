@@ -445,7 +445,7 @@ with expected(kind, sch, obj, sub, extra, file) as (values
   ('표', 'factory', 'out_docs', '', '', 'factory/012_partners_docs.sql'),
   ('표', 'factory', 'partners', '', '', 'factory/012_partners_docs.sql'),
   ('함수', 'factory', 'issue_out_doc', '', 'cb833717eac26de195dc031146469cfe', 'factory/012_partners_docs.sql'),
-  ('함수', 'factory', 'post_stock_txns', '', '13b8618fc3e93987db384f14355c1dc9', 'factory/012_partners_docs.sql'),
+  ('함수', 'factory', 'post_stock_txns', '', '8f4cb689a9862c45ddfa462574732710', 'factory/013_storage_gupyeong.sql'),
   ('색인', 'hr', 'audit_log_at_idx', '', '', 'hr/001_hr_init.sql'),
   ('색인', 'hr', 'audit_log_target_idx', '', '', 'hr/001_hr_init.sql'),
   ('색인', 'hr', 'employees_emp_no_uq', '', '', 'hr/001_hr_init.sql'),

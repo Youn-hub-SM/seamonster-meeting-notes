@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, isPending007, PENDING_007 } from "@/app/lib/factory-db";
-import { DEFAULT_STORAGE, IN_KINDS, OUT_KINDS, PRICED_KINDS, TXN_TYPES, kgNum, productLabel, signedKg, type HistEvent, type TxnKind, type TxnType } from "@/app/lib/factory";
+import { DEFAULT_STORAGE, IN_KINDS, isDefaultStorage, OUT_KINDS, PRICED_KINDS, TXN_TYPES, kgNum, productLabel, signedKg, type HistEvent, type TxnKind, type TxnType } from "@/app/lib/factory";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -141,8 +141,8 @@ export async function POST(req: NextRequest) {
     }
     const storageOf = (v: unknown) => String(v ?? "").trim();
     const headStorage = storageOf(b.storage), toStorage = storageOf(b.to_storage);
-    if (headStorage.length > 40 || toStorage.length > 40) return bad("보관처 이름이 너무 깁니다(40자까지).");
-    if (isMove && !toStorage) return bad("옮길 보관처를 고르세요.");
+    if (headStorage.length > 40 || toStorage.length > 40) return bad("입고지 이름이 너무 깁니다(40자까지).");
+    if (isMove && !toStorage) return bad("옮길 입고지를 고르세요.");
     const txn_date = String(b.txn_date || "") || kstToday();
     if (!validDate(txn_date)) return NextResponse.json({ ok: false, error: "날짜가 올바르지 않습니다." }, { status: 400 });
     if (txn_date > kstToday()) return NextResponse.json({ ok: false, error: "오늘 이후 날짜로는 기록할 수 없습니다." }, { status: 400 });
@@ -181,11 +181,12 @@ export async function POST(req: NextRequest) {
       // 011 — 보낸 것만 싣는다(안 보내면 DB 기본값: 구분 없음·기본 보관처)
       if (kind) row.kind = kind;
       const lineStorage = storageOf(l.storage);
-      if (lineStorage.length > 40) return bad(`${p.name}: 보관처 이름이 너무 깁니다(40자까지).`);
-      // 입고 새 줄은 창 머리의 보관처, 출고·조정·이동의 로트 줄은 그 로트의 보관처
-      const storage = lineStorage || headStorage;
+      if (lineStorage.length > 40) return bad(`${p.name}: 입고지 이름이 너무 깁니다(40자까지).`);
+      // 입고 새 줄은 창 머리의 입고지, 출고·조정·이동의 로트 줄은 그 로트의 입고지.
+      //  새 줄이 기본 입고지(구평)면 안 보낸다 — DB 기본값이 들어간다(013 전에는 옛 이름 구평창고1층, 뒤에는 구평 — 둘이 갈라지지 않게)
+      const storage = lineStorage || (isDefaultStorage(headStorage) ? "" : headStorage);
       if (storage) row.storage = storage;
-      if (isMove && (storage || DEFAULT_STORAGE) === toStorage) return bad(`${p.name}: 이미 ${toStorage}에 있는 재고입니다.`);
+      if (isMove && (isDefaultStorage(storage) ? DEFAULT_STORAGE : storage) === (isDefaultStorage(toStorage) ? DEFAULT_STORAGE : toStorage)) return bad(`${p.name}: 이미 ${toStorage}에 있는 재고입니다.`);
       if (l.unit_price !== undefined && l.unit_price !== null && String(l.unit_price) !== "") {
         const up = Math.round(Number(l.unit_price) * 100) / 100;
         if (!Number.isFinite(up) || up < 0 || up > 1e9) return bad(`${p.name}: 단가가 올바르지 않습니다.`);

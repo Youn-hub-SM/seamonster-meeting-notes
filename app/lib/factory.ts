@@ -50,7 +50,11 @@ export type TxnKind = (typeof IN_KINDS)[number] | (typeof OUT_KINDS)[number] | "
 export const KIND_LABEL: Record<TxnKind, string> = { 생산: "생산", 매입: "매입", 반품: "반품", 매출: "매출", 현장투입: "현장 투입", 이동: "이동" };
 // 단가(kg당)를 적는 구분
 export const PRICED_KINDS: TxnKind[] = ["매입", "매출", "반품"];
-export const DEFAULT_STORAGE = "구평창고1층";
+// 입고지(화면 이름, 2026-11-27 대표 지시 — 코드·DB 열 이름은 storage). 기본 입고지 구평(factory/013 — 그 전 이름 구평창고1층은 LEGACY).
+//  기본 목록은 구평·외부(fields API), 관리자가 '칸 설정'에서 언제든 더하고 뺀다.
+export const DEFAULT_STORAGE = "구평";
+export const LEGACY_STORAGE = "구평창고1층";   // 013 적용 전 기록의 기본 입고지 이름 — 화면에서는 기본으로 본다
+export const isDefaultStorage = (s: string | null | undefined) => !s || s === DEFAULT_STORAGE || s === LEGACY_STORAGE;
 // 화면의 기록 종류 — 이동은 저장할 때 출고·입고 두 줄로 풀린다
 export type FormType = TxnType | "이동";
 
@@ -183,7 +187,7 @@ export function productLabel(p: { name: string; spec?: string | null }): string 
 export function lotLabel(l: { mfg_date: string | null; box_kg?: number | null; storage?: string | null }): string {
   const d = l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상";
   const s = l.box_kg ? `${d} · ${kgStr(Number(l.box_kg))}박스` : d;
-  return l.storage && l.storage !== DEFAULT_STORAGE ? `${s} · ${l.storage}` : s;
+  return isDefaultStorage(l.storage) ? s : `${s} · ${l.storage}`;
 }
 // 로트 열쇠 — 화면 key·같은 로트 판정에 쓴다
 export const lotKeyOf = (l: { mfg_date: string | null; box_kg?: number | null; storage?: string | null }) =>

@@ -15,13 +15,13 @@
 //   머리·배경·Esc 닫기가 없고, [그만두기]는 onClose 로 폼을 비운다.
 //  구분·보관처·단가·이동(factory/011, 2026-11-20 대표 지시 — kinds 가 true 일 때만 보인다):
 //   입고는 생산·매입·반품, 출고는 매출·현장 투입 중 하나를 고른다(한 번 저장 = 한 구분). 매입·매출·반품은 줄마다 kg당 단가.
-//   보관처가 둘 이상이면 입고·조정 새 줄이 들어갈 보관처를 창 머리에서 고르고, [이동]으로 로트를 다른 보관처로 옮긴다.
-//   로트 줄(출고·조정·이동)은 그 로트의 보관처를 따른다. 보관처 목록은 '칸 설정'에서 관리자가 고친다.
+//   입고지(= storage, 화면 이름은 입고지 — 2026-11-27 대표 지시, 기본 구평·외부)가 둘 이상이면 입고·조정 새 줄이 들어갈 입고지를 창 머리에서 고르고,
+//   [이동]으로 로트를 다른 입고지로 옮긴다. 로트 줄(출고·조정·이동)은 그 로트의 입고지를 따른다. 입고지 목록은 '칸 설정'에서 관리자가 고친다.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { DEFAULT_STORAGE, IN_KINDS, KIND_LABEL, ORIGINS, OUT_KINDS, PRICED_KINDS, boxBreakdown, boxSummary, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type FactoryFields, type FormType, type StockRow, type TxnKind } from "@/app/lib/factory";
+import { DEFAULT_STORAGE, IN_KINDS, KIND_LABEL, ORIGINS, isDefaultStorage, OUT_KINDS, PRICED_KINDS, boxBreakdown, boxSummary, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type FactoryFields, type FormType, type StockRow, type TxnKind } from "@/app/lib/factory";
 import { today } from "./util";
 
 // kg = 이 줄의 수량(입고·출고) 또는 실사 kg(조정). box_kg = 박스 중량(로트 줄은 로트의 값), boxes = 박스 수. have = 기존 로트의 현재 kg.
@@ -83,9 +83,9 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
     try {
       const r = await fetch("/api/factory/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) throw new Error(j.error || "보관처 저장 실패");
+      if (!r.ok || !j.ok) throw new Error(j.error || "입고지 저장 실패");
       onStorages(j.storages); setNewStorage("");
-    } catch (e) { setError(e instanceof Error ? e.message : "보관처 저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "입고지 저장 실패"); }
   }
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const [type, setType] = useState<FormType>(initialType);
@@ -224,10 +224,10 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
       const bk = numOr(l.box_kg);
       if (bk !== null && !(bk > 0)) { setError(`${name}: 박스 중량(kg)이 올바르지 않습니다.`); return; }
       if (takes(type) && n > l.have + 0.0005) { setError(`${name} (${lotLabel({ mfg_date: l.mfg_date || null, box_kg: bk, storage: l.storage })}): 재고 ${kgBox(l.have, bk)}보다 많습니다.`); return; }
-      if (type === "이동" && (l.storage || DEFAULT_STORAGE) === toStorage) { setError(`${name}: 이미 ${toStorage}에 있는 재고입니다.`); return; }
+      if (type === "이동" && (isDefaultStorage(l.storage) ? DEFAULT_STORAGE : l.storage) === (isDefaultStorage(toStorage) ? DEFAULT_STORAGE : toStorage)) { setError(`${name}: 이미 ${toStorage}에 있는 재고입니다.`); return; }
       if (priced && l.price.trim() !== "" && !(Number(l.price) >= 0)) { setError(`${name}: 단가가 올바르지 않습니다.`); return; }
     }
-    if (type === "이동" && !toStorage) { setError("옮길 보관처를 고르세요."); return; }
+    if (type === "이동" && !toStorage) { setError("옮길 입고지를 고르세요."); return; }
     // 같은 로트를 두 줄에 적으면(입고 새 줄끼리·조정 새 로트가 기존 로트와 겹침) 합계가 헷갈린다 — 막는다
     const seen = new Set<string>();
     for (const { b, l } of filled) {
@@ -360,7 +360,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                   <label className="fac-check"><input type="checkbox" className="b2b-checkbox" checked={fields.vessel} onChange={() => toggleField("vessel")} /> 본선명</label>
                   {kinds && (
                     <div className="fac-storages">
-                      <span className="fac-sub">보관처</span>
+                      <span className="fac-sub">입고지</span>
                       {storages.map((s, i) => (
                         <span key={s} className="fac-storage">
                           {s}
@@ -369,7 +369,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                       ))}
                       {admin && (
                         <span className="fac-storage-add">
-                          <input className="b2b-input" value={newStorage} placeholder="보관처 추가" maxLength={40} onChange={(e) => setNewStorage(hangulInputValue(e))}
+                          <input className="b2b-input" value={newStorage} placeholder="입고지 추가" maxLength={40} onChange={(e) => setNewStorage(hangulInputValue(e))}
                             onKeyDown={(e) => { if (e.key === "Enter" && newStorage.trim()) { e.preventDefault(); editStorage({ add_storage: newStorage.trim() }); } }} />
                           <button type="button" className="b2b-btn-secondary" disabled={!newStorage.trim()} onClick={() => editStorage({ add_storage: newStorage.trim() })}>추가</button>
                         </span>
@@ -400,7 +400,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
             {/* 입고의 거래처는 줄마다(재고가 나갈 곳) — 창 머리에는 출고 때만 */}
             {multi && (type === "입고" || type === "조정") && (
               <label className="b2b-field">
-                <span className="b2b-field-label">보관처</span>
+                <span className="b2b-field-label">입고지</span>
                 <select className="b2b-input" value={storage} onChange={(e) => setStorage(e.target.value)}>
                   {storages.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
