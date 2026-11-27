@@ -138,6 +138,9 @@
   padding: 10px 12px; background: #fff; border: 1px solid var(--sm-border); border-radius: 10px; box-shadow: var(--sm-shadow-float); white-space: nowrap;
 }
 .fac-f-tape .b2b-input { width: 110px; }
+/* 거래처·테잎색·본선명은 콤보박스(이전 값 목록, 2026-11-27) — 입력칸과 같은 폭·글자 */
+.fac-f .b2b-combo { width: 130px; }
+.fac-f .b2b-combo-input { font-size: 16px; padding: 8px 10px; border-radius: var(--sm-radius-btn); }
 .fac-txn-meta { display: grid; grid-template-columns: 170px 1fr 1.3fr; gap: 10px; }
 .fac-txn-search { font-size: 16px; padding: 12px 14px; }
 .fac-search-wrap { position: relative; }
@@ -276,6 +279,9 @@
   .fac-line:not(.is-lot) { display: grid; grid-template-columns: repeat(3, 1fr); align-items: end; }
   .fac-line:not(.is-lot) .fac-x { grid-column: 1 / -1; justify-self: end; }
   .fac-f-tape .b2b-input { width: 100%; }
+  .fac-f { min-width: 0; }
+  .fac-f .b2b-combo { width: 100%; min-width: 0; }
+  .fac-f .b2b-combo-input { min-width: 0; }
   .fac-f .b2b-input, .fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 100%; min-width: 0; }
   .fac-blk-new { width: 100%; }
   .fac-new-row { display: grid; grid-template-columns: 1fr 1fr; }

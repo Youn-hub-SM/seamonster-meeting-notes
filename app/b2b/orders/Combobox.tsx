@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { matchKoQuery } from "@/app/lib/hangul";
+import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 
 // extra: 화면에 표시하지 않고 검색 매칭에만 쓰는 추가 키워드(품목 특징 '진공/벌크' 등) — 선택 필드라 기존 사용처 무영향
 export type ComboOption = { id: string; label: string; sub?: string; extra?: string };
@@ -20,6 +20,7 @@ export function Combobox({
   emptyText,
   ariaLabel,
   invalid = false,
+  hangul = false,
 }: {
   value: string;
   options: ComboOption[];
@@ -30,6 +31,7 @@ export function Combobox({
   emptyText?: string;
   ariaLabel?: string;
   invalid?: boolean; // 폼 검증 오류 — 빨강 테두리(.b2b-combo.is-invalid) + aria-invalid
+  hangul?: boolean;  // 영타를 한글로 바로 바꿔 보인다(파도소리 기록 창, 2026-11-27) — 기본 꺼짐
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +106,7 @@ export function Combobox({
         //  칸을 눌러도 focus 가 다시 안 일어나 목록이 안 뜨던 문제(요청 창에서 '두 번째 품목이 선택되지 않음')
         onClick={() => { if (!open) openList(); }}
         onChange={(e) => {
-          const v = e.target.value;
+          const v = hangul ? hangulInputValue(e) : e.target.value;
           setQuery(v);
           if (!open) openList();
           else updateCoords();

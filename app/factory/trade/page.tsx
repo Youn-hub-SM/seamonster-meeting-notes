@@ -19,7 +19,7 @@ export default function FactoryTradePage() {
   // 기록 창에 줄 재고·설정 — 재고 목록과 같은 출처
   const [rows, setRows] = useState<StockRow[]>([]);
   const [fields, setFields] = useState<FactoryFields>(DEFAULT_FACTORY_FIELDS);
-  const [suggest, setSuggest] = useState<{ partners: string[]; tape_colors: string[] }>({ partners: [], tape_colors: [] });
+  const [suggest, setSuggest] = useState<{ partners: string[]; tape_colors: string[]; vessels: string[] }>({ partners: [], tape_colors: [], vessels: [] });
   const [kinds, setKinds] = useState(false);
   const [storages, setStorages] = useState<string[]>([DEFAULT_STORAGE]);
   const [admin, setAdmin] = useState(false);
@@ -51,7 +51,7 @@ export default function FactoryTradePage() {
     try {
       const j = await (await fetch("/api/factory/fields", { cache: "no-store" })).json();
       if (j.ok) {
-        setFields(j.fields); setSuggest({ partners: j.partners || [], tape_colors: j.tape_colors || [] });
+        setFields(j.fields); setSuggest({ partners: j.partners || [], tape_colors: j.tape_colors || [], vessels: j.vessels || [] });
         setKinds(!!j.kinds); setAdmin(!!j.admin);
         if (Array.isArray(j.storages) && j.storages.length) setStorages(j.storages);
       }

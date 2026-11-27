@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
+import { Combobox } from "@/app/b2b/orders/Combobox";
 import { DEFAULT_STORAGE, IN_KINDS, KIND_LABEL, ORIGINS, isDefaultStorage, OUT_KINDS, PRICED_KINDS, boxBreakdown, boxSummary, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type FactoryFields, type FormType, type StockRow, type TxnKind } from "@/app/lib/factory";
 import { today } from "./util";
 
@@ -61,7 +62,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
   admin: boolean;                                          // 보관처 목록은 관리자만 고친다
   onStorages: (s: string[]) => void;
   fields: FactoryFields;                                   // 선택 칸(거래처·테잎색) 보이기
-  suggest: { partners: string[]; tape_colors: string[] };   // 이전에 적은 값 — 드롭다운
+  suggest: { partners: string[]; tape_colors: string[]; vessels?: string[] };   // 이전에 적은 값 — 누르면 펼쳐지는 목록(2026-11-27 대표: 드롭박스로)
   onFields: (f: FactoryFields) => void;
   onClose: () => void;
   onSaved: (msg: string, doc?: { batch_id: string; doc_no: string } | null) => void; // doc = 매출 출고에 붙은 출고 번호(출고증)
@@ -88,6 +89,17 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
     } catch (e) { setError(e instanceof Error ? e.message : "입고지 저장 실패"); }
   }
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
+  // 이전에 적은 값 목록 — 콤보박스 선택지(자유 입력도 된다)
+  const opts = (list: string[] | undefined) => (list || []).map((v) => ({ id: v, label: v }));
+  const partnerOpts = useMemo(() => opts(suggest.partners), [suggest.partners]);
+  const tapeOpts = useMemo(() => opts(suggest.tape_colors), [suggest.tape_colors]);
+  const vesselOpts = useMemo(() => opts(suggest.vessels), [suggest.vessels]);
+  // 입고지 선택지 = 설정 목록 + 지금 재고에 있는 입고지(목록에서 뺐어도 재고가 남아 있으면 고를 수 있게)
+  const storageOpts = useMemo(() => {
+    const set = new Set(storages);
+    for (const r of rows) for (const l of r.lots) if (l.storage && !isDefaultStorage(l.storage)) set.add(l.storage);
+    return [...set];
+  }, [storages, rows]);
   const [type, setType] = useState<FormType>(initialType);
   const [kind, setKind] = useState<TxnKind>(defaultKind(initialType));
   const [storage, setStorage] = useState(storages[0] || DEFAULT_STORAGE);   // 새로 들어오는 줄의 보관처
@@ -320,22 +332,22 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
       {type === "입고" && fields.partner && (
         <label className="fac-f fac-f-tape">
           <span>{kinds && kind === "매입" ? "매입처" : "거래처"}</span>
-          <input className="b2b-input" list="fac-partners" value={l.partner} placeholder="선택" autoComplete="off"
-            onChange={(e) => setLine(b.key, l.key, { partner: hangulInputValue(e) })} />
+          <Combobox value={l.partner} options={partnerOpts} allowFreeText hangul placeholder="선택" emptyText="목록에 없음 — 적은 대로 저장"
+            onSelect={(o) => setLine(b.key, l.key, { partner: o.label })} onType={(v) => setLine(b.key, l.key, { partner: v })} />
         </label>
       )}
       {type === "입고" && fields.tape_color && (
         <label className="fac-f fac-f-tape">
           <span>테잎색</span>
-          <input className="b2b-input" list="fac-tape-colors" value={l.tape_color} placeholder="선택" autoComplete="off"
-            onChange={(e) => setLine(b.key, l.key, { tape_color: hangulInputValue(e) })} />
+          <Combobox value={l.tape_color} options={tapeOpts} allowFreeText hangul placeholder="선택" emptyText="목록에 없음 — 적은 대로 저장"
+            onSelect={(o) => setLine(b.key, l.key, { tape_color: o.label })} onType={(v) => setLine(b.key, l.key, { tape_color: v })} />
         </label>
       )}
       {type === "입고" && fields.vessel && (
         <label className="fac-f fac-f-tape">
           <span>본선명</span>
-          <input className="b2b-input" value={l.vessel} placeholder="선택" autoComplete="off" maxLength={60}
-            onChange={(e) => setLine(b.key, l.key, { vessel: hangulInputValue(e) })} />
+          <Combobox value={l.vessel} options={vesselOpts} allowFreeText hangul placeholder="선택" emptyText="목록에 없음 — 적은 대로 저장"
+            onSelect={(o) => setLine(b.key, l.key, { vessel: o.label })} onType={(v) => setLine(b.key, l.key, { vessel: v.slice(0, 60) })} />
         </label>
       )}
     </>
@@ -389,8 +401,6 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
               ))}
             </div>
           )}
-          <datalist id="fac-partners">{suggest.partners.map((v) => <option key={v} value={v} />)}</datalist>
-          <datalist id="fac-tape-colors">{suggest.tape_colors.map((v) => <option key={v} value={v} />)}</datalist>
 
           <div className="fac-txn-meta">
             <label className="b2b-field">
@@ -402,7 +412,7 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
               <label className="b2b-field">
                 <span className="b2b-field-label">입고지</span>
                 <select className="b2b-input" value={storage} onChange={(e) => setStorage(e.target.value)}>
-                  {storages.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {storageOpts.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </label>
             )}
@@ -411,14 +421,15 @@ export default function TxnForm({ rows, initialType, initialProductId, fields, s
                 <span className="b2b-field-label">옮길 곳</span>
                 <select className="b2b-input" value={toStorage} onChange={(e) => setToStorage(e.target.value)}>
                   <option value="">선택</option>
-                  {storages.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {storageOpts.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </label>
             )}
             {type === "출고" && fields.partner && !(kinds && kind === "현장투입") && (
               <label className="b2b-field">
                 <span className="b2b-field-label">거래처</span>
-                <input className="b2b-input" list="fac-partners" value={partner} autoComplete="off" onChange={(e) => setPartner(hangulInputValue(e))} placeholder="선택" />
+                <Combobox value={partner} options={partnerOpts} allowFreeText hangul placeholder="선택" emptyText="목록에 없음 — 적은 대로 저장"
+                  onSelect={(o) => setPartner(o.label)} onType={setPartner} />
               </label>
             )}
             <label className="b2b-field fac-txn-memo">

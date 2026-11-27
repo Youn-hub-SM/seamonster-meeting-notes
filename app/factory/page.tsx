@@ -40,7 +40,7 @@ export default function FactoryStockPage() {
   const [historyFor, setHistoryFor] = useState<StockRow | null>(null);
   // 선택 칸 설정 + 이전에 적은 값(드롭다운) — 입출고 창이 쓰고, 로트 줄 표시도 이 설정을 따른다
   const [fields, setFields] = useState<FactoryFields>(DEFAULT_FACTORY_FIELDS);
-  const [suggest, setSuggest] = useState<{ partners: string[]; tape_colors: string[] }>({ partners: [], tape_colors: [] });
+  const [suggest, setSuggest] = useState<{ partners: string[]; tape_colors: string[]; vessels: string[] }>({ partners: [], tape_colors: [], vessels: [] });
   // 구분·보관처·단가·이동(factory/011) — DB 가 준비됐을 때만 켠다. 보관처가 둘 이상이면 [이동]이 보인다
   const [kinds, setKinds] = useState(false);
   const [storages, setStorages] = useState<string[]>([DEFAULT_STORAGE]);
@@ -50,7 +50,7 @@ export default function FactoryStockPage() {
     try {
       const j = await (await fetch("/api/factory/fields", { cache: "no-store" })).json();
       if (j.ok) {
-        setFields(j.fields); setSuggest({ partners: j.partners || [], tape_colors: j.tape_colors || [] });
+        setFields(j.fields); setSuggest({ partners: j.partners || [], tape_colors: j.tape_colors || [], vessels: j.vessels || [] });
         setKinds(!!j.kinds); setAdmin(!!j.admin);
         if (Array.isArray(j.storages) && j.storages.length) setStorages(j.storages);
       }

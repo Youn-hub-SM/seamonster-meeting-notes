@@ -50,11 +50,12 @@ async function readFields(): Promise<FactoryFields> {
 }
 
 // 최근 순 고유 값 — 1000행 한도 안에서 최신 기록부터 본다(그 안에 없는 아주 옛 값은 빠질 수 있다 — 직접 치면 된다)
-async function recentValues(col: "partner" | "tape_color"): Promise<string[]> {
+async function recentValues(col: "partner" | "tape_color" | "vessel"): Promise<string[]> {
   const { data, error } = await factoryDb().from("stock_txns").select(col)
     .is("cancelled_at", null).not(col, "is", null).order("created_at", { ascending: false }).limit(1000);
   if (error) {
     if (col === "tape_color" && /tape_color/.test(error.message)) return []; // 009 미적용
+    if (col === "vessel" && /vessel/.test(error.message)) return []; // 012 미적용
     throw error;
   }
   const seen = new Set<string>(); const out: string[] = [];
@@ -67,14 +68,14 @@ async function recentValues(col: "partner" | "tape_color"): Promise<string[]> {
   return out;
 }
 
-// GET — { fields, partners, tape_colors }
+// GET — { fields, partners, tape_colors, vessels, storages, kinds, admin }
 export async function GET(req: NextRequest) {
   try {
     const u = await factoryWho(req);
-    const [fields, recent, tape_colors, storages, kinds, listed] = await Promise.all([readFields(), recentValues("partner"), recentValues("tape_color"), readStorages(), kindsReady(), partnerNames()]);
+    const [fields, recent, tape_colors, vessels, storages, kinds, listed] = await Promise.all([readFields(), recentValues("partner"), recentValues("tape_color"), recentValues("vessel"), readStorages(), kindsReady(), partnerNames()]);
     // 목록에 등록된 거래처 먼저, 그 뒤에 목록에 없는 최근 입력값
     const partners = [...listed, ...recent.filter((x) => !listed.includes(x))];
-    return NextResponse.json({ ok: true, fields, partners, tape_colors, storages, kinds, admin: u.admin });
+    return NextResponse.json({ ok: true, fields, partners, tape_colors, vessels, storages, kinds, admin: u.admin });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "칸 설정 조회 실패") }, { status: 500 });
   }
