@@ -14,6 +14,7 @@ import "./factory.css";
 //  /factory 구역 자체는 미들웨어가 파도소리 계정·관리자만 들인다.
 const NAV = [
   { href: "/factory", label: "재고", icon: "box" as const, exact: true },
+  { href: "/factory/trade", label: "입고 및 출고", icon: "pen" as const },   // 2026-11-27 대표 지시 — 업무도우미 '입고 및 출고'와 같은 틀
   { href: "/factory/history", label: "히스토리", icon: "receipt" as const },
   { href: "/factory/products", label: "상품마스터", icon: "fish" as const },
   { href: "/factory/partners", label: "거래처", icon: "handshake" as const },
