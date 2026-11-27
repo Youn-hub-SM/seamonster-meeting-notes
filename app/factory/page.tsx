@@ -295,13 +295,6 @@ export default function FactoryStockPage() {
         </>
       )}
 
-      {/* 모바일 하단 고정 버튼 */}
-      <div className="fac-actbar">
-        <button className="b2b-btn-primary" onClick={() => openForm("입고")}>입고</button>
-        <button className="b2b-btn-secondary" onClick={() => openForm("출고")}>출고</button>
-        <button className="b2b-btn-secondary" onClick={() => openForm("조정")}>조정</button>
-      </div>
-
       {form && (
         <TxnForm rows={rows} initialType={form.type} initialProductId={form.productId}
           fields={fields} suggest={suggest} onFields={setFields}

@@ -16,7 +16,7 @@ export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 import { isHeldHref } from "./hold";
 
-export const GUIDE_UPDATED = "2026-11-25";
+export const GUIDE_UPDATED = "2026-11-27";
 
 const GUIDE_ALL: GuideCategory[] = [
   {
@@ -1531,7 +1531,7 @@ const GUIDE_ALL: GuideCategory[] = [
               "보관처를 늘리려면 관리자가 기록 창의 '칸 설정'에서 보관처를 추가한다",
               "보관처가 둘 이상이면 입고·조정 창에서 보관처를 고른다",
               "다른 보관처로 옮길 때는 [이동]에서 옮길 곳을 고르고 로트별로 박스 수나 kg 을 넣은 뒤 [이동 저장]을 누른다",
-              "모바일에서는 목록으로 보이고 입고·출고·조정 버튼이 화면 아래에 있다"
+              "모바일·태블릿에서는 목록으로 보이고 입고·출고·조정 버튼이 제목 바로 아래에 있다"
             ],
             "tips": [
               "파도소리 계정과 관리자만 열 수 있다 — 일반 내부 계정은 화면·API 모두 차단된다",

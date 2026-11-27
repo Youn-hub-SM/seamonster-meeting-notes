@@ -123,7 +123,7 @@
 .fac-detail-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* 모바일 전용 요소는 PC 에서 숨김 */
-.fac-list, .fac-actbar { display: none; }
+.fac-list { display: none; }
 
 /* ── 입고·출고·조정 창 ───────────────────────────────────────────── */
 .fac-txn-modal { max-width: 720px; }
@@ -212,10 +212,15 @@
 .fac-imp-list { margin: 0; padding-left: 16px; font-size: 15px; }
 .fac-imp-list.fac-imp-err { font-size: 12px; }
 
-/* ── 모바일·태블릿(≤900px) — 목록 + 하단 버튼 ───────────────────── */
+/* ── 모바일·태블릿(≤900px) — 목록 + 상단 입고·출고·조정 버튼 ──────── */
 @media (max-width: 900px) {
-  .fac-main { padding: 12px 14px 90px; }
-  .fac-stock-table, .fac-hist-table, .fac-head-actions { display: none !important; }
+  .fac-main { padding: 12px 14px 24px; }
+  .fac-stock-table, .fac-hist-table { display: none !important; }
+  /* 입고·출고·조정 버튼은 상단에(2026-11-27 대표 지시) — 전엔 아래 고정 바였는데 태블릿 브라우저 도구 모음에 가려졌다 */
+  .fac-head-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; width: 100%; }
+  .fac-head-actions > button { padding-top: 12px; padding-bottom: 12px; font-size: 16px; }
+  .fac-head-actions > button:nth-child(n+4) { grid-column: 1 / -1; }
+  .fac-stock .b2b-page-head { flex-direction: column; align-items: stretch; gap: 10px; }
 
   .fac-toolbar .fac-search {
     flex: 1 1 100%; max-width: none;
@@ -246,14 +251,6 @@
   .fac-cards { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
   .fac-toolbar > .sm-tabs { flex: 1 1 100%; overflow-x: auto; flex-wrap: nowrap; }
   .fac-detail-btns > button { padding-left: 0; padding-right: 0; }
-
-  .fac-actbar {
-    display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px;
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-    background: #fff; border-top: 1px solid var(--sm-border); box-shadow: 0 -4px 14px rgba(0, 0, 0, .06);
-  }
-  .fac-actbar > button { padding-top: 13px; padding-bottom: 13px; font-size: 16px; }
 
   .fac-hist-item { padding: 12px 2px; border-bottom: 1px solid var(--sm-border-light); display: flex; flex-direction: column; gap: 4px; }
   .fac-hist-top { display: flex; align-items: center; gap: 8px; }
